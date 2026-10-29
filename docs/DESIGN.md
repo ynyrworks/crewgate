@@ -319,19 +319,28 @@ answered with `{}`: whether Codex honours `ask` / `deny` from PreToolUse is not 
 (docs/PLUGIN-FACTS.md), so Codex sessions stay on `remind`. `crew doctor` says so.
 
 **User-turn rule (`gates.require_user_turn`, default `true`).** An approval made by hand counts only if a *user message*
-of the session that asked arrived between its `gate.asked` and its `gate.answered yes`. The rule is judged **once, when
-the answer is recorded** (`crew gate answer`), and the verdict is stored on the `gate.answered` event as
-`data.user_turn` (boolean) with `data.ask_session`; later checks (`hasApproval`, the hooks) read only that verdict, the
-30-minute answer window and the session match. At answer time: the ask is found by its gate id (the whole log, no time
-cutoff); the answering session (`CLAUDE_SESSION_ID`) must be the session that asked (plain equality; a parent / subagent
-link is not followed, and an ask or answer with no known session cannot be judged, so the verdict is `false`); and the
-session's `prompt_ts` (the `UserPromptSubmit` hook appends the time in ms, never the text, newest 20) must hold a time
-between the ask and the answer. The answer is recorded right after your reply, so the 20-entry list is only read while
-it is fresh. The automatic yes of an `auto` gate needs no verdict. `crew gate answer ... yes` prints a warning when the
-verdict is `false`. A `gate.answered` written before this field existed has no verdict (unknown) and is **not valid**
-while `require_user_turn` is `true`. With `false` the old rule applies (any yes of the last 30 minutes). The rule
-applies in all three modes. Consequence: `CLAUDE_SESSION_ID` must reach the `crew` command; if the client does not
-export it, no hand-made approval validates until you set `require_user_turn: false` (unverified for each client).
+arrived between its `gate.asked` and its `gate.answered yes`. The rule is judged **once, when the answer is recorded**
+(`crew gate answer`), and the verdict is stored on the `gate.answered` event as `data.user_turn` (`true`, `false` or
+`"project"`) with `data.ask_session`; later checks (`hasApproval`, the hooks) read only that verdict, the 30-minute answer
+window and the session match. The ask is found by its gate id (the whole log, no time cutoff). The CLI takes the session
+id from `CLAUDE_CODE_SESSION_ID` (exported by Claude Code to the Bash tool, equal to the hook payload `session_id`), then
+`CLAUDE_SESSION_ID` for compatibility; `CLAUDE_CODE_HOST_SESSION_ID` is a different value and is not used. (Before this
+version the CLI read only `CLAUDE_SESSION_ID`, which Claude Code does not set, so every earlier `gate.asked` /
+`gate.answered` has no session.) The verdict depends on what is known:
+
+| Ask session | Answer session | Rule | `user_turn` |
+|---|---|---|---|
+| known | known, same | a prompt of that session lies between ask and answer | `true` / `false` |
+| known | known, different | never valid | `false` |
+| known | unknown (or the reverse) | a prompt of the known session lies between | `true` / `false` |
+| unknown | unknown (Codex CLI: no session variable is known) | a prompt of **any** session of the project lies between | `"project"` / `false` |
+
+`"project"` is weaker: with several sessions open on one project, a message in another session satisfies it. A parent /
+subagent link is not followed. `prompt_ts` is the list the `UserPromptSubmit` hook keeps in the session file (time in ms,
+never the text, newest 20); it is read while fresh, right after your reply. The automatic yes of an `auto` gate needs
+no verdict. `crew gate answer ... yes` prints a warning when the verdict is `false`. A `gate.answered` written before
+this field existed has no verdict (unknown) and is **not valid** while `require_user_turn` is `true`. With `false` the old
+rule applies (any yes of the last 30 minutes). The rule applies in all three modes.
 
 What it prevents: the model asking and answering "yes" itself inside one turn (`gate ask` and `gate answer yes` in a row)
 without you having replied, and another session validating an ask. What it does not prevent: the model answering "yes"

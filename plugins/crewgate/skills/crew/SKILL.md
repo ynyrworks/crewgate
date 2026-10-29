@@ -111,7 +111,7 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
   chat, wait, then `crew gate answer <gate-id> yes` and retry. Never try to get around a block.
 
 `gates.require_user_turn` (default on): an answer counts only if the user wrote a message after your `gate ask`. So ask,
-end your turn, and answer only after the user replied, in the same session that asked (the verdict is fixed when `crew gate answer` runs). `crew gate answer` warns when it saw no user message since the ask.
+end your turn, and answer only after the user replied, in the same session that asked (the CLI reads `CLAUDE_CODE_SESSION_ID`; the verdict is fixed when `crew gate answer` runs). `crew gate answer` warns when it saw no user message since the ask.
 
 Workers are told never to push, use the network or touch remote hosts; if a task needs one, that
 is a gate decision for you and the user, not the worker.

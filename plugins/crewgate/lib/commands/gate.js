@@ -22,7 +22,7 @@ function run(argv, ctx) {
   if (!Object.prototype.hasOwnProperty.call(SPECS, sub)) throw new UsageError('gate.usage');
   const a = parse(argv.slice(1), SPECS[sub]);
   const proj = ctx.requireProject();
-  const opts = { src: 'cli', session: process.env.CLAUDE_SESSION_ID || undefined };
+  const opts = { src: 'cli', session: gates.currentSession() };
   if (sub === 'ask') {
     if (a.task) tasks.load(proj.id, a.task);
     const r = gates.ask(proj.id, ctx.config().config, a, opts);
@@ -30,8 +30,10 @@ function run(argv, ctx) {
   } else {
     // The user-turn rule needs the session's prompt times (kept by the UserPromptSubmit hook).
     const cfg = ctx.config().config;
-    const s = opts.session ? sess.read(opts.session) : null;
-    const r = gates.answer(proj.id, a.id, a.answer, a.note, { ...opts, prompts: s && Array.isArray(s.prompt_ts) ? s.prompt_ts : [] });
+    const promptsOf = (id) => { const s = sess.read(id); return s && Array.isArray(s.prompt_ts) ? s.prompt_ts : []; };
+    const r = gates.answer(proj.id, a.id, a.answer, a.note, {
+      ...opts, prompts: opts.session ? promptsOf(opts.session) : [], promptsOf, projectPrompts: () => sess.promptsOfProject(proj.id),
+    });
     const lines = [ctx.t('gate.answered', { id: r.id, gate: r.gate, answer: r.answer })];
     if (r.answer === 'yes' && r.user_turn === false && gates.requiresUserTurn(cfg)) lines.push(ctx.t('gate.noUserTurn', { id: r.id }));
     ctx.emit(r, lines);

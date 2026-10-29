@@ -218,11 +218,63 @@ test('user-turn rule: an answer from another session than the ask does not count
   gates.answer(f.pid, id, 'yes', '', { session: f.sid, prompts: sess.read(f.sid).prompt_ts });
   assert.equal(events.read(f.pid, { types: 'gate.answered' })[0].data.user_turn, false);
   assert.equal(decision(pre(f, 'git push', 'ss1')), 'deny');
-  // an ask with no session cannot be judged either
-  const id2 = gates.ask(f.pid, {}, { gate: 'push' }).id;
+});
+
+test('user-turn rule: one session known, the other not -> a prompt of the known session counts', () => {
+  const f = fixture('block');
+  const promptsOf = (id) => (sess.read(id) || {}).prompt_ts || [];
+  // ask with a session, answer without
+  const a1 = gates.ask(f.pid, {}, { gate: 'push' }, { session: f.sid }).id;
+  assert.equal(gates.answer(f.pid, a1, 'yes', '', { promptsOf, prompts: [] }).user_turn, false, 'no prompt yet');
+  const a2 = gates.ask(f.pid, {}, { gate: 'push' }, { session: f.sid }).id;
   prompt(f);
-  gates.answer(f.pid, id2, 'yes', '', { session: f.sid, prompts: sess.read(f.sid).prompt_ts });
-  assert.equal(decision(pre(f, 'git push', 'ss2')), 'deny');
+  assert.equal(gates.answer(f.pid, a2, 'yes', '', { promptsOf, prompts: [] }).user_turn, true);
+  // ask without a session, answer with one
+  const a3 = gates.ask(f.pid, {}, { gate: 'push' }).id;
+  assert.equal(gates.answer(f.pid, a3, 'yes', '', { session: f.sid, prompts: promptsOf(f.sid), promptsOf }).user_turn, false);
+  const a4 = gates.ask(f.pid, {}, { gate: 'push' }).id;
+  prompt(f);
+  assert.equal(gates.answer(f.pid, a4, 'yes', '', { session: f.sid, prompts: promptsOf(f.sid), promptsOf }).user_turn, true);
+});
+
+test('user-turn rule: neither session known (Codex CLI) -> any prompt of the project counts, recorded as "project"', () => {
+  const f = fixture('block');
+  const opts = { projectPrompts: () => sess.promptsOfProject(f.pid) };
+  const a1 = gates.ask(f.pid, {}, { gate: 'push' }).id;
+  assert.equal(gates.answer(f.pid, a1, 'yes', '', opts).user_turn, false);
+  assert.equal(decision(pre(f, 'git push', 'cx0')), 'deny');
+  const a2 = gates.ask(f.pid, {}, { gate: 'push' }).id;
+  prompt(f);
+  assert.equal(gates.answer(f.pid, a2, 'yes', '', opts).user_turn, 'project');
+  assert.equal(events.read(f.pid, { types: 'gate.answered' }).pop().data.user_turn, 'project');
+  assert.equal(pre(f, 'git push', 'cx1').out, '{}');
+});
+
+test('session id helper: CLAUDE_CODE_SESSION_ID first, CLAUDE_SESSION_ID as fallback, nothing else', () => {
+  assert.equal(gates.currentSession({ CLAUDE_CODE_SESSION_ID: 'a', CLAUDE_SESSION_ID: 'b' }), 'a');
+  assert.equal(gates.currentSession({ CLAUDE_SESSION_ID: 'b' }), 'b');
+  assert.equal(gates.currentSession({ CLAUDE_CODE_HOST_SESSION_ID: 'h' }), undefined);
+  assert.equal(gates.currentSession({}), undefined);
+});
+
+test('CLI: gate ask / answer take the session from CLAUDE_CODE_SESSION_ID; without any, the project-wide fallback applies', () => {
+  const f = fixture('block');
+  const env = { CLAUDE_CODE_SESSION_ID: f.sid };
+  const ask = JSON.parse(crew(['--json', 'gate', 'ask', 'push'], f.repo, env).out);
+  prompt(f);
+  const ans = crew(['--json', 'gate', 'answer', ask.id, 'yes'], f.repo, env);
+  assert.equal(ans.code, 0, ans.err);
+  const ev = events.read(f.pid, { types: ['gate.asked', 'gate.answered'] });
+  assert.equal(ev[0].session, f.sid);
+  assert.equal(ev[1].session, f.sid);
+  assert.equal(ev[1].data.user_turn, true);
+  assert.equal(pre(f, 'git push', 'ce1').out, '{}');
+  // no id at all (Codex): project-wide
+  const g = fixture('block');
+  const ask2 = JSON.parse(crew(['--json', 'gate', 'ask', 'push'], g.repo, { CLAUDE_CODE_SESSION_ID: '', CLAUDE_SESSION_ID: '' }).out);
+  prompt(g);
+  crew(['gate', 'answer', ask2.id, 'yes'], g.repo, { CLAUDE_CODE_SESSION_ID: '', CLAUDE_SESSION_ID: '' });
+  assert.equal(events.read(g.pid, { types: 'gate.answered' }).pop().data.user_turn, 'project');
 });
 
 test('user-turn rule: many later prompts do not evict the evidence', () => {
@@ -242,7 +294,7 @@ test('user-turn rule: the ask is found by id however old it is', () => {
   fs.appendFileSync(file, `${JSON.stringify(line)}\n`);
   const r = gates.answer(f.pid, 'g-old001', 'yes', '', { session: 'sx', prompts: [Date.now() - 60000] });
   assert.equal(r.user_turn, true);
-  assert.equal(gates.userTurnVerdict({ session: 'sx', ts: old }, 'sx', [Date.parse(old) - 1], Date.now()), false, 'a prompt before the ask');
+  assert.equal(gates.userTurnVerdict({ session: 'sx', ts: old }, 'sx', { prompts: [Date.parse(old) - 1] }, Date.now()), false, 'a prompt before the ask');
 });
 
 test('user-turn rule: an old gate.answered without the verdict is not valid when required, valid when not', () => {
@@ -293,7 +345,7 @@ test('prompt times are kept without text', () => {
 // ---------------------------------------------------------------- CLI
 test('crew gate answer warns when no user message happened since the ask', () => {
   const f = fixture('confirm');
-  const env = { CLAUDE_SESSION_ID: f.sid };
+  const env = { CLAUDE_CODE_SESSION_ID: f.sid };
   const ask = gates.ask(f.pid, {}, { gate: 'push' }, { session: f.sid });
   const r1 = crew(['gate', 'answer', ask.id, 'yes'], f.repo, env);
   assert.equal(r1.code, 0, r1.err);
@@ -308,7 +360,7 @@ test('crew gate answer warns when no user message happened since the ask', () =>
 test('crew gate answer does not warn when require_user_turn is false', () => {
   const f = fixture('confirm', { require_user_turn: false });
   const ask = gates.ask(f.pid, {}, { gate: 'push' });
-  const r = crew(['gate', 'answer', ask.id, 'yes'], f.repo, { CLAUDE_SESSION_ID: f.sid });
+  const r = crew(['gate', 'answer', ask.id, 'yes'], f.repo, { CLAUDE_CODE_SESSION_ID: f.sid });
   assert.doesNotMatch(r.out, /will not count/);
 });
 

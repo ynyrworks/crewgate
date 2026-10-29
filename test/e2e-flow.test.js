@@ -132,7 +132,7 @@ test('full delegated flow: dispatch, report, review, send-back, accept, merge', 
   // ---- accept, merge
   const accepted = wf.crewJson(['task', 'accept', id, '--note', 'dedupe verified'], repo);
   assert.equal(accepted.code, 0, accepted.err);
-  const sessEnv = { CLAUDE_SESSION_ID: SID };
+  const sessEnv = { CLAUDE_CODE_SESSION_ID: SID };
   const gate = JSON.parse(h.crew(['--json', 'gate', 'ask', 'merge', '--task', id, '--detail', 'merge todo-due'], repo, sessEnv).out);
   hook('user-prompt-submit', base({ hook_event_name: 'UserPromptSubmit', prompt: 'yes, merge it' })); // the user's reply
   assert.equal(h.crew(['gate', 'answer', gate.id, 'yes', '--note', 'user said yes'], repo, sessEnv).code, 0);

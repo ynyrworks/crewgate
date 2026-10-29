@@ -117,5 +117,5 @@
   "gate.asked": "已記錄關卡 {gate} 的詢問：{id}。請在聊天裡問使用者，再執行：gate answer {id} yes|no",
   "gate.askedAuto": "關卡 {gate} 為 auto：已核准（{id}）。",
   "gate.answered": "關卡 {gate}（{id}）：{answer}",
-  "gate.noUserTurn": "警告：這個回答不會被當成核准（gates.require_user_turn）：自關卡 {id} 詢問以來此工作階段沒有看到使用者訊息，或回答的工作階段不是提問的那個（CLAUDE_SESSION_ID 未知或不同）。請在聊天裡問使用者、等他回覆，再重新 gate ask 後回答。"
+  "gate.noUserTurn": "警告：這個回答不會被當成核准（gates.require_user_turn）：在關卡 {id} 詢問到這次回答之間沒有看到使用者訊息，或回答的工作階段不是提問的那個（工作階段 id 取自 CLAUDE_CODE_SESSION_ID）。請在聊天裡問使用者、等他回覆，再重新 gate ask 後回答。"
 }

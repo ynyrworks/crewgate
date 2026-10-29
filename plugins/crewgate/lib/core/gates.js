@@ -52,18 +52,33 @@ function ask(projectId, cfg, input, opts = {}) {
   return { id, gate, mode, answered: reply };
 }
 
-// Did the user speak between the ask and now? Judged once, when the answer is recorded: the answering session
-// must be the session that asked (equality; a gate asked and answered with no known session cannot be judged)
-// and `prompts` (ms, UserPromptSubmit times of that session) must hold a time between the ask and now.
-function userTurnVerdict(asked, session, prompts, nowMs) {
-  if (!asked.session || !session || asked.session !== session) return false;
+// The session id of the process that runs the CLI. Claude Code exports CLAUDE_CODE_SESSION_ID to the Bash tool
+// (same value as the hook payload session_id); CLAUDE_SESSION_ID is kept for compatibility. CLAUDE_CODE_HOST_SESSION_ID
+// is a different value and is not used. Codex: no variable is known, so '' (the answer falls back, see below).
+function currentSession(env = process.env) {
+  return String((env && (env.CLAUDE_CODE_SESSION_ID || env.CLAUDE_SESSION_ID)) || '').trim() || undefined;
+}
+
+// Did the user speak between the ask and now? Judged once, when the answer is recorded. Returns true, false or 'project'.
+//   both sessions known: they must be equal, and a prompt of that session (opts.prompts, ms) lies between;
+//   one known: a prompt of the known session lies between (opts.prompts is the answering session's, opts.promptsOf(id)
+//     reads another session's);
+//   neither known: a prompt of ANY session of the project (opts.projectPrompts()) lies between -> 'project' (weaker).
+function userTurnVerdict(asked, session, opts, nowMs) {
   const from = Date.parse(asked.ts);
-  return Array.isArray(prompts) && prompts.some((t) => t >= from && t <= nowMs);
+  const between = (list) => Array.isArray(list) && list.some((t) => t >= from && t <= nowMs);
+  const as = asked.session || '';
+  if (as && session) return as === session && between(opts.prompts);
+  if (as || session) {
+    const known = as || session;
+    return between(known === session ? opts.prompts : (typeof opts.promptsOf === 'function' ? opts.promptsOf(known) : null));
+  }
+  return typeof opts.projectPrompts === 'function' && between(opts.projectPrompts()) ? 'project' : false;
 }
 
 // answer(projectId, gateId, 'yes'|'no', note, opts) -> { id, gate, answer, user_turn }
-// opts: src, session, prompts. The ask is found by its id (the whole log, no time cutoff).
-// data.user_turn (boolean) and data.ask_session are stored on the gate.answered event.
+// opts: src, session, prompts, promptsOf(sessionId), projectPrompts(). The ask is found by its id (the whole log, no time cutoff).
+// data.user_turn (true | false | 'project') and data.ask_session are stored on the gate.answered event.
 function answer(projectId, gateId, reply, note, opts = {}) {
   if (reply !== 'yes' && reply !== 'no') throw new UsageError('args.badChoice', { name: 'answer', choices: 'yes, no' });
   const all = events.read(projectId, { types: ['gate.asked', 'gate.answered'] });
@@ -71,7 +86,7 @@ function answer(projectId, gateId, reply, note, opts = {}) {
   if (!asked) throw new CrewError('gate.notFound', { id: String(gateId) });
   const done = all.find((e) => e.type === 'gate.answered' && e.data && e.data.id === gateId);
   if (done) throw new CrewError('gate.alreadyAnswered', { id: gateId, answer: done.data.answer });
-  const userTurn = userTurnVerdict(asked, opts.session, opts.prompts, Date.now());
+  const userTurn = userTurnVerdict(asked, opts.session, opts, Date.now());
   events.append(projectId, {
     type: 'gate.answered', src: opts.src || 'cli', session: opts.session, task: asked.task || undefined, key: `${gateId}:answered`,
     data: { id: gateId, gate: asked.data.gate, answer: reply, auto: false, note: note || '', user_turn: userTurn, ask_session: asked.session || '' },
@@ -89,7 +104,7 @@ function hasApproval(projectId, gate, session, now = Date.now(), opts = {}) {
   const need = opts.requireUserTurn === true;
   return events.read(projectId, { types: 'gate.answered', since }).some((e) => e.data && e.data.gate === gate && e.data.answer === 'yes'
     && (!e.session || !session || e.session === session)
-    && (!need || e.data.auto === true || e.data.user_turn === true));
+    && (!need || e.data.auto === true || e.data.user_turn === true || e.data.user_turn === 'project'));
 }
 
 // Which gate a detected git/PR command falls under (event types come from hooks/gitcmd.js).
@@ -119,4 +134,4 @@ function history(projectId, limit = 30) {
   return [...rows.values(), ...missing].sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0)).slice(0, limit);
 }
 
-module.exports = { GATES, ANSWER_WINDOW_MS, modeOf, enforceOf, requiresUserTurn, userTurnVerdict, ask, answer, hasApproval, gateOf, history };
+module.exports = { GATES, ANSWER_WINDOW_MS, modeOf, currentSession, enforceOf, requiresUserTurn, userTurnVerdict, ask, answer, hasApproval, gateOf, history };
