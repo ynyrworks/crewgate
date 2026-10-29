@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Board: a finished one-shot run is `done`, not `waiting for you`: `codex exec` rollouts (`session_meta.payload.originator` `codex_exec` / `source` `exec`) and headless Claude runs (`entrypoint` `sdk-*`, e.g. `claude -p`). Interactive sessions whose turn ended still wait. `session.end` events from Codex hooks now end Codex sessions too (the rollout's `session_meta.payload.id` is the hook's `session_id`).
+- Screenshots in both READMEs, taken from a fictional demo: `scripts/demo-board.js` serves it, `scripts/screenshots.js` captures it.
+
 ## 0.10.0 — 2026-10-29
 
 Codex support (experimental).

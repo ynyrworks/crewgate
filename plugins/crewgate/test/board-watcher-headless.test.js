@@ -40,6 +40,19 @@ test('interactive codex sessions with a completed turn stay waiting', () => {
   assert.equal(codexOne({ originator: 'codex_cli_rs', source: 'cli' }).status, 'waiting');
 });
 
+test('a codex exec run that finished long ago is done, not idle', () => {
+  const root = h.tmpDir('crew-hl-codex-');
+  const f = path.join(root, '2026', '10', '29', `rollout-x-${SID}.jsonl`);
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, jl(codexLines({ originator: 'codex_exec', source: 'exec' })));
+  const old = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  fs.utimesSync(f, old, old);
+  const lines = codexLines({ originator: 'codex_exec', source: 'exec' }).map((o) => ({ ...o, timestamp: old.toISOString() }));
+  fs.writeFileSync(f, jl(lines));
+  fs.utimesSync(f, old, old);
+  assert.equal(createWatcher({ claudeRoot: null, codexRoot: root, ttlMs: 0 }).sessions()[0].status, 'done');
+});
+
 test('a codex exec run that is still working is not forced to done', () => {
   assert.equal(codexOne({ originator: 'codex_exec', source: 'exec' }, 'task_started').status, 'working');
 });

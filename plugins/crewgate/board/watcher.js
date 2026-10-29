@@ -378,7 +378,7 @@ function createWatcher(opts = {}) {
         if (status === 'done' && !info.subagent && engine === 'claude') doneIds.add(info.sessionId);
       }
       // a one-shot run (codex exec, claude -p) whose last turn ended is finished: nobody is there to answer
-      if (info.headless && status === 'waiting') status = 'done';
+      if (info.headless && info.state === 'waiting' && (status === 'waiting' || status === 'idle')) status = 'done';
       // the model asked the user a question / for plan approval: it is waiting even though the last line is a tool call
       if (info.act && info.act.kind === 'waiting' && (status === 'tool' || status === 'working')) status = 'waiting';
       const row = {
