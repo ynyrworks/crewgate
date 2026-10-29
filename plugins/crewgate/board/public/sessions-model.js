@@ -208,8 +208,52 @@
     return words.every(function (w) { return hay.indexOf(w) >= 0; });
   }
 
+  // ---- history (#/history): pages of past sessions, grouped by day
+
+  var DAY_SUMS = ['sessions', 'duration_ms', 'prompts', 'tool_calls', 'tokens'];
+
+  // Day totals of several pages added up (the same day can span two pages). Newest day first.
+  function mergeDays(list) {
+    var by = {};
+    var out = [];
+    list.forEach(function (d) {
+      var x = by[d.day];
+      if (!x) { x = by[d.day] = { day: d.day, sessions: 0, duration_ms: 0, prompts: 0, tool_calls: 0, tokens: 0, cost: null, cost_complete: true, partial: false }; out.push(x); }
+      DAY_SUMS.forEach(function (k) { x[k] += d[k] || 0; });
+      if (d.cost !== null && d.cost !== undefined) x.cost = (x.cost || 0) + d.cost;
+      if (d.cost_complete === false) x.cost_complete = false;
+      if (d.partial) x.partial = true;
+    });
+    out.sort(function (a, b) { return a.day < b.day ? 1 : a.day > b.day ? -1 : 0; });
+    return out;
+  }
+
+  // Pages -> [{ day, totals, rows }]. A session shown twice (a page fetched again) counts once; the first copy wins.
+  function historyGroups(pages) {
+    var seen = {};
+    var groups = [];
+    pages.forEach(function (p) {
+      p.rows.forEach(function (r) {
+        if (seen[r.id]) return;
+        seen[r.id] = true;
+        var g = groups[groups.length - 1];
+        if (!g || g.day !== r.day) { g = { day: r.day, totals: null, rows: [] }; groups.push(g); }
+        g.rows.push(r);
+      });
+    });
+    var totals = {};
+    mergeDays([].concat.apply([], pages.map(function (p) { return p.totals; }))).forEach(function (d) { totals[d.day] = d; });
+    groups.forEach(function (g) { g.totals = totals[g.day] || null; });
+    return groups;
+  }
+
+  // Does a page still have numbers that will grow (rows whose transcript is not fully counted yet)?
+  function pagePartial(p) {
+    return p.rows.some(function (r) { var s = r.totals || r.stats; return !s || s.partial; });
+  }
+
   // Only ids the server makes are used in links.
   function validId(id) { return typeof id === 'string' && /^[0-9a-f]{12}$/.test(id); }
 
-  return { cleanFilter: cleanFilter, matches: matches, buildTree: buildTree, isOpen: isOpen, visible: visible, counts: counts, isRunning: isRunning, isWaiting: isWaiting, displayStatus: displayStatus, fmtDuration: fmtDuration, compact: compact, tokenSum: tokenSum, cardStats: cardStats, KIND_ORDER: KIND_ORDER, emptyTimeline: emptyTimeline, mergeLatest: mergeLatest, mergeOlder: mergeOlder, withGaps: withGaps, kindCounts: kindCounts, stepText: stepText, stepMatches: stepMatches, validId: validId, STATES: STATES, ENGINES: ENGINES };
+  return { cleanFilter: cleanFilter, matches: matches, buildTree: buildTree, isOpen: isOpen, visible: visible, counts: counts, isRunning: isRunning, isWaiting: isWaiting, displayStatus: displayStatus, fmtDuration: fmtDuration, compact: compact, tokenSum: tokenSum, cardStats: cardStats, KIND_ORDER: KIND_ORDER, emptyTimeline: emptyTimeline, mergeLatest: mergeLatest, mergeOlder: mergeOlder, withGaps: withGaps, kindCounts: kindCounts, stepText: stepText, stepMatches: stepMatches, validId: validId, mergeDays: mergeDays, historyGroups: historyGroups, pagePartial: pagePartial, STATES: STATES, ENGINES: ENGINES };
 }));

@@ -295,13 +295,13 @@ const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647
 for (let d = 1; d <= 12; d++) {
   const hoursAgo = d * 24 + 3;
   const when = NOW - hoursAgo * 60 * MIN;
-  const recs = [];
+  const recs = [{ type: 'user', uuid: `hu${d}`, timestamp: new Date(when - MIN).toISOString(), cwd: repo, sessionId: `hist-${d}`, message: { role: 'user', content: `Tidy up todo-cli, round ${d}` } }];
   const n = 3 + Math.floor(rnd() * 6);
   for (let i = 0; i < n; i++) {
     const opus = rnd() < 0.35;
     msgN++;
     recs.push({ type: 'assistant', uuid: `h${msgN}`, timestamp: new Date(when + i * MIN).toISOString(), cwd: repo, sessionId: `hist-${d}`,
-      message: { id: `msg_h${msgN}`, role: 'assistant', model: opus ? 'claude-opus-4' : 'claude-sonnet-4', stop_reason: 'end_turn', content: [{ type: 'text', text: 'ok' }],
+      message: { id: `msg_h${msgN}`, role: 'assistant', model: opus ? 'claude-opus-4' : 'claude-sonnet-4', stop_reason: 'end_turn', content: i % 2 ? [{ type: 'tool_use', id: `tuh${msgN}`, name: i % 4 === 1 ? 'Bash' : 'Edit', input: {} }] : [{ type: 'text', text: 'ok' }],
         usage: usage(Math.round(2000 + rnd() * 9000), Math.round(500 + rnd() * 6000), Math.round(60000 + rnd() * 900000), Math.round(rnd() * 40000)) } });
   }
   const f = path.join(CP, `hist-${d}.jsonl`);

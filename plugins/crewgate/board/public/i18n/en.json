@@ -260,5 +260,15 @@
   "update.removeOld": "Remove old versions",
   "update.removing": "Removing…",
   "update.removedOld": "Removed {count} old version(s), freed {mb} MB.",
-  "update.keptOld": "{count} could not be removed (in use); close your sessions and try again."
+  "update.keptOld": "{count} could not be removed (in use); close your sessions and try again.",
+  "nav.history": "History",
+  "history.range": "Range",
+  "history.last1": "Last 24 hours",
+  "history.lastN": "Last {count} days",
+  "history.sessions": "{count} sessions",
+  "history.sessions1": "{count} session",
+  "history.none": "No sessions in this range.",
+  "history.more": "Load more",
+  "history.end": "No older sessions in this range.",
+  "history.truncated": "Very many transcript files: only part of them was scanned, so older sessions may be missing."
 }

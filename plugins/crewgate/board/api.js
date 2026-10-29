@@ -19,6 +19,7 @@ const { createUsage } = require('./usage');
 const { createSessionStats, sumStats, topTools } = require('./session-stats');
 const { timeline: buildTimeline, crewEventsIn, KINDS: TIMELINE_KINDS } = require('./session-timeline');
 const { hashId } = require('./watcher');
+const { createHistory, dayTotals, dayOf } = require('./history');
 
 class ApiError extends Error {
   constructor(status, key, vars, extra) {
@@ -171,6 +172,7 @@ function createApi(opts = {}) {
   const watcher = opts.watcher || createWatcher({ sessionEnds: createSessionEnds(() => projects.list().map((p) => paths.eventsFile(p.id))) });
   const usage = opts.usage || createUsage();
   const sessionStats = opts.stats || createSessionStats();
+  const history = opts.history || createHistory({ claudeRoot: watcher.claudeRoot, codexRoot: watcher.codexRoot });
   const version = opts.version || '0.0.0';
   const rootCache = new Map();   // cwd -> { at, id }
 
@@ -239,10 +241,10 @@ function createApi(opts = {}) {
     return rows;
   }
 
-  function attachStats(rows) {
+  function attachStats(rows, fileFor = watcher.fileFor) {
     const entries = [];
     for (const r of rows) {
-      const f = watcher.fileFor ? watcher.fileFor(r.id) : null;
+      const f = fileFor ? fileFor(r.id) : null;
       if (f) entries.push({ id: r.id, ...f });
     }
     const g = globalCfg();
@@ -359,11 +361,21 @@ function createApi(opts = {}) {
   function sessionDetail({ id, query }) {
     if (!/^[0-9a-f]{12}$/.test(String(id))) throw new ApiError(404, 'api.notFound');
     const rows = sessionRows();
-    const row = rows.find((r) => r.id === id);
-    const f = row && watcher.fileFor ? watcher.fileFor(id) : null;
-    if (!f) throw new ApiError(404, 'api.notFound');
-    const kids = rows.filter((r) => r.parent === id);
-    attachStats([row, ...kids]);
+    let row = rows.find((r) => r.id === id);
+    let f = row && watcher.fileFor ? watcher.fileFor(id) : null;
+    let kids = rows.filter((r) => r.parent === id);
+    let fileFor = watcher.fileFor;
+    const old = !f;
+    if (old) {
+      // older than the 24-hour list: look it up in the history
+      const hs = history.session(id, { showText: showText(), resolveProject });
+      if (!hs) throw new ApiError(404, 'api.notFound');
+      row = hs.row;
+      f = hs.file;
+      kids = hs.kids;
+      fileFor = history.fileFor;
+    }
+    attachStats([row, ...kids], fileFor);
     const uint = (v) => (/^\d{1,15}$/.test(String(v)) ? Number(v) : undefined);
     const kinds = typeof query.kinds === 'string' ? query.kinds.split(',').filter((k) => TIMELINE_KINDS.includes(k)) : [];
     const agentId = (/[\/]subagents[\/]agent-([^\/]+)\.jsonl$/.exec(f.file) || [])[1] || null;
@@ -376,7 +388,7 @@ function createApi(opts = {}) {
     const link = (agent) => {
       if (row.subagent || f.engine !== 'claude' || !/^[\w.-]{1,80}$/.test(agent)) return null;
       const child = hashId(path.join(path.dirname(f.file), path.basename(f.file, '.jsonl'), 'subagents', `agent-${agent}.jsonl`));
-      return watcher.fileFor(child) ? child : null;
+      return fileFor(child) ? child : null;
     };
     const tl = buildTimeline({
       file: f.file, engine: f.engine, cwd: row.cwd, showText: showText(), before: uint(query.before), beforeTs: uint(query.before_ts),
@@ -388,7 +400,41 @@ function createApi(opts = {}) {
       session: { ...publicSession(row), project_name: row.project ? names.get(row.project) || null : null },
       children: kids.map(publicSession),
       kinds: TIMELINE_KINDS,
+      ...(old ? { history: true } : {}),
       ...tl,
+    };
+  }
+
+  // Sessions older than the 24-hour list, newest first, one page at a time (cursor = ms mtime, see history.js).
+  function historyList({ query }) {
+    const uint = (v) => (/^\d{1,15}$/.test(String(v)) ? Number(v) : undefined);
+    const days = uint(query.days);
+    const tzAsked = /^-?\d{1,4}$/.test(String(query.tz)) ? Number(query.tz) : 0;
+    const tz = Math.abs(tzAsked) <= 14 * 60 ? tzAsked : 0;
+    const project = typeof query.project === 'string' && (query.project === '-' || paths.ID_RE.test(query.project)) ? query.project : '';
+    const pg = history.page({ days: days || undefined, before: uint(query.before), project, size: uint(query.limit), showText: showText(), resolveProject });
+    const rows = [];
+    for (const g of pg.groups) rows.push(g.row, ...g.kids);
+    attachStats(rows, history.fileFor);
+    const names = new Map(projects.list().map((p) => [p.id, p.name]));
+    const sessions = pg.groups.map((g) => {
+      const r = g.row;
+      const first = (r.totals || r.stats || {}).first_ts;
+      return {
+        ...publicSession(r),
+        project_name: r.project ? names.get(r.project) || null : null,
+        started: Number.isFinite(first) ? new Date(first).toISOString() : null,
+        day: dayOf(Date.parse(r.lastActivity), tz),
+      };
+    });
+    const pub = pg.groups.map((g) => g.row);
+    return {
+      show_text: showText(),
+      days: Math.min(history.options.maxDays, Math.max(1, days || history.options.defaultDays)),
+      sessions,
+      day_totals: dayTotals(pub, tz),
+      next: pg.next,
+      truncated: pg.truncated,
     };
   }
 
@@ -427,6 +473,7 @@ function createApi(opts = {}) {
     ['GET', /^\/api\/project\/([^/]+)$/, (a) => projectDetail({ id: a[0] })],
     ['GET', /^\/api\/sessions$/, () => sessionsList()],
     ['GET', /^\/api\/session\/([^/]+)$/, (a, q) => sessionDetail({ id: a[0], query: q })],
+    ['GET', /^\/api\/history$/, (a, q) => historyList({ query: q })],
     ['GET', /^\/api\/usage$/, (a, q) => usageReport({ query: q })],
     ['GET', /^\/api\/schema$/, () => ({ project: config.SCHEMA, global: config.GLOBAL_SCHEMA })],
     ['GET', /^\/api\/config$/, () => configView(config.loadGlobal())],

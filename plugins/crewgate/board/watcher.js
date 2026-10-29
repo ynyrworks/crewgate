@@ -266,6 +266,32 @@ function statusOf(state, lastMs, now, o) {
   return age <= o.workMs ? 'working' : 'idle';   // 'working', or nothing readable: go by the file time
 }
 
+// What the tail (and, for the cwd, the head) of one transcript says about its session. o: { tailBytes, headBytes }.
+function readInfo(file, engine, size, o) {
+  let objs = [];
+  try { objs = tailObjects(file, size, o.tailBytes); } catch { /* unreadable */ }
+  let r;
+  if (engine === 'codex') {
+    r = readCodex(objs, firstObject(file, o.headBytes));
+  } else {
+    r = readClaude(objs);
+    if (!r.cwd) { const first = firstObject(file, o.headBytes); if (first && isStr(first.cwd)) r.cwd = first.cwd; }
+    if (!r.subagent && /[\\/]subagents[\\/]/.test(file)) r.subagent = true;
+    // <session id>.jsonl, or <session id>/subagents/<agent>.jsonl (the subagent belongs to that session)
+    const sub = /([^\\/]+)[\\/]subagents[\\/][^\\/]+$/.exec(file);
+    r.sessionId = sub ? sub[1] : path.basename(file, '.jsonl');
+    const fileAgent = /[\\/]subagents[\\/]agent-([^\\/]+)\.jsonl$/.exec(file);
+    if (fileAgent) r.agentId = fileAgent[1];
+    // <root>/<project>/<session>/subagents/<agent>.jsonl belongs to <root>/<project>/<session>.jsonl
+    if (sub) r.parentFile = path.join(path.dirname(path.dirname(path.dirname(file))), `${sub[1]}.jsonl`);
+  }
+  return {
+    engine, state: r.state, cwd: r.cwd, model: r.model, subagent: r.subagent, lastTs: r.lastTs, text: r.text, closed: !!r.closed,
+    sessionId: r.sessionId || null, act: r.act || null, prompt: r.prompt || null, title: r.title || null,
+    agentId: r.agentId || null, gitBranch: r.gitBranch || null, headless: !!r.headless, parentFile: r.parentFile || null,
+  };
+}
+
 function createWatcher(opts = {}) {
   const o = { ...DEFAULTS, ...defaultRoots(), ...opts };
   let cache = null;
@@ -277,28 +303,7 @@ function createWatcher(opts = {}) {
     const key = `${st.size}:${st.mtimeMs}`;
     const hit = perFile.get(file);
     if (hit && hit.key === key) return hit.info;
-    let objs = [];
-    try { objs = tailObjects(file, st.size, o.tailBytes); } catch { /* unreadable */ }
-    let r;
-    if (engine === 'codex') {
-      r = readCodex(objs, firstObject(file, o.headBytes));
-    } else {
-      r = readClaude(objs);
-      if (!r.cwd) { const first = firstObject(file, o.headBytes); if (first && isStr(first.cwd)) r.cwd = first.cwd; }
-      if (!r.subagent && /[\\/]subagents[\\/]/.test(file)) r.subagent = true;
-      // <session id>.jsonl, or <session id>/subagents/<agent>.jsonl (the subagent belongs to that session)
-      const sub = /([^\\/]+)[\\/]subagents[\\/][^\\/]+$/.exec(file);
-      r.sessionId = sub ? sub[1] : path.basename(file, '.jsonl');
-      const fileAgent = /[\\/]subagents[\\/]agent-([^\\/]+)\.jsonl$/.exec(file);
-      if (fileAgent) r.agentId = fileAgent[1];
-      // <root>/<project>/<session>/subagents/<agent>.jsonl belongs to <root>/<project>/<session>.jsonl
-      if (sub) r.parentFile = path.join(path.dirname(path.dirname(path.dirname(file))), `${sub[1]}.jsonl`);
-    }
-    const info = {
-      engine, state: r.state, cwd: r.cwd, model: r.model, subagent: r.subagent, lastTs: r.lastTs, text: r.text, closed: !!r.closed,
-      sessionId: r.sessionId || null, act: r.act || null, prompt: r.prompt || null, title: r.title || null,
-      agentId: r.agentId || null, gitBranch: r.gitBranch || null, headless: !!r.headless, parentFile: r.parentFile || null,
-    };
+    const info = readInfo(file, engine, st.size, o);
     perFile.set(file, { key, info });
     return info;
   }
@@ -428,4 +433,4 @@ function createWatcher(opts = {}) {
   return { sessions, fileFor, options: o, claudeRoot: o.claudeRoot, codexRoot: o.codexRoot };
 }
 
-module.exports = { createWatcher, promptText, hashId, codexArg, snippet, readClaude, readCodex, statusOf, targetOf, toolArg, roleOf, tailObjects, DEFAULTS, walk, defaultRoots };
+module.exports = { createWatcher, promptText, hashId, codexArg, snippet, readClaude, readCodex, statusOf, targetOf, toolArg, roleOf, tailObjects, DEFAULTS, walk, defaultRoots, readInfo };

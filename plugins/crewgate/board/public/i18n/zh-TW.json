@@ -260,5 +260,15 @@
   "update.removeOld": "移除舊版本",
   "update.removing": "移除中…",
   "update.removedOld": "已移除 {count} 個舊版本，釋出 {mb} MB。",
-  "update.keptOld": "有 {count} 個無法移除（使用中）；請關閉工作階段後再試。"
+  "update.keptOld": "有 {count} 個無法移除（使用中）；請關閉工作階段後再試。",
+  "nav.history": "歷史",
+  "history.range": "範圍",
+  "history.last1": "最近 24 小時",
+  "history.lastN": "最近 {count} 天",
+  "history.sessions": "{count} 個工作階段",
+  "history.sessions1": "{count} 個工作階段",
+  "history.none": "此範圍內沒有工作階段。",
+  "history.more": "載入更多",
+  "history.end": "此範圍內沒有更早的工作階段。",
+  "history.truncated": "對話紀錄檔案非常多：只掃描了一部分，較舊的工作階段可能沒有列出。"
 }

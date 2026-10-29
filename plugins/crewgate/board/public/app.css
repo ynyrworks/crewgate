@@ -153,6 +153,8 @@ button.toggle { border: 0; background: none; padding: 0 4px; min-width: 24px; mi
 .kinds button { min-height: 32px; }
 .kinds button[aria-pressed="true"] { border-color: var(--accent); border-width: 2px; font-weight: 600; }
 .kinds button[aria-pressed="true"]::before { content: "✓ "; }
+.day-total { margin: 0 0 8px; font-variant-numeric: tabular-nums; }
+.s-name { font-weight: 600; }
 button.older { margin: 0 0 10px; min-height: 36px; }
 .tl { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid var(--border); }
 .tl-item { position: relative; padding: 4px 0 8px 12px; overflow-wrap: anywhere; }

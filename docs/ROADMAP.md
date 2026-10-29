@@ -18,10 +18,13 @@ what matters. Details of how things work today are in [DESIGN.md](DESIGN.md).
 - Office view (experimental): `#/office`, a pixel-art office of live sessions.
 - Fixes from real use: recorded gates, hooks-last-seen, merge records, `via`, agent name normalisation, work item updates, default checks detection.
 
+## Unreleased
+
+- History view (`#/history`): statistics and timelines for sessions older than the 24-hour list window, by day, with a range and project filter.
+
 ## Later
 
 - Timeline polish: tool durations at the page boundary, a search box, and crewgate events older than the board's event tail.
-- Statistics for sessions older than the 24-hour list window (a history view).
 - Promoted-rule scoring: measure whether a promoted lesson actually reduces repeat corrections.
 
 ## Exploring
