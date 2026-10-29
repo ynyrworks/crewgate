@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "language": "en",
+  "roles": {
+    "orchestrator": {
+      "engine": "claude",
+      "model": "inherit"
+    },
+    "worker": {
+      "engine": "claude",
+      "model": "sonnet",
+      "agent": "crew-worker"
+    },
+    "reviewer": {
+      "engine": "claude",
+      "model": "sonnet",
+      "agent": "crew-reviewer"
+    },
+    "refuter": {
+      "engine": "claude",
+      "model": "sonnet",
+      "agent": "crew-refuter"
+    }
+  },
+  "engines": {
+    "codex": {
+      "command": "codex",
+      "args": [
+        "exec",
+        "-s",
+        "read-only",
+        "--skip-git-repo-check",
+        "-"
+      ]
+    }
+  },
+  "gates": {
+    "push": "ask",
+    "open_pr": "ask",
+    "merge": "ask",
+    "remote_hosts": "ask",
+    "large_task": "ask",
+    "install_or_download": "ask"
+  },
+  "limits": {
+    "max_parallel_workers": 3,
+    "max_returns_before_takeover": 2,
+    "report_max_tokens": 1500,
+    "orchestrator_read_warn_lines": 300,
+    "orchestrator_edit": "warn",
+    "orchestrator_edit_allow": [
+      "**/*.md",
+      "docs/**",
+      ".claude/**",
+      ".crew/**"
+    ]
+  },
+  "review": {
+    "min_confidence": 0.6,
+    "report_inference": false,
+    "nit_cap": 5,
+    "categories": [
+      "correctness",
+      "security-exploitable",
+      "data-loss",
+      "regression",
+      "spec-mismatch",
+      "test-gap",
+      "maintainability",
+      "nit"
+    ],
+    "downgrade_to_nit": [
+      "theoretical-race",
+      "style"
+    ]
+  },
+  "checks": [],
+  "forbidden": {
+    "paths": [],
+    "actions": []
+  },
+  "board": {
+    "enabled": true,
+    "port": 8781
+  },
+  "lessons": {
+    "promote_after_days": 3,
+    "rules_cap": 15,
+    "rules_file": "CLAUDE.md"
+  }
+}

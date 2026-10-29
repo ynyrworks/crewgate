@@ -13,3 +13,8 @@
 - Hooks: single `crew-hook.js` entry for SessionStart, UserPromptSubmit, PreToolUse, PostToolUse,
   SubagentStart/Stop, Stop, PreCompact and SessionEnd (dispatch tracking, orchestrator edit guard,
   big-read reminder, git push/merge events, session digest). See `plugins/agent-crew/hooks/README.md`.
+
+- Workflow commands: `init` (renders config, agent copies and `.crew/` files), `task`, `review`
+  (find, deterministic filter with dismissed ledger, refute, finalize), `handoff`, `lesson`, `doctor`.
+- Templates, generic `crew-worker` / `crew-reviewer` / `crew-refuter` agents and the `/agent-crew:crew`
+  orchestrator skill with references.
