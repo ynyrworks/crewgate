@@ -1,6 +1,6 @@
 'use strict';
 
-// A tiny todo list kept in a JSON file. Fictional example code for agent-crew.
+// A tiny todo list kept in a JSON file. Fictional example code for crewgate.
 const fs = require('fs');
 
 function load(file) {

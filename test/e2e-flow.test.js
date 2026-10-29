@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const PLUGIN = path.join(__dirname, '..', 'plugins', 'agent-crew');
+const PLUGIN = path.join(__dirname, '..', 'plugins', 'crewgate');
 const h = require(path.join(PLUGIN, 'test', 'helpers'));
 const hk = require(path.join(PLUGIN, 'test', 'hooks-helpers'));
 const wf = require(path.join(PLUGIN, 'test', 'workflow-util'));
@@ -173,7 +173,7 @@ test('full delegated flow: dispatch, report, review, send-back, accept, merge', 
     assert.equal(t.review.final, 1);
     assert.equal(t.review.upheld, 1);
     assert.equal(t.review.rounds, 1);
-    const dropped = JSON.parse(fs.readFileSync(path.join(process.env.AGENT_CREW_HOME, 'projects', pid, 'tasks', id, 'findings', '1.filtered.json'), 'utf8'));
+    const dropped = JSON.parse(fs.readFileSync(path.join(process.env.CREWGATE_HOME, 'projects', pid, 'tasks', id, 'findings', '1.filtered.json'), 'utf8'));
     assert.deepEqual(dropped.map((x) => x.reason).sort(), ['dismissed', 'inference']);
     assert.deepEqual(d.needs.open, [], 'nothing is waiting for the user');
     assert.ok(d.events.some((e) => e.type === 'git.merge'), 'the git.merge event is shown');

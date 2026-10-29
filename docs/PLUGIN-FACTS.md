@@ -10,13 +10,13 @@ Items marked (uncertain) were not confirmed in the docs; code must tolerate eith
 ## Layout
 - `.claude-plugin/marketplace.json` at repo root: required `name`, `owner`, `plugins[]`;
   each entry requires `name` (must equal plugin.json `name`) and `source`
-  (`"./plugins/agent-crew"`; must start with `./`, no `..`).
+  (`"./plugins/crewgate"`; must start with `./`, no `..`).
 - Plugin root holds `.claude-plugin/plugin.json` (only `name` required; also set
   `version`, `description`, `author{name}`, `license`, `repository`, `keywords`),
   `skills/<name>/SKILL.md`, `agents/*.md`, `hooks/hooks.json`, `bin/`, `scripts/`.
   Never put skills/agents/hooks inside `.claude-plugin/`.
 - Validate with `claude plugin validate <dir> [--strict]`.
-- Install: `/plugin marketplace add owner/repo` then `/plugin install agent-crew@<marketplace-name>`.
+- Install: `/plugin marketplace add <owner>/<repo>` then `/plugin install <plugin>@<marketplace-name>` (here: `ynyrworks/crewgate`, `crewgate@crewgate`).
 
 ## Hooks (`hooks/hooks.json`)
 ```json
@@ -56,7 +56,7 @@ Its `tool_input` contains `prompt`, `subagent_type`, `description`, optional `mo
 - PreToolUse decision: `hookSpecificOutput.permissionDecision` = allow|deny|ask|defer +
   `permissionDecisionReason`.
 - Exit 2 = blocking error (stderr is the reason; JSON ignored). Other non-zero = non-blocking error notice.
-- Stop / SubagentStop: `decision:"block"` + `reason` continues the turn — agent-crew never does this.
+- Stop / SubagentStop: `decision:"block"` + `reason` continues the turn — crewgate never does this.
   `hookSpecificOutput.additionalContext` is also accepted on these two events, but "the conversation
   continues so Claude can act on it" (same loop protections: `stop_hook_active`, 8-continuation cap).
   A mere reminder therefore uses top-level `systemMessage` (shown to the user, never continues a turn).
@@ -70,10 +70,10 @@ Its `tool_input` contains `prompt`, `subagent_type`, `description`, optional `mo
 Frontmatter: `name`, `description` (required), `tools`, `disallowedTools`, `model`,
 `maxTurns`, `skills`, `effort`, `isolation`, `color`, `background`. Ignored for plugin agents:
 `hooks`, `mcpServers`, `permissionMode`, `initialPrompt`. Plugin agents are namespaced
-`agent-crew:crew-worker`; project copies rendered by `crew init` are plain `crew-worker`.
+`crewgate:crew-worker`; project copies rendered by `crew init` are plain `crew-worker`.
 
 ## Skills
-Plugin skills are invoked namespaced: `/agent-crew:crew`. Frontmatter: `name`,
+Plugin skills are invoked namespaced: `/crewgate:crew`. Frontmatter: `name`,
 `description`, `when_to_use`, `argument-hint`, `allowed-tools`, `disable-model-invocation`.
 `$ARGUMENTS` holds the arguments. In the body `${CLAUDE_PLUGIN_ROOT}` and
 `${CLAUDE_SKILL_DIR}` are substituted, so the skill calls the CLI as

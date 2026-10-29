@@ -1,6 +1,6 @@
-# agent-crew — design
+# crewgate — design
 
-agent-crew is a Claude Code plugin for **delegated development**: one orchestrator
+crewgate is a Claude Code plugin for **delegated development**: one orchestrator
 session plans, dispatches, reviews and merges; worker subagents implement in git
 worktrees; reviewer subagents review read-only. Progress is recorded **by hooks and
 workflow commands, not by the model remembering to log**, and shown on a local
@@ -42,7 +42,7 @@ names, artwork or vendor logos.
 
 ```
 .claude-plugin/marketplace.json        marketplace with one plugin
-plugins/agent-crew/
+plugins/crewgate/
   .claude-plugin/plugin.json
   skills/crew/SKILL.md                 the /crew skill (orchestrator playbook)
   skills/crew/references/*.md          longer reference loaded on demand
@@ -78,12 +78,12 @@ macOS and Linux (no bash/PowerShell assumptions; use `path`, `os.homedir()`).
 | Lessons | `<repo>/.crew/LESSONS.md` | yes |
 | Dismissed findings | `<repo>/.crew/dismissed.jsonl` | yes |
 | Promoted rules | marked block in `<repo>/CLAUDE.md` | yes |
-| Runtime data | `~/.agent-crew/` (override: `AGENT_CREW_HOME`) | no |
+| Runtime data | `~/.crewgate/` (override: `CREWGATE_HOME`; the pre-rename `~/.agent-crew/` and `AGENT_CREW_HOME` still work as a fallback) | no |
 
 Runtime data layout:
 
 ```
-~/.agent-crew/
+~/.crewgate/
   config.json                          global: port, usage prices, language default
   projects.json                        registry: id -> { path, name, added }
   projects/<id>/
@@ -149,7 +149,7 @@ All fields are optional; defaults below. The board's Settings page edits this fi
 
 - `roles` is an open map: projects may add roles (e.g. `docs-writer`). `engine` is
   `claude` or the name of an engine defined in the **global** config (`engines` is read from
-  `~/.agent-crew/config.json` only; a project-level `engines` block is ignored with a warning). `model` is `inherit`, `opus`, `sonnet`, `haiku` or a
+  `~/.crewgate/config.json` only; a project-level `engines` block is ignored with a warning). `model` is `inherit`, `opus`, `sonnet`, `haiku` or a
   full model id.
 - `gates` values: `auto` (just do it), `ask` (ask the user in chat first), `never`.
 - `orchestrator_edit`: `off` | `warn` | `block` (see §8).
@@ -279,7 +279,7 @@ snippet). `once` stops matching when the snippet no longer exists in the file;
 - Writes are atomic (write `*.tmp` in the same dir, then rename). Corrupt JSON files
   are moved aside to `<name>.corrupt-<ts>` and reported, never silently overwritten.
 - Hooks run with the user's permissions outside the sandbox: they only read stdin, the
-  project's git metadata and agent-crew files, and only write under `~/.agent-crew/`.
+  project's git metadata and crewgate files, and only write under `~/.crewgate/`.
 - Agent files rendered by `crew init` include the default worker boundaries: work only
   in the assigned worktree/branch; commit, never push; no network, no downloads, no
   remote hosts; don't read secrets (`.env*`, keys, credential stores); don't execute
@@ -301,7 +301,7 @@ prints the body fenced as untrusted data.
   `crew lesson suggest` lists candidates; the `/crew wrap-up` step proposes them to the
   user. Nothing is promoted without the user's explicit yes.
 - `crew lesson promote <key> --rule ".."` writes into a marked block in `rules_file`:
-  `<!-- agent-crew:rules:start -->` … `<!-- agent-crew:rules:end -->`, one line per rule
+  `<!-- crewgate:rules:start -->` … `<!-- crewgate:rules:end -->`, one line per rule
   with `(source: <key>, <first date>–<last date>)`. Only text inside the markers is
   touched. When the block holds `rules_cap` rules the command refuses and names the
   oldest/least-cited rule so the user can choose to replace it

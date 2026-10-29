@@ -51,9 +51,9 @@ Committed with the project. Created by `crew init`.
 | `lessons.rules_cap` | integer; min 1; max 200 | `15` | Most promoted rules kept. | 升格規則數量上限。 |
 | `lessons.rules_file` | string | `"CLAUDE.md"` | File that holds the promoted-rules block. Must be inside the project folder. | 存放升格規則區塊的檔案，必須位於專案資料夾內。 |
 
-## Global config: `~/.agent-crew/config.json`
+## Global config: `~/.crewgate/config.json`
 
-Per user (override the folder with `AGENT_CREW_HOME`). Not part of any repository.
+Per user (override the folder with `CREWGATE_HOME`). Not part of any repository.
 
 | Key | Type and limits | Default | Description | 說明 |
 |---|---|---|---|---|

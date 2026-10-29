@@ -20,11 +20,11 @@ const NAMES = [j('che', 'oyu'), j('whatsmy', 'agentdoing'), j('my', 'office'), j
 
 // Names that must not ship (a company, an author's mail prefix, ...) are NOT written in this public
 // file. Each contributor can keep their own list, one regular expression per line, in the untracked
-// file <git dir>/info/hygiene-extra, or in the environment variable AGENT_CREW_HYGIENE_EXTRA
+// file <git dir>/info/hygiene-extra, or in the environment variable CREWGATE_HYGIENE_EXTRA
 // (separated by newlines or semicolons). Lines starting with # are comments; matching is case-insensitive.
 function extraPatterns() {
   const lines = [];
-  const fromEnv = process.env.AGENT_CREW_HYGIENE_EXTRA;
+  const fromEnv = process.env.CREWGATE_HYGIENE_EXTRA;
   if (fromEnv) lines.push(...fromEnv.split(/[\r\n;]+/));
   try {
     const r = spawnSync('git', ['rev-parse', '--git-path', 'info/hygiene-extra'], { cwd: ROOT, encoding: 'utf8' });
@@ -101,17 +101,17 @@ test('the allow-list stays tiny', () => {
   assert.ok(allowed < MAX_ALLOWED, `${allowed} lines use the ${MARKER} marker; the cap is ${MAX_ALLOWED - 1}`);
 });
 
-test('extra patterns come from AGENT_CREW_HYGIENE_EXTRA and are optional', () => {
-  const before = process.env.AGENT_CREW_HYGIENE_EXTRA;
+test('extra patterns come from CREWGATE_HYGIENE_EXTRA and are optional', () => {
+  const before = process.env.CREWGATE_HYGIENE_EXTRA;
   try {
-    delete process.env.AGENT_CREW_HYGIENE_EXTRA;
+    delete process.env.CREWGATE_HYGIENE_EXTRA;
     const base = extraPatterns().length;
-    process.env.AGENT_CREW_HYGIENE_EXTRA = '# comment\nsecret-co;other-name';
+    process.env.CREWGATE_HYGIENE_EXTRA = '# comment\nsecret-co;other-name';
     const got = extraPatterns();
     assert.equal(got.length, base + 2);
     assert.ok(got.some((p) => p.re.test('Secret-Co Ltd')));
   } finally {
-    if (before === undefined) delete process.env.AGENT_CREW_HYGIENE_EXTRA; else process.env.AGENT_CREW_HYGIENE_EXTRA = before;
+    if (before === undefined) delete process.env.CREWGATE_HYGIENE_EXTRA; else process.env.CREWGATE_HYGIENE_EXTRA = before;
   }
 });
 

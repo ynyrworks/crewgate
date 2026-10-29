@@ -9,7 +9,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const EX = path.join(__dirname, '..', 'examples', 'todo-cli');
-const PLUGIN = path.join(__dirname, '..', 'plugins', 'agent-crew');
+const PLUGIN = path.join(__dirname, '..', 'plugins', 'crewgate');
 const config = require(path.join(PLUGIN, 'lib', 'core', 'config'));
 const tasks = require(path.join(PLUGIN, 'lib', 'core', 'tasks'));
 const rv = require(path.join(PLUGIN, 'lib', 'features', 'review'));

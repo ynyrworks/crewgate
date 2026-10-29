@@ -1,8 +1,10 @@
-# agent-crew
+# crewgate
+
+[![CI](https://github.com/ynyrworks/crewgate/actions/workflows/ci.yml/badge.svg)](https://github.com/ynyrworks/crewgate/actions/workflows/ci.yml)
 
 [English](README.md)
 
-**agent-crew** 是一個 [Claude Code](https://code.claude.com) 外掛，用來做「分工開發」。由一個**統籌**（orchestrator）
+**crewgate** 是一個 [Claude Code](https://code.claude.com) 外掛，用來做「分工開發」。由一個**統籌**（orchestrator）
 工作階段負責規劃、寫任務書（brief），再派出**工人**（worker）子代理，在各自的 git worktree 裡實作；唯讀的**審查員**
 （reviewer）與**反駁員**（refuter）子代理負責檢查成果，只有通過決定性過濾的發現才會送到你面前。進度由
 **hook 與流程指令自動記錄，不靠模型自己記得去記**，並顯示在只監聽 `127.0.0.1` 的本機看板上。
@@ -17,7 +19,7 @@
 - 統籌把（昂貴的）上下文拿去讀大檔案；
 - 規則只是一大段文字，寫了就被忘記。
 
-agent-crew 把這些都變成強制或自動記錄的機制：五段式任務書（缺段落 CLI 直接拒收）、改程式與讀大檔的提醒、
+crewgate 把這些都變成強制或自動記錄的機制：五段式任務書（缺段落 CLI 直接拒收）、改程式與讀大檔的提醒、
 由 hook 事件記錄狀態、三段式審查流程、尚未審查或仍在背景執行時的收尾提醒，以及只有你點頭才會升格成規則的經驗。
 
 沒有任何執行期相依套件，需要 Node.js 18 以上，Windows、macOS、Linux 都能用。完全不連網，hook 與看板也不會呼叫模型。
@@ -31,7 +33,7 @@ agent-crew 把這些都變成強制或自動記錄的機制：五段式任務書
   +--------------------------+   crew task create    +--------------------+
   | 統籌 orchestrator        | --------------------> | 任務書 + 任務      |
   | 主工作階段               |   （五段式任務書）    | （狀態機）         |
-  | /agent-crew:crew         |                       +--------------------+
+  | /crewgate:crew           |                       +--------------------+
   +------------+-------------+                                ^
                | Agent 工具；提示詞帶有                       | 狀態
                | "crew-task: <id>"                            |
@@ -66,7 +68,7 @@ commit，絕不 push。審查員讀 diff、任務書與 `.crew/REVIEW.md`，回�
 SubagentStart/Stop、Stop、PreCompact 與 SessionEnd。它們透過 `crew-task:` 標記把派出去的子代理對應到任務；統籌自己
 改程式時提醒（或依設定直接擋下）；不帶範圍讀超大檔案時提醒；記錄 `git push` 與 `git merge`；有已回報卻未審查的工作時提醒；
 並在工作階段結束時寫下決定性的摘要。沒有用 `crew init` 登錄的專案，所有 hook 都是靜默的空操作。詳見
-[plugins/agent-crew/hooks/README.md](plugins/agent-crew/hooks/README.md)。
+[plugins/crewgate/hooks/README.md](plugins/crewgate/hooks/README.md)。
 
 **看板。** `crew board start` 會啟動本機網頁：所有專案、依狀態排列的任務與退回次數、執行中的子代理、等你處理的事項、
 工作流、紀錄、審查統計、經驗、交接、本機 Claude Code / Codex 工作階段即時清單、token 用量，以及由設定結構產生的設定頁。
@@ -76,32 +78,32 @@ SubagentStart/Stop、Stop、PreCompact 與 SessionEnd。它們透過 `crew-task:
 
 ## 安裝
 
-從 marketplace 安裝（請把 `<owner>` 換成這個儲存庫的 GitHub 擁有者）：
+從 GitHub marketplace 安裝：
 
 ```
-/plugin marketplace add <owner>/agent-crew
-/plugin install agent-crew@agent-crew
+/plugin marketplace add ynyrworks/crewgate
+/plugin install crewgate@crewgate
 ```
 
 或是不安裝，直接用本機複本試用：
 
 ```
-git clone https://github.com/<owner>/agent-crew
-claude --plugin-dir agent-crew/plugins/agent-crew
+git clone https://github.com/ynyrworks/crewgate
+claude --plugin-dir crewgate/plugins/crewgate
 ```
 
-技能要加上外掛名稱來呼叫：`/agent-crew:crew`。CLI 位於 `plugins/agent-crew/bin/crew.js`；在 Claude Code 裡由技能代你呼叫，
-在終端機則用 `node plugins/agent-crew/bin/crew.js <指令>`。
+技能要加上外掛名稱來呼叫：`/crewgate:crew`。CLI 位於 `plugins/crewgate/bin/crew.js`；在 Claude Code 裡由技能代你呼叫，
+在終端機則用 `node plugins/crewgate/bin/crew.js <指令>`。
 
 ## 快速開始
 
 1. 安裝外掛（見上方），在你的 git 專案裡開啟 Claude Code。
-2. 執行 `/agent-crew:crew init`。它會建立 `.claude/crew.json`、`.claude/agents/` 下的三個 agent 檔、
+2. 執行 `/crewgate:crew init`。它會建立 `.claude/crew.json`、`.claude/agents/` 下的三個 agent 檔、
    `.crew/REVIEW.md` 與 `.crew/LESSONS.md`，並登錄專案。想要繁體中文輸出可加 `--lang zh-TW`。
    已存在的檔案不加 `--force` 絕不會被覆蓋。
 3. 編輯 `.claude/crew.json`：設定 `checks`（例如 `["npm test"]`）以及要禁止的 `forbidden` 路徑或動作，
    然後 commit，讓團隊共用。
-4. 交代工作：`/agent-crew:crew 幫 add 指令加上 --due 選項，分工去做`。統籌會寫任務書、建立任務與 worktree，
+4. 交代工作：`/crewgate:crew 幫 add 指令加上 --due 選項，分工去做`。統籌會寫任務書、建立任務與 worktree，
    並派出工人。派工由 hook 自動記錄，你不需要手動記任何東西。
 5. 選用：請 Claude 啟動看板（`crew board start`），再開啟 `http://127.0.0.1:8781/`。
 6. 工人回報後，統籌會跑審查流程、把倖存的發現給你看，決定退回或驗收，並在合併前先問你（`merge` 關卡預設是 `ask`）。
@@ -109,7 +111,7 @@ claude --plugin-dir agent-crew/plugins/agent-crew
 ## 設定
 
 專案設定在 `.claude/crew.json`（所有欄位都是選填）；全域設定（看板連接埠、用量單價、預設語言）在
-`~/.agent-crew/config.json`。完整的欄位對照表由程式自動產生：[docs/CONFIG.md](docs/CONFIG.md)（含繁體中文說明）。
+`~/.crewgate/config.json`。完整的欄位對照表由程式自動產生：[docs/CONFIG.md](docs/CONFIG.md)（含繁體中文說明）。
 最常會動到的欄位：
 
 | 欄位 | 用途 |
@@ -127,7 +129,7 @@ claude --plugin-dir agent-crew/plugins/agent-crew
 
 ## CLI 參考
 
-所有指令、選項與檔案位置：[plugins/agent-crew/skills/crew/references/commands.md](plugins/agent-crew/skills/crew/references/commands.md)。
+所有指令、選項與檔案位置：[plugins/crewgate/skills/crew/references/commands.md](plugins/crewgate/skills/crew/references/commands.md)。
 指令群組：`init`、`doctor`、`project`、`task`、`review`、`handoff`、`lesson`、`need`、`work`、`log`、`mr`、
 `validate`、`board`、`import`。讀取類指令都支援 `--json`。
 
@@ -141,9 +143,9 @@ _截圖之後會補在這裡：總覽、專案（任務與審查統計）、工�
   token 並使用 JSON 內容類型，並送出嚴格的 CSP。沒有遙測、沒有對外連線，hook 與看板也不會呼叫模型。
 - **遮蔽。** 文字會先遮蔽再截斷才儲存：私鑰、Bearer／Basic 認證、`password=` 之類的鍵值、常見服務金鑰、JWT，
   以及除了本機迴路與文件保留網段以外的 IP 位址。
-- **資料放哪裡。** 執行期資料寫在 `~/.agent-crew/`（可用 `AGENT_CREW_HOME` 改位置）。專案內的檔案
+- **資料放哪裡。** 執行期資料寫在 `~/.crewgate/`（可用 `CREWGATE_HOME` 改位置）。專案內的檔案
   （`.claude/crew.json`、`.crew/*`）只會由 `crew init` 與經驗相關指令寫入。
-- **Hook 在沙盒之外執行**，使用你自己的權限。它們只讀取標準輸入、專案的 git 資訊與 agent-crew 的檔案，只寫入資料目錄。
+- **Hook 在沙盒之外執行**，使用你自己的權限。它們只讀取標準輸入、專案的 git 資訊與 crewgate 的檔案，只寫入資料目錄。
   它們不會自動登錄專案，也不會擋住 Stop。唯一刻意的拒絕，是你把 `orchestrator_edit` 設成 `block` 時的編輯守門。
 - **文字一律當資料。** 檔案內容、報告、交接內容與審查發現，交給模型時都會加上圍欄並標示為不可信，
   裡面出現的指令不應被執行。
@@ -153,14 +155,14 @@ _截圖之後會補在這裡：總覽、專案（任務與審查統計）、工�
 
 ## 用 Codex 或其他 CLI 當審查員
 
-審查員這個角色可以不用 Claude。全域設定（`~/.agent-crew/config.json`）預設就有名為 `codex` 的引擎（`codex exec -s read-only --skip-git-repo-check -`）。
+審查員這個角色可以不用 Claude。全域設定（`~/.crewgate/config.json`）預設就有名為 `codex` 的引擎（`codex exec -s read-only --skip-git-repo-check -`）。
 在專案把 `roles.reviewer.engine` 設成 `codex`，或單次執行：
 
 ```
 crew review run <任務> --engine codex
 ```
 
-agent-crew 會組出提示詞（任務書、審查規則、diff），從標準輸入餵進去，從標準輸出取出 JSON 陣列的發現，
+crewgate 會組出提示詞（任務書、審查規則、diff），從標準輸入餵進去，從標準輸出取出 JSON 陣列的發現，
 再接著走同樣的過濾與反駁階段。你也可以在**全域**設定的 `engines` 底下加自己的引擎，指定 `command` 與 `args`；提示詞一律從標準輸入傳入。
 指令依 `PATH` 尋找（Windows 也支援 `.cmd`/`.bat`，不經 shell 啟動）。專案的 `.claude/crew.json` 只能用名稱引用引擎
 （`roles.*.engine`）；專案檔裡的 `engines` 會被忽略並顯示警告，因為複製來的儲存庫不該決定 `crew review run` 要執行哪個程式。
@@ -186,11 +188,11 @@ node scripts/gen-config-docs.js   # 修改設定結構之後
 ```
 
 規則：不得新增執行期相依套件、Node 18 以上、跨平台（不假設特定 shell）、測試只用暫存資料夾，絕不碰真實的
-`~/.agent-crew` 或 `~/.claude`。儲存庫衛生測試會擋下多餘的 IP 位址、像憑證的字串與專案專屬名稱；
+`~/.crewgate` 或 `~/.claude`。儲存庫衛生測試會擋下多餘的 IP 位址、像憑證的字串與專案專屬名稱；
 文件請用 `192.0.2.x`，測試中需要其他位址時請在執行時才組出來。修正與測試請放在同一次變更。
 
 若有些名稱（公司名、信箱前綴）不得出現在儲存庫，請不要寫進任何受版控的檔案：把每行一個正規表示式放在未追蹤的
-`.git/info/hygiene-extra`（或設環境變數 `AGENT_CREW_HYGIENE_EXTRA`，以分號分隔），衛生測試會把它們加進內建規則。
+`.git/info/hygiene-extra`（或設環境變數 `CREWGATE_HYGIENE_EXTRA`，以分號分隔），衛生測試會把它們加進內建規則。
 
 ## 授權
 
