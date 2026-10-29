@@ -109,8 +109,8 @@ test('paging: limit and the mtime cursor walk the whole range without gaps or re
     assert.ok(r.sessions.length <= 2);
     seen.push(...r.sessions.map((s) => s.id));
     if (r.next === null) break;
-    assert.equal(typeof r.next, 'number');
-    before = `&before=${r.next}`;
+    assert.match(r.next, /^\d+-[0-9a-f]{12}$/);
+    before = `&before=${encodeURIComponent(r.next)}`;
   }
   const all = (await get('/api/history?days=90')).json.sessions.map((s) => s.id);
   assert.deepEqual(seen, all);
@@ -217,7 +217,7 @@ test('bounds: files looked at per request are capped and said so', () => {
   const small = createHistory({ claudeRoot, codexRoot, maxExamined: 1 });
   const p1 = small.page({ days: 90 });
   assert.equal(p1.groups.length, 1);
-  assert.equal(typeof p1.next, 'number', 'the rest is reachable through the cursor');
+  assert.equal(typeof p1.next, 'string', 'the rest is reachable through the cursor');
   assert.deepEqual(createHistory({}).page({ days: 90 }).groups, [], 'no roots, nothing listed');
   assert.equal(createHistory({ claudeRoot, codexRoot }).session('not-an-id'), null);
 });
@@ -234,4 +234,130 @@ test('UI model: pages group by day, totals merge across pages, a refetched page 
   assert.equal(SM.pagePartial({ rows: [{ stats: { partial: true } }] }), true);
   assert.equal(SM.pagePartial({ rows: [{ stats: { partial: false }, totals: { partial: true } }] }), true);
   assert.equal(SM.pagePartial(p1), false);
+});
+
+// ---- review fixes
+
+// one-line transcripts with exact (possibly fractional) mtimes in seconds
+function tinyRoot(prefix, names, mtimeOf) {
+  const root = h.tmpDir(prefix);
+  names.forEach((n, i) => {
+    const f = path.join(root, 'proj', `${n}.jsonl`);
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    fs.writeFileSync(f, jl([{ cwd: root, sessionId: n, timestamp: iso(NOW), type: 'user', message: { role: 'user', content: 'x' } }]));
+    const s = mtimeOf(i);
+    fs.utimesSync(f, s, s);
+  });
+  return root;
+}
+function walkAll(hist, query = {}, guard = 50) {
+  const seen = [];
+  let before;
+  for (let i = 0; i < guard; i++) {
+    const pg = hist.page({ days: 90, before, ...query });
+    seen.push(...pg.groups.map((g) => g.row.id));
+    if (pg.next === null) return seen;
+    before = pg.next;
+  }
+  throw new Error('cursor does not advance');
+}
+
+test('cursor: fractional mtimes round trip through the HTTP API without repeating page 1', async () => {
+  const base = Math.floor(ago(2) / 1000);
+  const root = tinyRoot('crew-hist-frac-', ['a', 'b', 'c', 'd', 'e'], (i) => base + i * 100 + 0.123456);
+  const b = createBoard({ claudeRoot: root, codexRoot: h.tmpDir('crew-hist-frac-cx-'), watcher: { ttlMs: 0 } });
+  const p = await b.listen(0);
+  try {
+    const seen = [];
+    let before = '';
+    for (let i = 0; i < 10; i++) {
+      const r = (await h.request(p, { path: `/api/history?days=7&limit=2${before}` })).json;
+      seen.push(...r.sessions.map((s) => s.id));
+      if (r.next === null) break;
+      before = `&before=${encodeURIComponent(r.next)}`;
+    }
+    assert.equal(seen.length, 5);
+    assert.equal(new Set(seen).size, 5, 'no repeats');
+    // the cursor from older clients (a bare millisecond number) still works
+    const r1 = (await h.request(p, { path: '/api/history?days=7&limit=2' })).json;
+    const ms = Math.floor(Date.parse(r1.sessions[1].lastActivity));
+    const r2 = (await h.request(p, { path: `/api/history?days=7&before=${ms}` })).json;
+    assert.ok(r2.sessions.every((s) => Date.parse(s.lastActivity) < ms + 1));
+  } finally { await b.close(); }
+});
+
+test('cursor: a tie of any size across the examination cap is neither skipped nor repeated', () => {
+  const same = Math.floor(ago(2) / 1000);
+  const names = Array.from({ length: 13 }, (_, i) => `s${String(i).padStart(2, '0')}`);
+  const root = tinyRoot('crew-hist-tie-', names, () => same);
+  for (const [maxExamined, size] of [[3, 100], [100, 4], [1, 1], [5, 5]]) {
+    const seen = walkAll(createHistory({ claudeRoot: root, maxExamined }), { size });
+    assert.equal(seen.length, 13, `${maxExamined}/${size}: all sessions`);
+    assert.equal(new Set(seen).size, 13, `${maxExamined}/${size}: none twice`);
+  }
+});
+
+test('listing budget: empty directories and entries are charged, date folders out of range are not opened', () => {
+  const root = h.tmpDir('crew-hist-budget-');
+  for (let i = 0; i < 200; i++) fs.mkdirSync(path.join(root, `p${i}`, `s${i}`, 'subagents'), { recursive: true });
+  const cx = h.tmpDir('crew-hist-budget-cx-');
+  const today = new Date();
+  const dir = (d) => path.join(cx, String(d.getUTCFullYear()), String(d.getUTCMonth() + 1).padStart(2, '0'), String(d.getUTCDate()).padStart(2, '0'));
+  fs.mkdirSync(path.join(cx, '2020', '01', '01'), { recursive: true });
+  fs.writeFileSync(path.join(cx, '2020', '01', '01', 'rollout-old.jsonl'), '{}\n');
+  fs.mkdirSync(dir(today), { recursive: true });
+  fs.writeFileSync(path.join(dir(today), 'rollout-new.jsonl'), '{}\n');
+  fs.mkdirSync(path.join(root, 'a', 'b', 'c', 'd'), { recursive: true });   // outside the known layout
+  const opened = [];
+  const real = fs.opendirSync;
+  fs.opendirSync = (p, ...rest) => { opened.push(String(p)); return real.call(fs, p, ...rest); };
+  try {
+    const hist = createHistory({ claudeRoot: root, codexRoot: cx, maxScan: 20 });
+    const pg = hist.page({ days: 7 });
+    assert.equal(pg.truncated, true);
+    assert.ok(opened.filter((p) => p.startsWith(root)).length <= 20, `opened ${opened.length} directories`);
+    opened.length = 0;
+    const wide = createHistory({ claudeRoot: h.tmpDir('crew-hist-none-'), codexRoot: cx });
+    const pg2 = wide.page({ days: 7 });
+    assert.equal(pg2.truncated, false);
+    assert.ok(pg2.groups.length >= 0);
+    assert.ok(!opened.some((p) => p.includes(`${path.sep}2020`)), 'the 2020 date folder is skipped for a 7-day range');
+    assert.ok(opened.some((p) => p.endsWith(String(today.getUTCDate()).padStart(2, '0'))), 'today\'s folder is read');
+    assert.ok(!opened.some((p) => p.includes('a' + path.sep + 'b' + path.sep + 'c')), 'nothing outside the layout');
+  } finally { fs.opendirSync = real; }
+});
+
+test('activity time of a session is the newest of the parent and its subagents (list, day and detail agree)', async () => {
+  const root = h.tmpDir('crew-hist-eff-');
+  const par = path.join(root, 'pe', 'old.jsonl');
+  claudeFile(par, { cwd: root, sid: 'old', at: ago(60) });
+  const kid = path.join(root, 'pe', 'old', 'subagents', 'agent-k1.jsonl');
+  claudeFile(kid, { cwd: root, sid: 'old', at: ago(2), agent: 'k1' });
+  const hist = createHistory({ claudeRoot: root });
+  const pg = hist.page({ days: 7 });
+  assert.equal(pg.groups.length, 1, 'listed in 7 days because of the subagent');
+  const want = fs.statSync(kid).mtimeMs;
+  assert.ok(Math.abs(Date.parse(pg.groups[0].row.lastActivity) - want) < 1000);
+  assert.equal(dayTotals([pg.groups[0].row], 0)[0].day, new Date(want).toISOString().slice(0, 10));
+  const det = hist.session(hashId(par));
+  assert.ok(Math.abs(Date.parse(det.row.lastActivity) - want) < 1000, 'the detail page agrees');
+});
+
+test('show_text switched off elsewhere: cached history pages are detected and dropped', async () => {
+  const pages = [{ showText: true, rows: [{ last_prompt: 'x' }] }, { showText: true, rows: [] }];
+  assert.equal(SM.textChanged(pages, true), false);
+  assert.equal(SM.textChanged(pages, false), true, 'turned off: text must not stay on screen');
+  assert.equal(SM.textChanged([{ showText: false }], true), true, 'turned on: refetch to get text');
+  assert.equal(SM.textChanged([], false), false);
+  const src = fs.readFileSync(path.join(__dirname, '..', 'board', 'public', 'app.js'), 'utf8');
+  const tick = src.slice(src.indexOf('function histTick'), src.indexOf('function dayLabel'));
+  assert.match(tick, /\/api\/meta/, 'every refresh tick asks the board for the current setting');
+  assert.match(tick, /textChanged/);
+  // server side: the flag follows the setting on each answer
+  await setText(true);
+  assert.equal((await get('/api/history?days=7')).json.show_text, true);
+  await setText(false);
+  const off = await get('/api/history?days=7');
+  assert.equal(off.json.show_text, false);
+  assert.ok(off.json.sessions.every((s) => !('last_prompt' in s)));
 });

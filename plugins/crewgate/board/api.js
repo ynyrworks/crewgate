@@ -412,7 +412,7 @@ function createApi(opts = {}) {
     const tzAsked = /^-?\d{1,4}$/.test(String(query.tz)) ? Number(query.tz) : 0;
     const tz = Math.abs(tzAsked) <= 14 * 60 ? tzAsked : 0;
     const project = typeof query.project === 'string' && (query.project === '-' || paths.ID_RE.test(query.project)) ? query.project : '';
-    const pg = history.page({ days: days || undefined, before: uint(query.before), project, size: uint(query.limit), showText: showText(), resolveProject });
+    const pg = history.page({ days: days || undefined, before: typeof query.before === 'string' ? query.before : undefined, project, size: uint(query.limit), showText: showText(), resolveProject });
     const rows = [];
     for (const g of pg.groups) rows.push(g.row, ...g.kids);
     attachStats(rows, history.fileFor);

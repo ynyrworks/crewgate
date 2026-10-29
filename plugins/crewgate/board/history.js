@@ -14,9 +14,9 @@ const DAY = 24 * 60 * 60 * 1000;
 const DEFAULTS = {
   defaultDays: 7,
   maxDays: 90,
-  pageSize: 50,          // sessions per page (a tie on the last mtime may add a few)
+  pageSize: 50,          // sessions per page
   maxPageSize: 100,
-  maxScan: 20000,        // transcript files looked at per request; more are ignored (truncated: true)
+  maxScan: 40000,        // directory opens and entries read per request; the rest is ignored (truncated: true)
   maxExamined: 300,      // candidates whose head/tail are read per request (a project filter may skip many)
   maxKids: 100,          // subagent files per session
   maxIds: 20000,         // remembered id -> file entries
@@ -26,20 +26,64 @@ const DEFAULTS = {
 
 const SUBAGENT_RE = /([^\\/]+)[\\/]subagents[\\/]agent-[^\\/]+\.jsonl$/;
 
-// .jsonl files under a root, at most state.left of them in total (state.truncated tells when more existed).
-function listFiles(dir, out, state, depth = 0) {
-  if (depth > 6 || state.left <= 0) return;
-  let ents;
-  try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
-  for (const e of ents) {
-    const f = path.join(dir, e.name);
-    if (e.isDirectory()) listFiles(f, out, state, depth + 1);
-    else if (e.isFile() && e.name.endsWith('.jsonl')) {
+// Reads a directory entry by entry (never the whole listing at once); the open and every entry are charged to
+// state.left, and state.truncated is set when the budget ran out.
+function eachEntry(dir, state, fn) {
+  if (state.left <= 0) { state.truncated = true; return; }
+  state.left--;
+  let d;
+  try { d = fs.opendirSync(dir); } catch { return; }
+  try {
+    for (let e = d.readSync(); e; e = d.readSync()) {
       if (state.left <= 0) { state.truncated = true; return; }
       state.left--;
-      out.push(f);
+      fn(e);
     }
-  }
+  } catch { /* unreadable directory */ } finally { try { d.closeSync(); } catch { /* ignore */ } }
+}
+
+const isJsonl = (e) => e.isFile() && e.name.endsWith('.jsonl');
+
+// Claude layout: <root>/<project>/<session>.jsonl and <root>/<project>/<session>/subagents/agent-*.jsonl.
+function listClaude(root, out, state) {
+  eachEntry(root, state, (e) => {
+    const p = path.join(root, e.name);
+    if (isJsonl(e)) out.push(p);
+    else if (e.isDirectory()) {
+      eachEntry(p, state, (s) => {
+        const sp = path.join(p, s.name);
+        if (isJsonl(s)) out.push(sp);
+        else if (s.isDirectory()) {
+          const sub = path.join(sp, 'subagents');
+          eachEntry(sub, state, (k) => { if (isJsonl(k) && k.name.startsWith('agent-')) out.push(path.join(sub, k.name)); });
+        }
+      });
+    }
+  });
+}
+
+// Codex layout: <root>/YYYY/MM/DD/rollout-*.jsonl. Date folders that end before `from` (a day of slack for time zones)
+// are not opened. Other folders directly under the root are read one level deep, files only.
+function listCodex(root, out, state, from) {
+  const leaf = (dir) => eachEntry(dir, state, (e) => { if (isJsonl(e)) out.push(path.join(dir, e.name)); });
+  const walk = (dir, level, y, m) => eachEntry(dir, state, (e) => {
+    const p = path.join(dir, e.name);
+    if (isJsonl(e)) { out.push(p); return; }
+    if (!e.isDirectory()) return;
+    if (level === 0 && !/^\d{4}$/.test(e.name)) { leaf(p); return; }
+    if (!/^\d{1,4}$/.test(e.name) || level > 2) return;
+    const n = Number(e.name);
+    const end = level === 0 ? Date.UTC(n + 1, 0, 1) : level === 1 ? Date.UTC(y, n, 1) : Date.UTC(y, m - 1, n + 1);
+    if (from > 0 && end + DAY < from) return;
+    if (level === 2) leaf(p); else walk(p, level + 1, level === 0 ? n : y, level === 1 ? n : 0);
+  });
+  walk(root, 0, 0, 0);
+}
+
+function listTree(root, engine, state, from) {
+  const out = [];
+  if (engine === 'claude') listClaude(root, out, state); else listCodex(root, out, state, from);
+  return out;
 }
 
 const parentOf = (file) => {
@@ -72,6 +116,12 @@ function dayTotals(rows, tz = 0) {
   return [...days.values()].sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0));
 }
 
+// "<ms>-<12 hex id>" or a bare "<ms>" -> { ms, id }, else null (no cursor).
+function parseCursor(v) {
+  const m = /^(\d{1,15})(?:-([0-9a-f]{12}))?$/.exec(String(v === undefined || v === null ? '' : v));
+  return m ? { ms: Number(m[1]), id: m[2] || '' } : null;
+}
+
 // opts: { claudeRoot, codexRoot, now } plus the DEFAULTS above. A missing root is simply not listed.
 function createHistory(opts = {}) {
   const o = { ...DEFAULTS, ...opts };
@@ -92,13 +142,11 @@ function createHistory(opts = {}) {
   const fileFor = (id) => ids.get(String(id)) || null;
 
   // Every transcript with its stat: [{ file, engine, st }], and whether the cap cut the list.
-  function scan() {
+  function scan(from) {
     const out = [];
     const state = { left: o.maxScan, truncated: false };
     for (const [root, engine] of roots()) {
-      const list = [];
-      listFiles(root, list, state);
-      for (const file of list) {
+      for (const file of listTree(root, engine, state, from)) {
         try { out.push({ file, engine, st: fs.statSync(file) }); } catch { /* vanished */ }
       }
     }
@@ -116,7 +164,8 @@ function createHistory(opts = {}) {
   }
 
   // A row shaped like the watcher's (the API strips cwd/session). Text snippets only with showText.
-  function describe(file, engine, st, { showText = false } = {}) {
+  // `activityMs` is the newest time of the session including its subagents (default: the file's own).
+  function describe(file, engine, st, { showText = false, activityMs = st.mtimeMs } = {}) {
     const info = infoOf(file, engine, st);
     const id = remember(file, engine, st);
     const row = {
@@ -124,7 +173,7 @@ function createHistory(opts = {}) {
       engine,
       status: 'done',
       activity: { kind: 'done' },
-      lastActivity: new Date(st.mtimeMs).toISOString(),
+      lastActivity: new Date(activityMs).toISOString(),
       model: info.model,
       subagent: info.subagent,
       session: info.sessionId,
@@ -149,12 +198,10 @@ function createHistory(opts = {}) {
   // The subagent transcripts of a Claude session file: [{ file, st }].
   function kidsOf(file) {
     const dir = path.join(path.dirname(file), path.basename(file, '.jsonl'), 'subagents');
-    let names;
-    try { names = fs.readdirSync(dir); } catch { return []; }
+    const names = [];
+    eachEntry(dir, { left: o.maxKids * 2, truncated: false }, (e) => { if (isJsonl(e) && e.name.startsWith('agent-') && names.length < o.maxKids) names.push(e.name); });
     const out = [];
     for (const n of names.sort()) {
-      if (out.length >= o.maxKids) break;
-      if (!/^agent-.+\.jsonl$/.test(n)) continue;
       const f = path.join(dir, n);
       try { out.push({ file: f, st: fs.statSync(f) }); } catch { /* vanished */ }
     }
@@ -163,13 +210,16 @@ function createHistory(opts = {}) {
 
   // page({ days, before, project, size, showText, resolveProject }) ->
   //   { groups: [{ row, kids: [{ id, parent }] }], next, truncated }
-  // Sessions (top-level, newest first) whose newest file was touched within `days` and before `before` (ms).
-  // `next` is the cursor for the following page (the mtime of the last session looked at) or null.
+  // Sessions (top-level, newest first) whose newest file (own or a subagent's) was touched within `days`.
+  // Order is (whole-millisecond mtime, session id) descending. `next` is the cursor of the last session looked at,
+  // "<ms>-<id>", or null at the end; `before` takes it back (a bare "<ms>" means strictly older than that
+  // millisecond), so a tie of any size is never skipped or repeated, wherever a page ends.
   function page({ days = o.defaultDays, before, project = '', size = o.pageSize, showText = false, resolveProject = null } = {}) {
     const d = Math.min(o.maxDays, Math.max(1, Math.floor(days) || o.defaultDays));
     const want = Math.min(o.maxPageSize, Math.max(1, Math.floor(size) || o.pageSize));
     const from = now() - d * DAY;
-    const { files, truncated } = scan();
+    const { files, truncated } = scan(from);
+    const cut = parseCursor(before);
 
     // group by session: a subagent file belongs to its parent session's file
     const groups = new Map();   // session file -> { file, engine, st, mtime, kids }
@@ -190,7 +240,8 @@ function createHistory(opts = {}) {
       if (g.st) cands.push(g);
       else for (const f of g.loose) cands.push({ file: f.file, engine: f.engine, st: f.st, mtime: f.st.mtimeMs, loose: [] });
     }
-    cands.sort((a, b) => b.mtime - a.mtime || (a.file < b.file ? -1 : 1));
+    for (const g of cands) { g.ms = Math.floor(g.mtime); g.cid = hashId(g.file); }
+    cands.sort((a, b) => b.ms - a.ms || (a.cid < b.cid ? 1 : a.cid > b.cid ? -1 : 0));
 
     const known = new Map();   // cwd -> project id
     const projectOf = (cwd) => {
@@ -208,17 +259,15 @@ function createHistory(opts = {}) {
     let examined = 0;
     for (; i < cands.length; i++) {
       const g = cands[i];
-      if (before !== undefined && g.mtime >= before) continue;
-      // fill the page, but never split sessions that share the last mtime (the cursor is a strict "older than")
-      if (picked.length >= want && g.mtime !== picked[picked.length - 1].mtime) break;
-      if (examined >= o.maxExamined) break;
+      if (cut && !(g.ms < cut.ms || (g.ms === cut.ms && g.cid < cut.id))) continue;
+      if (picked.length >= want || examined >= o.maxExamined) break;
       examined++;
-      const row = describe(g.file, g.engine, g.st, { showText });
+      const row = describe(g.file, g.engine, g.st, { showText, activityMs: g.mtime });
       row.project = projectOf(row.cwd);
       if (project === '-' ? row.project : project && row.project !== project) continue;
-      picked.push({ g, row, mtime: g.mtime });
+      picked.push({ g, row });
     }
-    const next = i < cands.length ? cands[i - 1].mtime : null;
+    const next = i < cands.length && i > 0 ? `${cands[i - 1].ms}-${cands[i - 1].cid}` : null;
 
     return {
       groups: picked.map(({ g, row }) => {
@@ -227,7 +276,7 @@ function createHistory(opts = {}) {
           : [];
         return { row, kids };
       }),
-      next: next === null || next === undefined ? null : next,
+      next,
       truncated,
     };
   }
@@ -239,9 +288,7 @@ function createHistory(opts = {}) {
     if (hit) { try { const st = fs.statSync(hit.file); return { file: hit.file, engine: hit.engine, st }; } catch { ids.delete(id); } }
     const state = { left: o.maxScan, truncated: false };
     for (const [root, engine] of roots()) {
-      const list = [];
-      listFiles(root, list, state);
-      for (const file of list) {
+      for (const file of listTree(root, engine, state, 0)) {
         if (hashId(file) !== id) continue;
         try { return { file, engine, st: fs.statSync(file) }; } catch { return null; }
       }
@@ -254,18 +301,20 @@ function createHistory(opts = {}) {
     if (!/^[0-9a-f]{12}$/.test(String(id))) return null;
     const f = locate(id);
     if (!f) return null;
-    const mk = (file, engine, st) => {
-      const row = describe(file, engine, st, { showText });
+    const mk = (file, engine, st, activityMs) => {
+      const row = describe(file, engine, st, { showText, activityMs });
       if (resolveProject && row.cwd) { try { const p = resolveProject(row.cwd); if (p) row.project = p.id; } catch { /* unresolved */ } }
       return row;
     };
-    const row = mk(f.file, f.engine, f.st);
+    const kidFiles = f.engine === 'claude' && !/[\\/]subagents[\\/]/.test(f.file) ? kidsOf(f.file) : [];
+    const activityMs = kidFiles.reduce((m, k) => Math.max(m, k.st.mtimeMs), f.st.mtimeMs);
+    const row = mk(f.file, f.engine, f.st, activityMs);
     if (row.parent) { try { fs.statSync(parentOf(f.file)); } catch { row.parent = null; } }
-    const kids = f.engine === 'claude' && !row.subagent ? kidsOf(f.file).map((k) => mk(k.file, 'claude', k.st)) : [];
+    const kids = kidFiles.map((k) => mk(k.file, 'claude', k.st));
     return { row, kids, file: ids.get(id) };
   }
 
   return { page, session, fileFor, options: o };
 }
 
-module.exports = { createHistory, dayTotals, dayOf, DEFAULTS };
+module.exports = { createHistory, dayTotals, dayOf, parseCursor, DEFAULTS };

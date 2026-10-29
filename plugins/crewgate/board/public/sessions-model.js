@@ -247,6 +247,12 @@
     return groups;
   }
 
+  // Do cached pages disagree with the current board.show_text? Then their text is stale (shown after it was switched off,
+  // or missing after it was switched on) and the pages must be fetched again.
+  function textChanged(pages, showText) {
+    return pages.some(function (p) { return !!p.showText !== !!showText; });
+  }
+
   // Does a page still have numbers that will grow (rows whose transcript is not fully counted yet)?
   function pagePartial(p) {
     return p.rows.some(function (r) { var s = r.totals || r.stats; return !s || s.partial; });
@@ -255,5 +261,5 @@
   // Only ids the server makes are used in links.
   function validId(id) { return typeof id === 'string' && /^[0-9a-f]{12}$/.test(id); }
 
-  return { cleanFilter: cleanFilter, matches: matches, buildTree: buildTree, isOpen: isOpen, visible: visible, counts: counts, isRunning: isRunning, isWaiting: isWaiting, displayStatus: displayStatus, fmtDuration: fmtDuration, compact: compact, tokenSum: tokenSum, cardStats: cardStats, KIND_ORDER: KIND_ORDER, emptyTimeline: emptyTimeline, mergeLatest: mergeLatest, mergeOlder: mergeOlder, withGaps: withGaps, kindCounts: kindCounts, stepText: stepText, stepMatches: stepMatches, validId: validId, mergeDays: mergeDays, historyGroups: historyGroups, pagePartial: pagePartial, STATES: STATES, ENGINES: ENGINES };
+  return { cleanFilter: cleanFilter, matches: matches, buildTree: buildTree, isOpen: isOpen, visible: visible, counts: counts, isRunning: isRunning, isWaiting: isWaiting, displayStatus: displayStatus, fmtDuration: fmtDuration, compact: compact, tokenSum: tokenSum, cardStats: cardStats, KIND_ORDER: KIND_ORDER, emptyTimeline: emptyTimeline, mergeLatest: mergeLatest, mergeOlder: mergeOlder, withGaps: withGaps, kindCounts: kindCounts, stepText: stepText, stepMatches: stepMatches, validId: validId, mergeDays: mergeDays, historyGroups: historyGroups, pagePartial: pagePartial, textChanged: textChanged, STATES: STATES, ENGINES: ENGINES };
 }));

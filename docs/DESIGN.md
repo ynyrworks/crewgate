@@ -419,10 +419,11 @@ live activity. Crewgate events of the session (from the project's event tail) ar
 covers.
 
 History. `GET /api/history` (`board/history.js`) serves sessions older than the watcher's 24-hour window (and the newer ones, too: it lists everything
-inside `days`, 1-90, default 7). Discovery is a directory walk of the Claude and Codex roots with one `stat` per transcript (at most 20,000
-files, then `truncated: true`); a subagent file (`<session>/subagents/agent-*.jsonl`) belongs to its parent session file, and a group is as new
-as its newest member. Groups are sorted by mtime, newest first, and a page is 50 sessions (`limit` up to 100; sessions that share the last
-mtime stay on the same page). The cursor `next` is the mtime of the last session looked at; `before` is a strict "older than", and at most 300
+inside `days`, 1-90, default 7). Discovery walks the known layouts of the Claude and Codex roots (Codex date folders out of range are not opened), entry by
+entry, charging every directory open and entry to a budget (40,000, then `truncated: true`), and takes one `stat` per transcript; a subagent file (`<session>/subagents/agent-*.jsonl`) belongs to its parent session file, and a group is as new
+as its newest member. Groups are sorted by (whole-millisecond mtime, id) descending, newest first, and a page is 50 sessions (`limit` up to 100). The cursor
+`next` is `<ms>-<id>` of the last session looked at and `before` means strictly after it in that order, so ties are never skipped or
+repeated even when the examination cap or the page size ends inside one; at most 300
 candidates have their head and tail read per request (the cwd, model and branch come from `watcher.readInfo`, remembered per file
 and size), so a project filter that skips many sessions continues through the cursor instead of reading without end. The project is
 resolved from the cwd like on the Sessions page; `project=-` means none. Statistics come from `session-stats` with its per-call byte

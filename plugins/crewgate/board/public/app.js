@@ -849,7 +849,7 @@
   function histQuery(before) {
     var q = ['days=' + HIST.days, 'tz=' + (-new Date().getTimezoneOffset())];
     if (HIST.project) q.push('project=' + encodeURIComponent(HIST.project));
-    if (before !== null && before !== undefined) q.push('before=' + before);
+    if (before !== null && before !== undefined) q.push('before=' + encodeURIComponent(before));
     return '?' + q.join('&');
   }
 
@@ -897,14 +897,20 @@
         histDraw();
       }).catch(function (e) { HIST.loaded = false; render(card(t('error'), h('p', { class: 'err', text: e.message })), 'herr' + S.lang); });
     }
-    var i = -1;
-    HIST.pages.forEach(function (p, k) { if (i < 0 && SM.pagePartial(p)) i = k; });
-    if (i < 0) { histDraw(); return Promise.resolve(); }
+    // board.show_text may have been switched elsewhere: cached rows carry (or lack) text, so start over when it differs
     var gen2 = HIST.gen;
-    return histGet(HIST.pages[i].before).then(function (p) {
-      if (gen2 !== HIST.gen || !p) return;
-      HIST.pages[i] = p;
-      histDraw();
+    return api('/api/meta').then(function (res) {
+      if (gen2 !== HIST.gen) return null;
+      if (res.status < 400 && SM.textChanged(HIST.pages, !!res.data.show_text)) { histReset(); return histTick(); }
+      var i = -1;
+      HIST.pages.forEach(function (p, k) { if (i < 0 && SM.pagePartial(p)) i = k; });
+      if (i < 0) { histDraw(); return null; }
+      return histGet(HIST.pages[i].before).then(function (p) {
+        if (gen2 !== HIST.gen || !p) return;
+        if (SM.textChanged(HIST.pages, p.showText)) { histReset(); return histTick(); }
+        HIST.pages[i] = p;
+        histDraw();
+      });
     }).catch(function () { histDraw(); });
   }
 
