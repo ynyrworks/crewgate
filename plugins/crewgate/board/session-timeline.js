@@ -14,6 +14,8 @@ const DEFAULTS = {
   maxScanBytes: 8 * 1024 * 1024,   // bytes read per page (a page may hold fewer events than asked)
   chunkBytes: 256 * 1024,
   maxLineBytes: 8 * 1024 * 1024,
+  lookAheadBytes: 512 * 1024,      // bytes read forward past the page edge to find results of the page's open tool calls
+  crewScanBytes: 4 * 1024 * 1024,  // bytes read backwards from the end of events.jsonl for crewgate events
 };
 const KINDS = ['prompt', 'tool', 'subagent', 'crew', 'error'];
 const SUBAGENT_TOOLS = new Set(['Agent', 'Task']);
@@ -64,6 +66,19 @@ function backLines(file, end, o, onLine) {
   } finally { fs.closeSync(fd); }
 }
 
+// tool_result blocks of a Claude user record: [{ id, err, agent, launched }].
+function claudeResults(x) {
+  const m = x.message || {};
+  const out = [];
+  if (x.type !== 'user' || !Array.isArray(m.content)) return out;
+  for (const b of m.content) {
+    if (!b || b.type !== 'tool_result' || !isStr(b.tool_use_id)) continue;
+    const tur = x.toolUseResult && typeof x.toolUseResult === 'object' ? x.toolUseResult : {};
+    out.push({ id: b.tool_use_id, err: b.is_error === true, agent: isStr(tur.agentId) ? tur.agentId : null, launched: tur.isAsync === true || tur.status === 'async_launched' });
+  }
+  return out;
+}
+
 function claudeEvents(x, ctx) {
   const out = [];
   const ts = tsOf(x.timestamp);
@@ -71,16 +86,10 @@ function claudeEvents(x, ctx) {
   if (x.type === 'user') {
     const pt = promptText(x);
     if (pt !== null) out.push({ kind: 'prompt', ts, ...(ctx.showText ? { text: snippet(pt) } : {}) });
-    if (Array.isArray(m.content)) {
-      for (const b of m.content) {
-        if (!b || b.type !== 'tool_result' || !isStr(b.tool_use_id)) continue;
-        const tur = x.toolUseResult && typeof x.toolUseResult === 'object' ? x.toolUseResult : {};
-        const agent = isStr(tur.agentId) ? tur.agentId : null;
-        const launched = tur.isAsync === true || tur.status === 'async_launched';
-        ctx.results.set(b.tool_use_id, { ts, err: b.is_error === true, agent });
-        if (b.is_error === true) out.push({ kind: 'error', ts, ref: b.tool_use_id });
-        if (agent && !launched) out.push({ kind: 'subagent', phase: 'stop', ts, ref: b.tool_use_id, agent: ctx.link(agent) });
-      }
+    for (const r of claudeResults(x)) {
+      ctx.results.set(r.id, { ts, err: r.err, agent: r.agent });
+      if (r.err) out.push({ kind: 'error', ts, ref: r.id });
+      if (r.agent && !r.launched) out.push({ kind: 'subagent', phase: 'stop', ts, ref: r.id, agent: ctx.link(r.agent) });
     }
     return out;
   }
@@ -90,6 +99,7 @@ function claudeEvents(x, ctx) {
     const res = ctx.results.get(b.id) || null;
     const ev = { ts, ref: isStr(b.id) ? b.id : null };
     if (res && res.ts !== null && ts !== null && res.ts >= ts) ev.dur_ms = res.ts - ts;
+    if (!res && ev.ref) ctx.pending.set(ev.ref, ev);   // its result may sit just past the page edge
     if (SUBAGENT_TOOLS.has(b.name)) {
       Object.assign(ev, { kind: 'subagent', phase: 'start', agent: res && res.agent ? ctx.link(res.agent) : null });
       const inp = b.input && typeof b.input === 'object' ? b.input : {};
@@ -124,12 +134,82 @@ function codexEvents(x, ctx) {
     const res = ctx.results.get(p.call_id) || null;
     const ev = { ts, ref: isStr(p.call_id) ? p.call_id : null };
     if (res && res.ts !== null && ts !== null && res.ts >= ts) ev.dur_ms = res.ts - ts;
-    if (/(?:^|[._])spawn_agent$/.test(p.name)) { out.push({ ...ev, kind: 'subagent', phase: 'start', agent: null }); return out; }
+    if (!res && ev.ref) ctx.pending.set(ev.ref, ev);
+    if (/(?:^|[._])spawn_agent$/.test(p.name)) { Object.assign(ev, { kind: 'subagent', phase: 'start', agent: null }); out.push(ev); return out; }   // pending must hold the pushed object
     Object.assign(ev, { kind: 'tool', tool: p.name.slice(0, 60) });
     if (ctx.showText) { const tg = targetOf(codexArg(p), ctx.cwd); if (tg) ev.target = tg; }
     out.push(ev);
   }
   return out;
+}
+
+// Results of calls still open at the page edge, read FORWARD from `from` (the start of the newer page) for at
+// most o.lookAheadBytes; stops as soon as every open call is answered. Patches duration, failure and the
+// subagent link into the pending events. Returns the bytes read.
+function lookAhead(file, from, size, ctx, o, codex) {
+  if (!ctx.pending.size || from >= size || !(o.lookAheadBytes > 0)) return 0;
+  const fd = fs.openSync(file, 'r');
+  let read = 0;
+  try {
+    let pos = from;
+    let carry = Buffer.alloc(0);
+    while (pos < size && read < o.lookAheadBytes && ctx.pending.size) {
+      const part = Buffer.alloc(Math.min(o.chunkBytes, size - pos, o.lookAheadBytes - read));
+      const n = fs.readSync(fd, part, 0, part.length, pos);
+      if (n <= 0) break;
+      pos += n;
+      read += n;
+      let buf = carry.length ? Buffer.concat([carry, part.subarray(0, n)]) : part.subarray(0, n);
+      let nl;
+      while (ctx.pending.size && (nl = buf.indexOf(10)) >= 0) {
+        const seg = buf.subarray(0, nl);
+        buf = buf.subarray(nl + 1);
+        if (seg.length === 0 || seg.length > o.maxLineBytes) continue;
+        const text = seg.toString('utf8');
+        if (!(codex ? CODEX_RE : MSG_RE).test(text)) continue;
+        let x;
+        try { x = JSON.parse(text); } catch { continue; }
+        if (!x || typeof x !== 'object') continue;
+        const ts = tsOf(x.timestamp);
+        const p = x.payload || {};
+        const got = codex
+          ? (x.type === 'response_item' && (p.type === 'function_call_output' || p.type === 'custom_tool_call_output') && isStr(p.call_id) ? [{ id: p.call_id, err: false, agent: null }] : [])
+          : claudeResults(x);
+        for (const r of got) {
+          const ev = ctx.pending.get(r.id);
+          if (!ev) continue;
+          ctx.pending.delete(r.id);
+          if (ts !== null && ev.ts !== null && ts >= ev.ts) ev.dur_ms = ts - ev.ts;
+          if (r.err && ev.kind === 'tool') ev.err = true;
+          if (r.agent && ev.kind === 'subagent' && ev.phase === 'start') ev.agent = ctx.link(r.agent);
+        }
+      }
+      carry = buf.length <= o.maxLineBytes ? Buffer.from(buf) : Buffer.alloc(0);   // an unfinished last line waits for the next chunk
+    }
+  } finally { fs.closeSync(fd); }
+  return read;
+}
+
+// Crewgate events of one session out of the project's events.jsonl, read BACKWARDS from its end (at most
+// o.crewScanBytes) until lines are older than `lo`; only events inside [lo, hi) are returned, oldest first.
+// `match(e)` selects the session's events. The log is chronological, so the walk stops at the first line before lo.
+function crewEventsIn(file, lo, hi, match, opts) {
+  const o = { ...DEFAULTS, ...opts };
+  const out = [];
+  const TS_RE = /^\{"v":\d+,"ts":"([^"]+)"/;
+  try {
+    backLines(file, fs.statSync(file).size, { ...o, maxScanBytes: o.crewScanBytes }, (text) => {
+      const m = TS_RE.exec(text);
+      const ts = m ? tsOf(m[1]) : null;
+      if (ts !== null && ts < lo) return false;
+      if (ts !== null && ts >= hi) return true;
+      let e;
+      try { e = JSON.parse(text); } catch { return true; }
+      if (e && typeof e.type === 'string' && match(e)) out.push(e);
+      return true;
+    });
+  } catch { /* unreadable log: no crewgate events */ }
+  return out.reverse();
 }
 
 // Crewgate events (already filtered to this session by the caller) as timeline events.
@@ -143,7 +223,9 @@ function crewEvent(e) {
 }
 
 // timeline({ file, engine, cwd, showText, before, beforeTs, limit, kinds, crewEvents, link }) ->
-//   { events (oldest first), cursor, cursor_ts, scanned, truncated }
+//   { events (oldest first), cursor, cursor_ts, scanned, ahead, truncated }
+// `ahead` = bytes read past the page edge to find the results of tool calls still open on this page.
+// `crewEvents` is a list or a function (lo, hi) -> list.
 // `before` is a byte offset from an earlier answer's cursor; reading goes backwards from there.
 // `link(agentId)` -> row id of that subagent's own session, or null.
 function timeline(opts) {
@@ -153,7 +235,7 @@ function timeline(opts) {
   const kinds = new Set((Array.isArray(o.kinds) && o.kinds.length ? o.kinds : KINDS).filter((k) => KINDS.includes(k)));
   const size = fs.statSync(o.file).size;
   const end = Number.isInteger(o.before) && o.before >= 0 && o.before <= size ? o.before : size;
-  const ctx = { showText: o.showText === true, cwd: o.cwd, results: new Map(), calls: new Map(), link: typeof o.link === 'function' ? o.link : () => null };
+  const ctx = { showText: o.showText === true, cwd: o.cwd, results: new Map(), calls: new Map(), pending: new Map(), link: typeof o.link === 'function' ? o.link : () => null };
   const codex = o.engine === 'codex';
   const events = [];
   let oldestTs = null;
@@ -172,6 +254,7 @@ function timeline(opts) {
     return events.length < limit;
   });
   events.reverse();
+  const ahead = end < size ? lookAhead(o.file, end, size, ctx, o, codex) : 0;
   for (const ev of events) {
     if (ev.kind === 'error' && ev.ref && ctx.calls.has(ev.ref)) ev.tool = ctx.calls.get(ev.ref);
   }
@@ -182,7 +265,10 @@ function timeline(opts) {
     const lo = more && oldestTs !== null ? oldestTs : 0;
     const hi = Number.isFinite(o.beforeTs) && end < size ? o.beforeTs : Infinity;
     const seenAgents = new Set(events.filter((e) => e.kind === 'subagent' && e.agent).map((e) => `${e.phase}:${e.agent}`));
-    for (const ce of Array.isArray(o.crewEvents) ? o.crewEvents : []) {
+    // crewEvents: a list, or a function (lo, hi) -> list so the caller reads only the span of this page
+    let crew = o.crewEvents;
+    if (typeof crew === 'function') { try { crew = crew(lo, hi); } catch { crew = []; } }
+    for (const ce of Array.isArray(crew) ? crew : []) {
       const ev = crewEvent(ce);
       if (!ev || ev.ts < lo || ev.ts >= hi || !kinds.has(ev.kind)) continue;
       if (ev.kind === 'subagent') {
@@ -195,7 +281,7 @@ function timeline(opts) {
     }
     events.sort((a, b) => (a.ts === null ? -1 : b.ts === null ? 1 : a.ts - b.ts));
   }
-  return { events, cursor, cursor_ts: more ? oldestTs : null, scanned: r.scanned, truncated: more && !r.stopped };
+  return { events, cursor, cursor_ts: more ? oldestTs : null, scanned: r.scanned, ahead, truncated: more && !r.stopped };
 }
 
-module.exports = { timeline, backLines, KINDS, DEFAULTS };
+module.exports = { timeline, backLines, crewEventsIn, KINDS, DEFAULTS };

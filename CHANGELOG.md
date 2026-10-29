@@ -3,6 +3,9 @@
 ## Unreleased
 
 - Git events and gates follow the repo a command targets. PostToolUse(Bash) used the project of the session cwd for `git.push` / `git.merge` events and the push / open_pr / merge gate check, so `cd <other repo> && git push` or `git -C <other repo> push` was recorded (and reminded) against the wrong project. The `cd` / `pushd` words before the command and `git -C` are now resolved from the session cwd (Git-Bash `/c/work/x` paths on Windows included) and the owning registered project is used for the events, `gate.missing` and the approval lookup; one command line can touch several projects. A directory outside every registered project records nothing (it is never registered), and a dynamic directory (`cd "$DIR"`, `$(...)`, `cd -`, `cd ~`) falls back to the session project as before.
+- Search box on the timeline page: filters the loaded steps (tool name, target, prompt snippet, crewgate event type, task id) as you type, case-insensitive, all words must match, with a match count. In private mode only names and kinds are searched. It searches loaded steps only; load older steps to search further back.
+- Tool durations across the page edge: a call opened on an older page now gets its duration, failure flag and subagent link from a forward look-ahead past the page edge (at most 512 KiB, stops when every open call is answered). The answer gains an additive field `ahead` (bytes read forward).
+- crewgate events older than the board's recent event tail now show: the API reads the project's `events.jsonl` backwards for the time window of the page (at most 4 MiB), filtered by session.
 
 ## 0.12.1 — 2026-10-29
 

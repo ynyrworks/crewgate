@@ -17,7 +17,7 @@ const { createWatcher } = require('./watcher');
 const { createSessionEnds } = require('./session-ends');
 const { createUsage } = require('./usage');
 const { createSessionStats, sumStats, topTools } = require('./session-stats');
-const { timeline: buildTimeline, KINDS: TIMELINE_KINDS } = require('./session-timeline');
+const { timeline: buildTimeline, crewEventsIn, KINDS: TIMELINE_KINDS } = require('./session-timeline');
 const { hashId } = require('./watcher');
 
 class ApiError extends Error {
@@ -367,9 +367,11 @@ function createApi(opts = {}) {
     const uint = (v) => (/^\d{1,15}$/.test(String(v)) ? Number(v) : undefined);
     const kinds = typeof query.kinds === 'string' ? query.kinds.split(',').filter((k) => TIMELINE_KINDS.includes(k)) : [];
     const agentId = (/[\/]subagents[\/]agent-([^\/]+)\.jsonl$/.exec(f.file) || [])[1] || null;
+    // crewgate events of this session inside the span of the page, read backwards from the project's log (bounded)
     let crewEvents = [];
     if (row.project && (row.session || agentId)) {
-      crewEvents = tailEvents(row.project, 5000).filter((e) => (agentId ? e.agent === agentId : e.session === row.session));
+      const mine = (e) => (agentId ? e.agent === agentId : e.session === row.session);
+      crewEvents = (lo, hi) => crewEventsIn(paths.eventsFile(row.project), lo, hi, mine);
     }
     const link = (agent) => {
       if (row.subagent || f.engine !== 'claude' || !/^[\w.-]{1,80}$/.test(agent)) return null;

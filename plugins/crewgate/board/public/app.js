@@ -649,8 +649,8 @@
     return el;
   }
 
-  var DET = { id: null, kinds: [], tl: null, data: null, loading: false, focusKey: null };
-  function detReset(id) { DET = { id: id, kinds: [], tl: SM.emptyTimeline(), data: null, loading: false, focusKey: null }; }
+  var DET = { id: null, kinds: [], q: '', tl: null, data: null, loading: false, focusKey: null };
+  function detReset(id) { DET = { id: id, kinds: [], q: '', tl: SM.emptyTimeline(), data: null, loading: false, focusKey: null }; }
   function detQuery(extra) {
     var q = [];
     if (DET.kinds.length) q.push('kinds=' + DET.kinds.join(','));
@@ -666,7 +666,7 @@
     render(sessionDetailPage(), 'sd' + Date.now());
     if (fid) {
       var el = document.querySelector('[data-fid="' + fid + '"]');
-      if (el) { try { el.focus(); } catch (e) { /* ignore */ } }
+      if (el) { try { el.focus(); if (el.type === 'search') el.setSelectionRange(el.value.length, el.value.length); } catch (e) { /* ignore */ } }
     }
   }
 
@@ -815,11 +815,26 @@
     var more = tl.cursor !== null
       ? h('button', { type: 'button', class: 'older', 'data-fid': 'older', disabled: DET.loading, onclick: loadOlder, text: DET.loading ? t('sessions.loading') : t('sessions.loadOlder') })
       : h('p', { class: 'muted', text: t('sessions.startReached') });
-    var list = tl.events.length
-      ? h('ol', { class: 'tl', 'aria-label': t('sessions.timeline') }, SM.withGaps(tl.events).map(stepItem))
-      : empty('sessions.noEvents');
+    // search: only the steps loaded so far; gaps are measured on the whole list, then rows are filtered
+    var listBox = h('div', { class: 'tl-box' });
+    var countEl = h('p', { class: 'muted tl-count', role: 'status', 'aria-live': 'polite' });
+    function drawList() {
+      var rows = SM.withGaps(tl.events).filter(function (r) { return SM.stepMatches(r.ev, DET.q, S.mask); });
+      listBox.textContent = '';
+      listBox.appendChild(rows.length
+        ? h('ol', { class: 'tl', 'aria-label': t('sessions.timeline') }, rows.map(stepItem))
+        : empty(tl.events.length ? 'sessions.noMatch' : 'sessions.noEvents'));
+      var q = DET.q.trim();
+      countEl.textContent = q ? t('sessions.searchCount', { shown: rows.length, total: tl.events.length }) + (tl.cursor !== null ? ' ' + t('sessions.searchLoaded') : '') : '';
+    }
+    var search = h('input', {
+      type: 'search', class: 'tl-search', 'data-fid': 'tl-search', value: DET.q, maxlength: 80, autocomplete: 'off',
+      'aria-label': t('sessions.search'), placeholder: t('sessions.search'),
+      oninput: function (e) { DET.q = e.target.value; drawList(); }
+    });
+    drawList();
     var note = S.mask ? t('sessions.textPrivate') : d.show_text ? t('sessions.textOn') : t('sessions.tlTextOff');
-    root.appendChild(h('section', { class: 'card' }, h('h2', { text: t('sessions.timeline') }), h('p', { class: 'muted', text: note }), bar, more, list));
+    root.appendChild(h('section', { class: 'card' }, h('h2', { text: t('sessions.timeline') }), h('p', { class: 'muted', text: note }), bar, search, countEl, more, listBox));
     return root;
   }
 
@@ -1023,7 +1038,7 @@
         if (S.last === sig) return;
         var fid = document.activeElement && document.activeElement.getAttribute ? document.activeElement.getAttribute('data-fid') : null;
         render(sessionDetailPage(), sig);
-        if (fid) { var el = document.querySelector('[data-fid="' + fid + '"]'); if (el) { try { el.focus(); } catch (e) { /* ignore */ } } }
+        if (fid) { var el = document.querySelector('[data-fid="' + fid + '"]'); if (el) { try { el.focus(); if (el.type === 'search') el.setSelectionRange(el.value.length, el.value.length); } catch (e) { /* ignore */ } } }
       }).then(done, fail);
       return;
     }
