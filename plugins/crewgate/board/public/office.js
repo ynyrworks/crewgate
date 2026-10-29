@@ -32,6 +32,7 @@
   var evPrev = null;         // detectEvents state
   var events = [];           // errands waiting for a free character
   var blinks = {};           // id -> { seed, k, next, until }
+  var placed = {};           // pod rectangles and desk cells since the last full rebuild (office-model.js layout memory)
   var drawn = {};            // ids that have a desk since the last full rebuild (and "+id" for a pod's spare desk)
   var loungeSeats = {};      // room key -> [id|null] per lounge spot
 
@@ -594,7 +595,25 @@
     }
   }
 
+  // A visible lounge spot that frees up goes to the first resident waiting beyond the cap, so the lounge never shows empty
+  // seats next to a "+N" badge. Animated: the resident walks over; snap: reduced motion, placed at once.
+  function rebalanceLounge(scene, snap) {
+    scene.rcs.forEach(function (rc) {
+      var list = loungeSeats[rc.room.key];
+      if (!list) return;
+      M.rebalanceSeats(list, rc.room.spots.length).forEach(function (mv) {
+        var a = actors[mv.id];
+        if (!a) return;
+        a.spot = mv.to;
+        if (a.state !== 'rest' || a.busy) return;
+        if (snap) { a.x = rc.room.spots[mv.to].x; a.y = rc.room.spots[mv.to].y; }
+        else program(a, [{ to: 'lounge', end: 'rest' }]);
+      });
+    });
+  }
+
   function stepActors(scene, dt) {
+    rebalanceLounge(scene, false);
     for (var i = 0; i < scene.rcs.length; i++) {
       var rc = scene.rcs[i];
       for (var j = 0; j < rc.occupied.length; j++) {
@@ -943,7 +962,7 @@
     if (!reduced()) events = events.concat(det.events).slice(-12);
     // a full rebuild (first view, back from another page) starts from nothing and packs the room; a refresh keeps every desk where it is
     var compact = !current || !current.alive();
-    if (compact) { layoutState = null; drawn = {}; }
+    if (compact) { layoutState = null; drawn = {}; placed = {}; }
     var placeOf = function (r) { return M.placeFor(r, Date.now()); };
     M.markDrawn(drawn, rows, placeOf);
     layoutState = M.assign(layoutState, M.visibleRows(rows, placeOf, drawn));
@@ -1028,6 +1047,7 @@
         if (a) settle(rc, a, d, self.items[d.id].row);
       });
     });
+    rebalanceLounge(this, true);
     events = [];
   };
 
@@ -1041,7 +1061,7 @@
     var k = Math.max(1, Math.round(this.plan.scale * this.plan.dpr));
     var seated = {};
     this.rows.forEach(function (r) { if (M.placeFor(r, Date.now()) === 'desk') seated[r.id] = true; });
-    var lay = M.layout(layoutState, { maxCols: this.plan.maxCols, drawn: drawn, seated: seated });
+    var lay = M.layout(layoutState, { maxCols: this.plan.maxCols, drawn: drawn, seated: seated, placed: placed });
     this.lay = lay;
     this.roomsEl.textContent = '';
     this.rcs = [];
@@ -1080,7 +1100,14 @@
     M.prune(actors, alive);
     M.prune(blinks, alive);
     M.prune(seen, alive);
-    Object.keys(loungeSeats).forEach(function (key) { loungeSeats[key] = loungeSeats[key].map(function (id) { return id && alive[id] ? id : null; }); });
+    var roomKeys = {};
+    lay.rooms.forEach(function (room) { roomKeys[room.key] = true; });
+    M.prune(loungeSeats, roomKeys);
+    Object.keys(loungeSeats).forEach(function (key) {
+      var l = loungeSeats[key].map(function (id) { return id && alive[id] ? id : null; });
+      while (l.length && !l[l.length - 1]) l.pop();
+      loungeSeats[key] = l;
+    });
     if (reduced()) this.settleAll();
     this.buildList();
     drawAll(now());
@@ -1096,9 +1123,10 @@
     rc.occupied.forEach(function (dd) {
       var a = actors[dd.id];
       if (!a || a.state === 'gone') return;
-      var s0 = seatPos(dd);
-      var away = a.state === 'rest' ? a.spot >= 0 && a.spot < rc.room.spots.length : a.busy && (a.hopping || Math.abs(a.x - s0.x) > 1 || Math.abs(a.y - s0.y) > 1);
-      if (away) cands.push({ id: dd.id, x: a.x, y: a.y, w: CHW, h: CHH });
+      // drawn as a walker (busy, whatever its state) or resting in a visible lounge spot; anyone at their desk is hit through the desk
+      var walker = a.busy;
+      var resting = a.state === 'rest' && !a.busy && a.spot >= 0 && a.spot < rc.room.spots.length;
+      if (walker || resting) cands.push({ id: dd.id, x: a.x, y: a.y, w: CHW, h: CHH });
     });
     var who = M.pickActor(cands, x, y);
     if (who) { var wa = actors[who]; return { id: who, x: wa.x + 12 - CELL.w / 2, y: wa.y - 4 }; }
@@ -1242,7 +1270,7 @@
       var main = document.getElementById('main');
       var w = Math.min((main && main.clientWidth) || 800, 1400) - 32;
       var plan = M.planFor(w);
-      if (!current.plan || plan.scale !== current.plan.scale || plan.maxCols !== current.plan.maxCols || current.plan.dpr !== dpr()) { layoutState = null; drawn = {}; layoutState = M.assign(null, M.visibleRows(current.rows, function (r) { return M.placeFor(r, Date.now()); }, M.markDrawn(drawn, current.rows, function (r) { return M.placeFor(r, Date.now()); }))); current.build(); }   // zoom changes devicePixelRatio too
+      if (!current.plan || plan.scale !== current.plan.scale || plan.maxCols !== current.plan.maxCols || current.plan.dpr !== dpr()) { layoutState = null; drawn = {}; placed = {}; layoutState = M.assign(null, M.visibleRows(current.rows, function (r) { return M.placeFor(r, Date.now()); }, M.markDrawn(drawn, current.rows, function (r) { return M.placeFor(r, Date.now()); }))); current.build(); }   // zoom changes devicePixelRatio too
     }, 200);
   });
   document.addEventListener('visibilitychange', kick);

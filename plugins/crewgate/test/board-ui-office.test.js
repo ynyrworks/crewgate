@@ -584,3 +584,76 @@ test('name plate font: 3 x 5 letters', () => {
   const mon = SP.SPRITES.monitor;
   assert.ok(SP.CELL.screen.x + SP.CELL.screen.w <= mon[0].length && SP.CELL.screen.y + SP.CELL.screen.h <= mon.length);
 });
+
+test('layout: between full rebuilds a pod only grows into free space, nothing already placed moves', () => {
+  const kid = (id, parent) => row({ id, parent, subagent: true, project: 'p1' });
+  const A = row({ id: 'A', project: 'p1' });
+  const B = row({ id: 'B', project: 'p1' });
+  const placed = {};
+  let st = OM.assign(null, [A, B]);
+  let lay = OM.layout(st, { maxCols: 2, placed });
+  const at = (l, id) => [l.pos[id].x, l.pos[id].y];
+  const a0 = at(lay, 'A');
+  const b0 = at(lay, 'B');
+  assert.deepEqual([a0[0], b0[0]], [10, 112], 'two solo pods side by side');
+  // A gets its first child: A and B stay exactly where they are, the child sits in the pod's spare desk
+  const rows1 = [A, B, kid('a1', 'A')];
+  st = OM.assign(st, rows1);
+  lay = OM.layout(st, { maxCols: 2, placed });
+  assert.deepEqual(at(lay, 'A'), a0);
+  assert.deepEqual(at(lay, 'B'), b0);
+  assert.ok(lay.pos.a1, 'the child has a desk');
+  // a fresh layout without memory is allowed to tidy (orchestrator in the middle), that is the full rebuild
+  assert.notDeepEqual(at(OM.layout(st, { maxCols: 2 }), 'A'), a0);
+  // more children: still nothing moves, desks never overlap, and everybody has a desk
+  let rows = rows1;
+  for (let i = 2; i <= 7; i++) {
+    rows = rows.concat(kid('a' + i, 'A'));
+    st = OM.assign(st, rows);
+    lay = OM.layout(st, { maxCols: 2, placed });
+    assert.deepEqual(at(lay, 'A'), a0, 'A after child ' + i);
+    assert.deepEqual(at(lay, 'B'), b0, 'B after child ' + i);
+    for (let j = 1; j <= i; j++) assert.ok(lay.pos['a' + j], 'a' + j);
+    const ds = lay.rooms[0].desks;
+    ds.forEach((d, x) => ds.forEach((e, y) => { if (x < y) assert.ok(d.x + OM.CELL_W <= e.x || e.x + OM.CELL_W <= d.x || d.y + OM.CELL_H <= e.y || e.y + OM.CELL_H <= d.y, 'desks overlap'); }));
+    lay.rooms[0].desks.forEach((d) => assert.ok(lay.rooms[0].pods.some((p) => d.x >= p.x && d.x + OM.CELL_W <= p.x + p.w && d.y >= p.y && d.y + OM.CELL_H <= p.y + p.h), 'every desk is inside a pod'));
+  }
+  // when the pod cannot grow (maxCols 1: B sits right below A) the newcomer gets a one-desk pod of its own
+  const placed1 = {};
+  let s1 = OM.assign(null, [A, B]);
+  let l1 = OM.layout(s1, { maxCols: 1, placed: placed1 });
+  const a1 = at(l1, 'A');
+  const b1 = at(l1, 'B');
+  assert.ok(b1[1] > a1[1], 'stacked');
+  let r1 = [A, B];
+  for (let i = 1; i <= 5; i++) {
+    r1 = r1.concat(kid('c' + i, 'A'));
+    s1 = OM.assign(s1, r1);
+    l1 = OM.layout(s1, { maxCols: 1, placed: placed1 });
+    assert.deepEqual(at(l1, 'A'), a1);
+    assert.deepEqual(at(l1, 'B'), b1);
+    assert.ok(l1.pos['c' + i], 'c' + i);
+  }
+  assert.ok(l1.rooms[0].pods.length >= 3, 'a one-desk pod was added');
+  // leavers and gone rooms take their memory with them
+  OM.layout(OM.assign(null, [A]), { maxCols: 2, placed: placed1 });
+  assert.ok(Object.keys(placed1).every((k) => k === 'p1|A'));
+  OM.layout(OM.assign(null, [row({ id: 'Z', project: 'other' })]), { maxCols: 2, placed: placed1 });
+  assert.deepEqual(Object.keys(placed1), ['other|Z']);
+});
+
+test('lounge seats: overflow residents move into freed visible spots, lists are trimmed', () => {
+  const list = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];                 // 5 visible spots, f and g wait behind the badge
+  assert.deepEqual(OM.rebalanceSeats(list, 5), []);
+  list[1] = null;                                                    // b goes back to work
+  assert.deepEqual(OM.rebalanceSeats(list, 5), [{ id: 'f', from: 5, to: 1 }]);
+  assert.deepEqual(list, ['a', 'f', 'c', 'd', 'e', null, 'g']);
+  list[0] = null; list[3] = null;                                    // two more leave: g takes the lowest free spot, nobody is left waiting
+  assert.deepEqual(OM.rebalanceSeats(list, 5), [{ id: 'g', from: 6, to: 0 }]);
+  assert.deepEqual(list, ['g', 'f', 'c', null, 'e']);
+  assert.deepEqual(OM.rebalanceSeats(['a', null, null], 5), [], 'trailing nulls are trimmed');
+  const l2 = ['x', null, null];
+  OM.rebalanceSeats(l2, 5);
+  assert.deepEqual(l2, ['x']);
+  assert.deepEqual(OM.rebalanceSeats([], 5), []);
+});
