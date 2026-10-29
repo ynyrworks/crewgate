@@ -17,6 +17,10 @@
   var POD_GAP = 6;
   var ROOM_PAD = 10;
   var WALL_H = 44;
+  var LOUNGE_H = 44;         // the lounge strip (sofa, coffee machine, plant) under the last row of pods
+  var LOUNGE_AFTER_MS = 90000;   // an idle session this long goes to rest in the lounge
+  var DOOR_W = 24;
+  var ACCS = ['none', 'glasses', 'phones', 'scarf', 'cap'];
   var STYLES = 4;            // hair styles, hair colours and skin tones a look can pick from
   var HAIRS = 6;
   var SKINS = 4;
@@ -40,31 +44,53 @@
     var s = String(name || '').toLowerCase();
     if (!s) return 'other';
     if (/^(task|agent)|subagent|spawn/.test(s)) return 'agent';
-    if (/grep|glob|search|fetch|^ls$|find/.test(s)) return 'search';
+    if (/web|http|browse|fetch|url/.test(s)) return 'web';
+    if (/grep|glob|search|^ls$|find/.test(s)) return 'search';
     if (/bash|shell|powershell|exec|command|terminal/.test(s)) return 'terminal';
     if (/read|edit|write|patch|notebook|todo/.test(s)) return 'file';
     return 'other';
   }
 
+  // The kind of work a tool call is: decides pose, prop and what the monitor shows.
+  function toolAct(name) {
+    var k = toolKind(name);
+    var s = String(name || '').toLowerCase();
+    if (k === 'terminal') return 'run';
+    if (k === 'search') return 'search';
+    if (k === 'web') return 'web';
+    if (k === 'agent') return 'dispatch';
+    if (k === 'file') return /read|view|cat|open/.test(s) && !/edit|write|patch|notebook|todo/.test(s) ? 'read' : 'edit';
+    return 'work';
+  }
+
   // animFor(row) -> what the character does.
+  //   act: think | read | search | web | run | edit | work | dispatch | wait | idle | away  (the behaviour; the rest are details)
+  //   prop: 'doc' | 'magnifier' | null held while working; fast: typing fast; look: 'screen' | 'viewer' | null
   //   pose: 'sit' | 'away'; typing: hands move; coffee: sips from a mug; bounce: gentle hop;
   //   bubble: null | 'think' | 'speech' | 'icon' | 'alert'; icon: tool kind for 'icon';
   //   screen: 'busy' | 'glow' | 'off'; lamp: desk lamp on; highlight: pulse the desk
   function animFor(row) {
     var shown = shownStatus(row);
     var kind = activityKind(row);
-    var out = { state: shown, pose: 'sit', typing: false, coffee: false, bounce: false, bubble: null, icon: null, screen: 'glow', lamp: true, highlight: false };
-    if (shown === 'done') { out.pose = 'away'; out.screen = 'off'; out.lamp = false; return out; }
-    if (shown === 'waiting') { out.bubble = 'alert'; out.bounce = true; out.highlight = true; return out; }
-    if (shown === 'idle') { out.coffee = true; out.screen = 'off'; return out; }
+    var out = { state: shown, pose: 'sit', typing: false, coffee: false, bounce: false, bubble: null, icon: null, screen: 'glow', lamp: true, highlight: false, act: 'think', prop: null, fast: false, look: null };
+    if (shown === 'done') { out.pose = 'away'; out.screen = 'off'; out.lamp = false; out.act = 'away'; return out; }
+    if (shown === 'waiting') { out.bubble = 'alert'; out.bounce = true; out.highlight = true; out.act = 'wait'; out.look = 'viewer'; return out; }
+    if (shown === 'idle') { out.coffee = true; out.screen = 'off'; out.act = 'idle'; return out; }
     // working / tool (and anything unknown, which is treated as busy)
     if (shown === 'tool' || kind === 'tool') {
       var tool = (row.activity || {}).tool;
-      out.typing = true; out.screen = 'busy'; out.bubble = 'icon'; out.icon = toolKind(tool);
+      var act = toolAct(tool);
+      out.act = act; out.bubble = 'icon'; out.icon = toolKind(tool);
+      if (act === 'run') { out.screen = 'run'; out.look = 'screen'; }
+      else if (act === 'read') { out.screen = 'read'; out.prop = 'doc'; }
+      else if (act === 'search') { out.screen = 'search'; out.prop = 'magnifier'; }
+      else if (act === 'web') { out.screen = 'web'; }
+      else if (act === 'dispatch') { out.screen = 'busy'; }
+      else { out.typing = true; out.screen = 'busy'; out.fast = act === 'edit'; }
       return out;
     }
-    if (kind === 'writing') { out.typing = true; out.screen = 'busy'; out.bubble = 'speech'; return out; }
-    if (kind === 'waiting') { out.bubble = 'alert'; out.bounce = true; out.highlight = true; return out; }
+    if (kind === 'writing') { out.typing = true; out.fast = true; out.screen = 'busy'; out.bubble = 'speech'; out.act = 'edit'; return out; }
+    if (kind === 'waiting') { out.bubble = 'alert'; out.bounce = true; out.highlight = true; out.act = 'wait'; out.look = 'viewer'; return out; }
     out.bubble = 'think';
     return out;
   }
@@ -78,9 +104,15 @@
   }
   function looks(row) {
     var n = hash(row.id);
+    var role = ROLES.indexOf(row.role) >= 0 ? row.role : 'other';
+    // accessory: seeded by the id, but roles keep a signature one (reviewer glasses, orchestrator headset); a cap only for other agents
+    var acc = ACCS[(n >>> 16) % ACCS.length];
+    if (role === 'reviewer') acc = 'glasses';
+    else if (role === 'orchestrator') acc = 'headset';
+    else if (acc === 'cap' && role !== 'other') acc = 'none';
     return {
-      engine: row.engine === 'codex' ? 'codex' : 'claude', role: ROLES.indexOf(row.role) >= 0 ? row.role : 'other',
-      style: n % STYLES, hair: (n >>> 4) % HAIRS, skin: (n >>> 9) % SKINS, phase: (n >>> 13) % 2400
+      engine: row.engine === 'codex' ? 'codex' : 'claude', role: role,
+      style: n % STYLES, hair: (n >>> 4) % HAIRS, skin: (n >>> 9) % SKINS, phase: (n >>> 13) % 2400, acc: acc
     };
   }
 
@@ -162,6 +194,21 @@
     return { roomOrder: order, rooms: rooms };
   }
 
+  // The lounge corner: 3 sofa seats and 2 standing spots (by the coffee machine and the plant). x, y are the top-left
+  // of a 24 x 32 character, so the foot line is y + 31. office-sprites.js LOUNGE holds the furniture offsets.
+  function loungeSpots(lounge) {
+    var spots = [];
+    for (var i = 0; i < 3; i++) spots.push({ x: lounge.x + 2 + i * 17, y: lounge.y + 4, kind: 'sofa' });
+    spots.push({ x: lounge.x + 66, y: lounge.y + 9, kind: 'stand' });
+    spots.push({ x: lounge.x + 94, y: lounge.y + 9, kind: 'stand' });
+    return spots;
+  }
+  // The door in the back wall; a finished session walks to `at` (top-left of its sprite) and disappears.
+  function doorFor(roomW) {
+    var x = roomW - DOOR_W - 10;
+    return { x: x, w: DOOR_W, at: { x: x + (DOOR_W - 24) / 2 + 0, y: WALL_H + 8 - 31 } };
+  }
+
   // layout(state, opts { maxCols }) -> { rooms: [{ key, w, h, cols, pods: [{ x, y, w, h }], desks: [{ id, x, y, orch, free }] }], pos: { id: desk } }
   // `desks` has one entry per seat of every pod; `id` is null for a free seat. Desk x/y is the top-left
   // of its 32 x 44 cell inside the room. maxCols (pods per row) only reflows rows, never reassigns seats.
@@ -211,7 +258,9 @@
         }
         y += rowH[r] * CELL_H + POD_GAP;
       }
-      return { key: key, cols: cols, w: ROOM_PAD * 2 + cols * POD_W + (cols - 1) * POD_GAP, h: y - POD_GAP + ROOM_PAD, pods: pods, desks: desks };
+      var rw = ROOM_PAD * 2 + cols * POD_W + (cols - 1) * POD_GAP;
+      var lounge = { x: ROOM_PAD, y: y - POD_GAP + 4, w: rw - ROOM_PAD * 2, h: LOUNGE_H };
+      return { key: key, cols: cols, w: rw, h: lounge.y + LOUNGE_H + 6, pods: pods, desks: desks, lounge: lounge, spots: loungeSpots(lounge), door: doorFor(rw) };
     });
     return { rooms: rooms, pos: pos };
   }
@@ -222,6 +271,59 @@
     var scale = w >= 2 * (POD_W + ROOM_PAD * 2) ? 2 : 1;
     var maxCols = Math.max(1, Math.min(4, Math.floor((w / scale - ROOM_PAD * 2 + POD_GAP) / (POD_W + POD_GAP))));
     return { scale: scale, maxCols: maxCols };
+  }
+
+  // ---------------------------------------------------------------- lifecycle and interactions
+  // placeFor(row, nowMs) -> 'desk' | 'lounge' | 'out'
+  //   out: finished (a subagent is gone for good, others have left for the day); lounge: idle for LOUNGE_AFTER_MS or more,
+  //   resting on the sofa until active again; desk: everything else (a session waiting for you stays visible at its desk).
+  function placeFor(row, nowMs) {
+    var s = shownStatus(row);
+    if (s === 'done') return 'out';
+    if (s === 'idle') {
+      var t = Date.parse(row.lastActivity);
+      if (isFinite(t) && nowMs - t >= LOUNGE_AFTER_MS) return 'lounge';
+    }
+    return 'desk';
+  }
+
+  function isActive(s) { return s === 'working' || s === 'tool'; }
+
+  // detectEvents(prev, rows) -> { events, next }. prev is the `next` of the last call (null on the first call: nothing
+  // happens for sessions already on screen). Events are short errands the page plays when it can:
+  //   report   a subagent finished: walks to its parent with a paper          { type, who, to }
+  //   review   a reviewer got busy: goes to look at the reviewed worker's screen
+  //   debate   a refuter got busy: stands next to the reviewer, both show "?"
+  //   dispatch a new subagent appeared: its parent walks over and hands it a paper
+  function detectEvents(prev, rows) {
+    var byId = {};
+    rows.forEach(function (r) { byId[r.id] = r; });
+    var next = {};
+    var events = [];
+    rows.forEach(function (r) {
+      next[r.id] = { shown: shownStatus(r), role: r.role || null, parent: r.parent || null };
+    });
+    if (!prev) return { events: events, next: next };
+    var sibling = function (row, role) {
+      var best = null;
+      rows.forEach(function (o) {
+        if (o.id === row.id || !row.parent || o.parent !== row.parent || o.role !== role) return;
+        var same = row.task && o.task && row.task.id && row.task.id === o.task.id;
+        if (!best || (same && !best.same)) best = { id: o.id, same: !!same };
+      });
+      return best && best.id;
+    };
+    rows.slice().sort(function (a, b) { return byIdAsc(a.id, b.id); }).forEach(function (r) {
+      var was = prev[r.id];
+      var now = next[r.id];
+      var parent = r.parent && r.parent !== r.id && byId[r.parent] ? r.parent : null;
+      if (!was) { if (parent) events.push({ type: 'dispatch', who: parent, to: r.id }); return; }
+      if (was.shown === now.shown) return;
+      if (r.subagent && now.shown === 'done' && parent) events.push({ type: 'report', who: r.id, to: parent });
+      else if (r.role === 'reviewer' && isActive(now.shown) && !isActive(was.shown)) { var w = sibling(r, 'worker'); if (w) events.push({ type: 'review', who: r.id, to: w }); }
+      else if (r.role === 'refuter' && isActive(now.shown) && !isActive(was.shown)) { var v = sibling(r, 'reviewer'); if (v) events.push({ type: 'debate', who: r.id, to: v }); }
+    });
+    return { events: events, next: next };
   }
 
   // ---------------------------------------------------------------- text, with the same privacy rules as the list
@@ -259,6 +361,7 @@
 
   return {
     CELL_W: CELL_W, CELL_H: CELL_H, POD_W: POD_W, POD_GAP: POD_GAP, ROOM_PAD: ROOM_PAD, WALL_H: WALL_H, ROLES: ROLES,
+    LOUNGE_H: LOUNGE_H, LOUNGE_AFTER_MS: LOUNGE_AFTER_MS, DOOR_W: DOOR_W, ACCS: ACCS, toolAct: toolAct, placeFor: placeFor, detectEvents: detectEvents, loungeSpots: loungeSpots, doorFor: doorFor, fillSlots: fillSlots,
     shownStatus: shownStatus, activityKind: activityKind, toolKind: toolKind, animFor: animFor, hash: hash, looks: looks,
     STYLES: STYLES, HAIRS: HAIRS, SKINS: SKINS, slotPos: slotPos, rootOf: rootOf, assign: assign, layout: layout, planFor: planFor, describe: describe, activityLine: activityLine
   };
