@@ -11,10 +11,12 @@ what matters. Details of how things work today are in [DESIGN.md](DESIGN.md).
   Everything stays local, tail-read and redacted.
 - **Codex support (experimental, shipped in this cycle).** Codex as a worker through `crew task run --engine codex` (crewgate commits, because the Codex sandbox cannot), Codex as a reviewer, and Codex as an orchestrator through the same plugin folder (hooks, skill, custom agents). Still to do: verification on more platforms and Codex versions, and Codex subagent workers once their sandbox can commit.
 
-## Built, waiting for a release
+## Released in 0.12
 
 - Session statistics: duration, prompts, tool counts, subagents, tokens and estimated cost per session, with totals per parent (cached incrementally per file, bounded work per request).
 - A per-session activity timeline you can drill into (`#/s/<id>`): 200 steps per page, paging backwards by byte offsets, filter by kind, links to subagent pages.
+- Office view (experimental): `#/office`, a pixel-art office of live sessions.
+- Fixes from real use: recorded gates, hooks-last-seen, merge records, `via`, agent name normalisation, work item updates, default checks detection.
 
 ## Later
 
@@ -24,7 +26,7 @@ what matters. Details of how things work today are in [DESIGN.md](DESIGN.md).
 
 ## Exploring
 
-- **Office view (done, experimental).** `#/office` shows live sessions as a pixel-art office, drawn from
+- **Office view (shipped in 0.12, experimental).** `#/office` shows live sessions as a pixel-art office, drawn from
   scratch on a canvas. The list view stays the default and the only one that must work everywhere. Still
   open: feedback from real use, more poses and room decoration, and whether a 3D variant is worth it.
 
