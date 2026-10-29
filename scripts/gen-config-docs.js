@@ -1,10 +1,10 @@
 'use strict';
 
-// Writes docs/CONFIG.md from the config schema (plugins/agent-crew/lib/core/config.js).
+// Writes docs/CONFIG.md from the config schema (plugins/crewgate/lib/core/config.js).
 // Usage: node scripts/gen-config-docs.js [--check]   (--check exits 1 when the file is stale)
 const fs = require('fs');
 const path = require('path');
-const config = require('../plugins/agent-crew/lib/core/config');
+const config = require('../plugins/crewgate/lib/core/config');
 
 const OUT = path.join(__dirname, '..', 'docs', 'CONFIG.md');
 
@@ -44,9 +44,9 @@ function render() {
     '',
     table(config.SCHEMA),
     '',
-    '## Global config: `~/.agent-crew/config.json`',
+    '## Global config: `~/.crewgate/config.json`',
     '',
-    'Per user (override the folder with `AGENT_CREW_HOME`). Not part of any repository.',
+    'Per user (override the folder with `CREWGATE_HOME`). Not part of any repository.',
     '',
     table(config.GLOBAL_SCHEMA),
     '',

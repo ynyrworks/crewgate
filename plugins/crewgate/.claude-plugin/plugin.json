@@ -1,0 +1,10 @@
+{
+  "name": "crewgate",
+  "version": "0.1.0",
+  "description": "Delegated development for Claude Code: an orchestrator dispatches worker and reviewer subagents in git worktrees, a deterministic review filter keeps only real findings, and hooks record progress on a local board.",
+  "author": { "name": "Ynyr" },
+  "license": "MIT",
+  "repository": "https://github.com/ynyrworks/crewgate",
+  "homepage": "https://github.com/ynyrworks/crewgate#readme",
+  "keywords": ["subagents", "orchestration", "delegation", "code-review", "worktree", "hooks", "workflow", "board"]
+}

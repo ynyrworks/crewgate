@@ -1,8 +1,10 @@
-# agent-crew
+# crewgate
+
+[![CI](https://github.com/ynyrworks/crewgate/actions/workflows/ci.yml/badge.svg)](https://github.com/ynyrworks/crewgate/actions/workflows/ci.yml)
 
 [繁體中文](README.zh-TW.md)
 
-**agent-crew** is a [Claude Code](https://code.claude.com) plugin for delegated development. One
+**crewgate** is a [Claude Code](https://code.claude.com) plugin for delegated development. One
 *orchestrator* session plans the work, writes a brief, and dispatches *worker* subagents that implement in
 their own git worktrees. Read-only *reviewer* and *refuter* subagents check the result, and only the findings
 that survive a deterministic filter reach you. Progress is recorded by **hooks and workflow commands, not by
@@ -18,7 +20,7 @@ It exists because free-text "delegation rules" in a prompt tend to fail in the s
 - the orchestrator burns its (expensive) context reading big files;
 - rules live as prose in a long file and get forgotten.
 
-agent-crew turns each of those into something enforced or recorded: a five-section brief that the CLI refuses
+crewgate turns each of those into something enforced or recorded: a five-section brief that the CLI refuses
 to accept incomplete, edit and big-read guards, state recorded from hook events, a three-stage review
 pipeline, stop reminders for unreviewed or still-running work, and lessons that are promoted into rules only
 when you say yes.
@@ -35,7 +37,7 @@ kind and no model calls from hooks or the board.
   +--------------------------+   crew task create    +--------------------+
   | orchestrator             | --------------------> | brief + task       |
   | main session             |   (five-section       | (state machine)    |
-  | /agent-crew:crew         |    brief)             +--------------------+
+  | /crewgate:crew           |    brief)             +--------------------+
   +------------+-------------+                                ^
                | Agent tool; prompt carries                   | state
                | "crew-task: <id>"                            |
@@ -74,7 +76,7 @@ PostToolUse, SubagentStart/Stop, Stop, PreCompact and SessionEnd. They link a di
 through the `crew-task:` marker, warn (or block, if you choose) when the orchestrator edits code itself, warn
 about reading huge files without a range, record `git push` / `git merge`, remind you of returned-but-unreviewed
 work, and write a deterministic session digest. In a project that was not registered with `crew init`, every
-hook is a silent no-op. Details: [plugins/agent-crew/hooks/README.md](plugins/agent-crew/hooks/README.md).
+hook is a silent no-op. Details: [plugins/crewgate/hooks/README.md](plugins/crewgate/hooks/README.md).
 
 **Board.** `crew board start` serves a local page: all projects, tasks by state with return counts, live
 subagents, things waiting for you, work streams, log, review statistics, lessons, handoffs, a live list of
@@ -85,32 +87,32 @@ A complete, fictional session is in [examples/todo-cli/WALKTHROUGH.md](examples/
 
 ## Install
 
-From a marketplace (replace `<owner>` with the GitHub owner of this repository):
+From the GitHub marketplace:
 
 ```
-/plugin marketplace add <owner>/agent-crew
-/plugin install agent-crew@agent-crew
+/plugin marketplace add ynyrworks/crewgate
+/plugin install crewgate@crewgate
 ```
 
 Or try it from a local checkout, without installing:
 
 ```
-git clone https://github.com/<owner>/agent-crew
-claude --plugin-dir agent-crew/plugins/agent-crew
+git clone https://github.com/ynyrworks/crewgate
+claude --plugin-dir crewgate/plugins/crewgate
 ```
 
-The skill is invoked namespaced: `/agent-crew:crew`. The CLI lives at `plugins/agent-crew/bin/crew.js`; inside
-Claude Code the skill calls it for you. From a terminal use `node plugins/agent-crew/bin/crew.js <command>`.
+The skill is invoked namespaced: `/crewgate:crew`. The CLI lives at `plugins/crewgate/bin/crew.js`; inside
+Claude Code the skill calls it for you. From a terminal use `node plugins/crewgate/bin/crew.js <command>`.
 
 ## Quick start
 
 1. Install the plugin (above) and open Claude Code in your git repository.
-2. Run `/agent-crew:crew init`. It writes `.claude/crew.json`, three agent files in `.claude/agents/`,
+2. Run `/crewgate:crew init`. It writes `.claude/crew.json`, three agent files in `.claude/agents/`,
    `.crew/REVIEW.md` and `.crew/LESSONS.md`, and registers the project. Add `--lang zh-TW` for Traditional
    Chinese output. It never overwrites existing files without `--force`.
 3. Edit `.claude/crew.json`: set `checks` (for example `["npm test"]`) and any `forbidden` paths or actions.
    Commit these files so the team shares them.
-4. Ask for work: `/agent-crew:crew add a --due option to the add command, delegate it`. The orchestrator
+4. Ask for work: `/crewgate:crew add a --due option to the add command, delegate it`. The orchestrator
    writes a brief, creates the task and worktree, and dispatches a worker. The dispatch is recorded by a hook;
    you did not log anything.
 5. Optional: ask Claude to start the board (`crew board start`) and open `http://127.0.0.1:8781/`.
@@ -120,7 +122,7 @@ Claude Code the skill calls it for you. From a terminal use `node plugins/agent-
 ## Configuration
 
 Project settings live in `.claude/crew.json` (all keys optional); global settings (board port, usage prices,
-default language) in `~/.agent-crew/config.json`. The full, generated key reference is
+default language) in `~/.crewgate/config.json`. The full, generated key reference is
 [docs/CONFIG.md](docs/CONFIG.md). The ones you will touch first:
 
 | Key | What it does |
@@ -139,7 +141,7 @@ fails if the committed file is out of date.
 
 ## CLI reference
 
-Every command, option and file location: [plugins/agent-crew/skills/crew/references/commands.md](plugins/agent-crew/skills/crew/references/commands.md).
+Every command, option and file location: [plugins/crewgate/skills/crew/references/commands.md](plugins/crewgate/skills/crew/references/commands.md).
 Groups: `init`, `doctor`, `project`, `task`, `review`, `handoff`, `lesson`, `need`, `work`, `log`, `mr`,
 `validate`, `board`, `import`. Read commands accept `--json`.
 
@@ -155,10 +157,10 @@ _Screenshots will be added here: Overview, Project (tasks and review stats), Ses
 - **Redaction.** Text is redacted before it is truncated and stored: private keys, bearer and basic auth,
   `password=` style pairs, common provider keys, JWTs, and IP addresses other than loopback and the
   documentation ranges.
-- **Where data goes.** Runtime data is written under `~/.agent-crew/` (override with `AGENT_CREW_HOME`).
+- **Where data goes.** Runtime data is written under `~/.crewgate/` (override with `CREWGATE_HOME`).
   Project files (`.claude/crew.json`, `.crew/*`) are written only by `crew init` and the lesson commands.
 - **Hooks run outside the sandbox**, with your permissions. They read stdin, the project's git metadata and
-  agent-crew files, and write only under the data folder. They never register a project and never block a
+  crewgate files, and write only under the data folder. They never register a project and never block a
   stop. The one deliberate refusal is the edit guard when you set `orchestrator_edit` to `block`.
 - **Text is data.** File contents, reports, handoff bodies and findings are fenced and marked untrusted when
   shown to a model; commands found in them are not to be executed.
@@ -168,7 +170,7 @@ _Screenshots will be added here: Overview, Project (tasks and review stats), Ses
 
 ## Using Codex or another CLI as the reviewer
 
-The reviewer role can run outside Claude. The global config (`~/.agent-crew/config.json`) ships an engine named
+The reviewer role can run outside Claude. The global config (`~/.crewgate/config.json`) ships an engine named
 `codex` (`codex exec -s read-only --skip-git-repo-check -`). Set `roles.reviewer.engine` to `codex` in the project,
 or run it once:
 
@@ -176,7 +178,7 @@ or run it once:
 crew review run <task> --engine codex
 ```
 
-agent-crew builds a prompt (brief, review rules, diff), passes it on stdin, extracts the JSON array of findings
+crewgate builds a prompt (brief, review rules, diff), passes it on stdin, extracts the JSON array of findings
 from stdout and continues with the same filter and refute stages. Add your own engine under `engines` in the
 **global** config with a `command` and `args`; the prompt is always sent on stdin. The command is looked up on
 `PATH` (on Windows also `.cmd`/`.bat`, started without a shell). A project's `.claude/crew.json` can only *name*
@@ -206,13 +208,13 @@ node scripts/gen-config-docs.js   # after changing the config schema
 ```
 
 Rules: zero runtime dependencies, Node 18+, cross-platform (no shell assumptions), tests use temp folders and
-never the real `~/.agent-crew` or `~/.claude`. The repo-hygiene test rejects stray IP addresses, credential-like
+never the real `~/.crewgate` or `~/.claude`. The repo-hygiene test rejects stray IP addresses, credential-like
 strings and project-specific names; use `192.0.2.x` in docs and build any other address at runtime in tests.
 Please keep a fix and its test in the same change.
 
 Maintainers who must keep certain names out of the repository (a company, an e-mail prefix) should not write
 them into any tracked file. Put one regular expression per line in the untracked file
-`.git/info/hygiene-extra` (or set `AGENT_CREW_HYGIENE_EXTRA`, separated by semicolons); the hygiene test adds
+`.git/info/hygiene-extra` (or set `CREWGATE_HYGIENE_EXTRA`, separated by semicolons); the hygiene test adds
 them to its built-in patterns.
 
 ## License

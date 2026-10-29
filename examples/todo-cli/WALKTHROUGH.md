@@ -1,17 +1,17 @@
 # Walkthrough: adding due dates to todo-cli
 
-A whole agent-crew session on a tiny, fictional project. Everything here is made up: the app, the task
+A whole crewgate session on a tiny, fictional project. Everything here is made up: the app, the task
 ids, the findings. Command output is abbreviated and ids will differ on your machine.
 
 `crew` below stands for `node "<plugin folder>/bin/crew.js"`. You rarely type it yourself: the
-orchestrator (your main Claude session, using the `/agent-crew:crew` skill) runs it, and the hooks run
+orchestrator (your main Claude session, using the `/crewgate:crew` skill) runs it, and the hooks run
 on their own.
 
 ## 0. Setup (once)
 
 ```
 cp -r examples/todo-cli ~/demo/todo-cli && cd ~/demo/todo-cli && git init && git add -A && git commit -m init
-claude --plugin-dir /path/to/agent-crew/plugins/agent-crew
+claude --plugin-dir /path/to/crewgate/plugins/crewgate
 ```
 
 The example already contains what `crew init` creates, so there is nothing to generate:
@@ -27,7 +27,7 @@ The example already contains what `crew init` creates, so there is nothing to ge
 Register the project once (this is the only registration; hooks never do it behind your back):
 
 ```
-> /agent-crew:crew init
+> /crewgate:crew init
 Registered project p55cbaf9c89 (todo-cli)
   kept         .claude/crew.json
   ...
@@ -155,7 +155,7 @@ worktree is removed.
 ## 6. Wrap-up
 
 ```
-> /agent-crew:crew wrap-up
+> /crewgate:crew wrap-up
 ```
 
 The orchestrator lists open tasks (none), things waiting for you (none) and:

@@ -2,7 +2,7 @@
   "name": "todo-cli",
   "version": "0.0.1",
   "private": true,
-  "description": "A tiny fictional todo list used to demonstrate agent-crew.",
+  "description": "A tiny fictional todo list used to demonstrate crewgate.",
   "bin": { "todo": "bin/todo.js" },
   "scripts": { "test": "node --test" },
   "license": "MIT"

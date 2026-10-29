@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+Renamed from agent-crew to crewgate (repository `ynyrworks/crewgate`). The skill is now `/crewgate:crew`, plugin agents are `crewgate:crew-worker` etc., the data folder is `~/.crewgate` and the environment variables are `CREWGATE_*`. The CLI command `crew`, `.claude/crew.json`, `.crew/` and the `crew-task:` marker are unchanged.
+Compatibility: if `~/.crewgate` is missing but `~/.agent-crew` exists, the old folder is used (the CLI prints a one-time notice); `AGENT_CREW_HOME` is still honoured as a fallback; old `agent-crew:rules` markers are read and rewritten to `crewgate:rules` on the next promote or retire.
+
 Security and correctness fixes from the first review round.
 
 - The dismissed ledger stores a hash of the snippet, never its text; findings files are redacted before they are written.
@@ -16,7 +19,7 @@ Security and correctness fixes from the first review round.
 
 First release.
 
-- Orchestrator skill `/agent-crew:crew` (init, status, wrap-up, handoff) and generic `crew-worker`,
+- Orchestrator skill `/crewgate:crew` (init, status, wrap-up, handoff) and generic `crew-worker`,
   `crew-reviewer` and `crew-refuter` agents; `crew init` renders project copies of the agents, the config and the
   `.crew/` files.
 - Task state machine with five-section briefs (the CLI refuses incomplete ones), capped worker reports,

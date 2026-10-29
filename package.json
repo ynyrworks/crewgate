@@ -1,8 +1,8 @@
 {
-  "name": "agent-crew",
+  "name": "crewgate",
   "version": "0.1.0",
   "private": true,
-  "description": "Repository root of the agent-crew Claude Code plugin (dev scripts only).",
+  "description": "Repository root of the crewgate Claude Code plugin (dev scripts only).",
   "license": "MIT",
   "engines": { "node": ">=18" },
   "scripts": {
