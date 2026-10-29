@@ -153,5 +153,10 @@
   "wf.doctor.boardDown": "not running (127.0.0.1:{port}); start it with `crew board start`",
   "wf.doctor.boardOther": "something else answers on 127.0.0.1:{port} ({detail})",
   "wf.doctor.allOk": "All checks passed.",
-  "wf.doctor.problems": "Some checks failed."
+  "wf.doctor.problems": "Some checks failed.",
+  "wf.doctor.name.update": "Updates",
+  "wf.doctor.updateOff": "update check is off (updates.check)",
+  "wf.doctor.updateUnknown": "{current}; latest release not checked yet (the board checks once a day, or run `crew update check`)",
+  "wf.doctor.updateCurrent": "{current} is the latest release",
+  "wf.doctor.updateNewer": "{current}; {latest} is available (run `crew update apply`)"
 }

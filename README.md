@@ -25,8 +25,9 @@ to accept incomplete, edit and big-read guards, state recorded from hook events,
 pipeline, stop reminders for unreviewed or still-running work, and lessons that are promoted into rules only
 when you say yes.
 
-Zero runtime dependencies. Node.js 18 or newer. Works on Windows, macOS and Linux. No network access of any
-kind and no model calls from hooks or the board.
+Zero runtime dependencies. Node.js 18 or newer. Works on Windows, macOS and Linux. The only network request is the board's optional update check
+(one request a day to GitHub, see Privacy and safety; turn it off with `updates.check`). No model calls from hooks or
+the board.
 
 ## How it works
 
@@ -143,7 +144,7 @@ fails if the committed file is out of date.
 
 Every command, option and file location: [plugins/crewgate/skills/crew/references/commands.md](plugins/crewgate/skills/crew/references/commands.md).
 Groups: `init`, `doctor`, `project`, `task`, `review`, `handoff`, `lesson`, `need`, `work`, `log`, `mr`,
-`validate`, `board`, `import`. Read commands accept `--json`.
+`validate`, `board`, `update`, `import`. Read commands accept `--json`.
 
 ## Board screenshots
 
@@ -191,8 +192,17 @@ What is next, what comes later and what is 1.0: [docs/ROADMAP.md](docs/ROADMAP.m
 ## Privacy and safety
 
 - **Local only.** The board binds `127.0.0.1`, rejects foreign `Host` headers, sets no CORS headers, requires a
-  per-process token and JSON content type for every write, and sends a strict CSP. No telemetry, no network
-  requests, no model calls from hooks or the board.
+  per-process token and JSON content type for every write, and sends a strict CSP. No telemetry, no model calls from hooks or the board.
+- **One outbound request, optional.** While `updates.check` is on (the default) the board server, never the
+  browser, asks `api.github.com` for the latest crewgate release at most once a day: a plain GET with a
+  `User-Agent: crewgate/<version>` header, no cookies or credentials, nothing about you or your projects, 5 s
+  timeout, result cached in `~/.crewgate/update-check.json`. Set `updates.check` to `false` and crewgate makes no
+  network request at all. `HTTPS_PROXY` is not supported. When a newer release exists the board shows a banner
+  (fix / new features / major) with release notes, **Update now** and **Skip this version**. Update now runs only
+  fixed commands (`claude plugin marketplace update crewgate`, `claude plugin update crewgate@crewgate`,
+  `codex plugin marketplace upgrade crewgate`), only for an installed plugin; a development checkout or a machine
+  without those CLIs gets the commands to copy instead. The board then restarts itself from the updated code.
+  Terminal: `crew update check`, `crew update apply`.
 - **Redaction.** Text is redacted before it is truncated and stored: private keys, bearer and basic auth,
   `password=` style pairs, common provider keys, JWTs, and IP addresses other than loopback and the
   documentation ranges.
@@ -265,6 +275,15 @@ Rules: zero runtime dependencies, Node 18+, cross-platform (no shell assumptions
 never the real `~/.crewgate` or `~/.claude`. The repo-hygiene test rejects stray IP addresses, credential-like
 strings and project-specific names; use `192.0.2.x` in docs and build any other address at runtime in tests.
 Please keep a fix and its test in the same change.
+
+Releases: the board's update banner (and `crew update check`) reads the newest published, non-pre-release GitHub release
+of this repository. When a release changes a hook command string (`hooks/hooks.json`, `hooks/codex-hooks.json`),
+add this line on its own line to the release notes so the banner can tell Codex users to re-approve the hooks
+(`/hooks`):
+
+```
+<!-- crewgate:rehook -->
+```
 
 Maintainers who must keep certain names out of the repository (a company, an e-mail prefix) should not write
 them into any tracked file. Put one regular expression per line in the untracked file

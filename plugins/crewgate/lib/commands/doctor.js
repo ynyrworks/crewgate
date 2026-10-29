@@ -89,6 +89,14 @@ async function run(argv, ctx) {
     else add('board', 'warn', ctx.t('wf.doctor.boardOther', { port, detail: b.detail }));
   }
 
+  try {
+    const u = require('../core/update-check').checkState({ current: require('../../board/server').pluginVersion() });
+    const v = { current: u.current, latest: u.latest };
+    if (!u.enabled) add('update', 'ok', ctx.t('wf.doctor.updateOff'));
+    else if (!u.latest) add('update', 'ok', ctx.t('wf.doctor.updateUnknown', v));
+    else add('update', u.kind ? 'warn' : 'ok', ctx.t(u.kind ? 'wf.doctor.updateNewer' : 'wf.doctor.updateCurrent', v));
+  } catch { /* the update notice is optional */ }
+
   const ok = checks.every((c) => c.status !== 'fail');
   const mark = { ok: 'OK  ', warn: 'WARN', fail: 'FAIL' };
   ctx.emit({ ok, checks }, [

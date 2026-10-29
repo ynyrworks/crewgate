@@ -106,6 +106,141 @@
   }
   function td(content, num) { return h('td', { class: num ? 'num' : '' }, content); }
 
+  // ------------------------------------------------------------------ update banner
+  // The server does the check and the update (DESIGN section 10); this only shows the state and asks.
+  // S.upd: { info, phase: idle|running|restarting|manual|failed|done, status, oldVersion, since, doneVersion }
+  var UM = window.UpdateModel;
+  var UPD_LIMIT = 45000;
+  S.upd = { info: null, phase: 'idle', status: null, oldVersion: '', since: 0, doneVersion: '' };
+
+  function loadUpdate() {
+    if (S.upd.phase !== 'idle') return;
+    api('/api/update').then(function (r) { if (r.status < 400) { S.upd.info = r.data; renderUpdate(); } }).catch(function () { /* offline banner shows */ });
+  }
+
+  function copyText(text, done) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () { /* select by hand */ });
+    } catch (e) { /* clipboard unavailable: the commands stay visible */ }
+  }
+
+  function commandBlock(lines) {
+    var text = lines.join('\n');
+    return [
+      h('pre', { tabindex: '0', text: text }),
+      h('button', { type: 'button', onclick: function (e) { var b = e.target; copyText(text, function () { b.textContent = t('update.copied'); }); }, text: t('update.copy') }),
+    ];
+  }
+
+  function dismissBtn(then) {
+    return h('span', { class: 'btns' }, h('button', { type: 'button', onclick: function () { S.upd.phase = 'idle'; renderUpdate(); if (then) then(); }, text: t('update.dismiss') }));
+  }
+
+  function renderUpdate() {
+    var el = $('update');
+    var u = S.upd;
+    var info = u.info;
+    var line = null;
+    var extra = [];
+    var fail = false;
+    // the page refreshes every few seconds: rebuild only when something shown has changed (keeps focus and clicks)
+    var sig = JSON.stringify([S.lang, u.phase, info, u.status, u.doneVersion, store('crew.skipUpdate') || '']);
+    if (el.getAttribute('data-sig') === sig) return;
+    el.setAttribute('data-sig', sig);
+    el.setAttribute('aria-label', t('update.region'));
+    if (u.phase === 'running') {
+      var cur = u.status && u.status.current;
+      line = [h('span', { class: 'msg', role: 'status', text: t('update.running') }), cur ? h('span', { class: 'muted', text: t('update.step', { cmd: cur }) }) : null];
+    } else if (u.phase === 'restarting') {
+      line = [h('span', { class: 'msg', role: 'status', text: t('update.restarting') })];
+    } else if (u.phase === 'done') {
+      line = [h('span', { class: 'msg', role: 'status', text: t('update.done', { version: u.doneVersion }) }), dismissBtn(loadUpdate)];
+    } else if (u.phase === 'manual') {
+      var cmds = [];
+      ((u.status && u.status.manual) || []).forEach(function (g) { g.commands.forEach(function (c) { cmds.push(c); }); });
+      cmds.push((u.status && u.status.restart_command) || 'crew board start');
+      line = [h('span', { class: 'msg', text: t('update.manual') }), dismissBtn()];
+      extra = commandBlock(cmds);
+    } else if (u.phase === 'failed') {
+      fail = true;
+      var st = u.status || {};
+      var bad = (st.steps || []).filter(function (x) { return !x.ok; })[0];
+      line = [h('span', { class: 'msg', role: 'alert', text: t('update.failed') }), dismissBtn()];
+      if (bad) extra = [h('p', { class: 'note', text: t('update.stepFailed', { cmd: bad.cmd }) }), h('pre', { tabindex: '0', text: bad.output || '' })];
+      else extra = [h('p', { class: 'note', text: t('update.restartFailed') })].concat(commandBlock([st.restart_command || 'crew board start']));
+    } else if (UM.visible(info, store('crew.skipUpdate') || '')) {
+      line = [
+        h('span', { class: 'msg', role: 'status', text: t('update.available', { latest: info.latest, kind: t(UM.kindKey(info.kind)) }) }),
+        h('a', { href: info.notes_url, target: '_blank', rel: 'noopener noreferrer', text: t('update.notes') }),
+        h('span', { class: 'btns' },
+          h('button', { type: 'button', class: 'primary', onclick: applyUpdate, text: t('update.now') }),
+          h('button', { type: 'button', onclick: function () { store('crew.skipUpdate', info.latest); renderUpdate(); }, text: t('update.skip') })),
+      ];
+      if (info.rehook) extra = [h('p', { class: 'note', text: t('update.rehook') })];
+    }
+    el.textContent = '';
+    el.className = fail ? 'update fail' : 'update';
+    if (!line) { el.hidden = true; return; }
+    el.hidden = false;
+    el.appendChild(h('div', { class: 'line' }, line));
+    extra.forEach(function (x) { el.appendChild(x); });
+  }
+
+  function applyUpdate() {
+    var u = S.upd;
+    u.oldVersion = (u.info && u.info.current) || '';
+    u.phase = 'running';
+    u.status = null;
+    renderUpdate();
+    api('/api/update/apply', { body: {} }).then(function (r) {
+      if (r.status >= 400) {
+        u.phase = 'failed';
+        u.status = { steps: [{ ok: false, cmd: 'crew update', output: (r.data.error && r.data.error.message) || '' }] };
+        renderUpdate();
+        return;
+      }
+      pollUpdate();
+    }).catch(function () { u.phase = 'idle'; renderUpdate(); });
+  }
+
+  function pollUpdate() {
+    var u = S.upd;
+    if (u.phase !== 'running' && u.phase !== 'restarting') return;
+    var again = function () { setTimeout(pollUpdate, 1000); };
+    var toRestart = function () { u.phase = 'restarting'; u.since = Date.now(); renderUpdate(); again(); };
+    if (u.phase === 'restarting') {
+      fetch('/api/health', { cache: 'no-store' }).then(function (r) { return r.json(); }).catch(function () { return null; }).then(function (hl) {
+        var v = UM.restartVerdict(u.oldVersion, hl, Date.now() - u.since, UPD_LIMIT);
+        if (v === 'ok') { store('crew.updated', hl.version); window.location.reload(); return; }
+        if (v === 'timeout') { u.phase = 'failed'; u.status = { restart_command: 'crew board start', steps: [] }; renderUpdate(); return; }
+        // the old board may be back already and say the restart failed
+        fetch('/api/update/status', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
+          if (d && d.state === 'failed') { u.phase = 'failed'; u.status = d; renderUpdate(); } else again();
+        }).catch(again);
+      });
+      return;
+    }
+    api('/api/update/status').then(function (r) {
+      var d = r.data;
+      u.status = d;
+      if (d.state === 'running') { renderUpdate(); again(); return; }
+      if (d.state === 'restarting') { toRestart(); return; }
+      if (d.state === 'manual') u.phase = 'manual';
+      else if (d.state === 'failed') u.phase = 'failed';
+      else if (d.state === 'done') { u.phase = 'done'; u.doneVersion = d.new_version || ''; } else u.phase = 'idle';
+      renderUpdate();
+    }).catch(toRestart);   // the board stopped answering: it is restarting itself
+  }
+
+  // Shown once, after the page reloaded onto the updated board.
+  function showUpdated() {
+    var v = store('crew.updated');
+    if (!v) return;
+    store('crew.updated', '');
+    S.upd.phase = 'done';
+    S.upd.doneVersion = v;
+  }
+
   // ------------------------------------------------------------------ routing
   function parseRoute() {
     var p = (location.hash || '#/').replace(/^#/, '').split('/').filter(Boolean);
@@ -136,6 +271,7 @@
     var mask = h('input', { type: 'checkbox', id: 'mask', role: 'switch', checked: S.mask, onchange: function (e) { S.mask = e.target.checked; store('crew.mask', S.mask ? '1' : '0'); refresh(true); } });
     tools.appendChild(h('label', { title: t('maskHint'), class: 'switch' }, mask, t('mask')));
     tools.appendChild(sel);
+    renderUpdate();
   }
 
   function setLang(lang) {
@@ -596,7 +732,10 @@
       renderChrome();
       window.addEventListener('hashchange', function () { S.last = ''; refresh(true); });
       document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') refresh(false); });
+      showUpdated();
       refresh(true);
+      loadUpdate();
+      setInterval(function () { if (document.visibilityState === 'visible') loadUpdate(); }, 60000);
       startTimer();
     });
   }

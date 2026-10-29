@@ -100,11 +100,33 @@ function writeState(port) {
   json.save(stateFile(), { pid: process.pid, port, started: new Date().toISOString() });
 }
 
+// Launches `board serve` detached from the given crew.js; its output goes to the board log.
+function spawnServe(bin, port, { search = false } = {}) {
+  fs.mkdirSync(paths.home(), { recursive: true });
+  const fd = fs.openSync(logFile(), 'a');
+  const child = spawn(process.execPath, [bin, 'board', 'serve', '--port', String(port), ...(search ? ['--search'] : [])], {
+    detached: true, stdio: ['ignore', fd, fd], windowsHide: true, env: process.env,
+  });
+  child.unref();
+  fs.closeSync(fd);
+  return child;
+}
+
 // Foreground server. Without `search` the exact port is required; with it the next free ports are tried.
 async function serve(ctx, port, search) {
   const { createBoard } = require('../../board/server');
-  const board = createBoard({});
   let bound = null;
+  // After a one-click update: free the port, start the updated code on it, and leave only when it answers.
+  // If it never does, take the port back so the old board keeps working.
+  const restart = async (newRoot) => {
+    await board.close();
+    const r = await require('../core/update-apply').launchReplacement(newRoot, bound);
+    if (r.ok) { setTimeout(() => process.exit(0), 200); return r; }
+    await board.listen(bound);
+    writeState(bound);
+    return r;
+  };
+  const board = createBoard({ updates: { auto: true, restart } });
   const last = search ? port + SEARCH_SPAN : port;
   for (let p = port; p <= last && bound === null; p++) {
     if (p > 65535) break;
@@ -134,13 +156,7 @@ async function start(ctx, a) {
   const explicit = a.port !== undefined;
   const port = explicit ? a.port : defaultPort();
   if (explicit && !(await portFree(port))) throw new CrewError('board.portBusy', { port });
-  fs.mkdirSync(paths.home(), { recursive: true });
-  const fd = fs.openSync(logFile(), 'a');
-  const child = spawn(process.execPath, [BIN, 'board', 'serve', '--port', String(port), ...(explicit ? [] : ['--search'])], {
-    detached: true, stdio: ['ignore', fd, fd], windowsHide: true, env: process.env,
-  });
-  child.unref();
-  fs.closeSync(fd);
+  const child = spawnServe(BIN, port, { search: !explicit });
   let exited = false;
   child.on('exit', () => { exited = true; });
   const deadline = Date.now() + START_WAIT_MS;
@@ -208,4 +224,9 @@ module.exports = {
   },
   run,
   openPlan,
+  spawnServe,
+  readState,
+  health,
+  running,
+  alive,
 };

@@ -131,3 +131,13 @@ button.toggle { border: 0; background: none; padding: 0 4px; min-width: 24px; mi
   .s-time { margin-left: 0; width: 100%; }
 }
 .is-waiting .muted { color: var(--text-2); }
+
+.update { margin: 0; padding: 10px 16px; background: var(--surface); border-bottom: 2px solid var(--accent); }
+.update[hidden] { display: none; }
+.update.fail { border-bottom-color: var(--crit); }
+.update .line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.update .msg { font-weight: 600; overflow-wrap: anywhere; }
+.update .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.update .note { margin: 6px 0 0; color: var(--text-2); overflow-wrap: anywhere; }
+.update pre { margin: 6px 0 0; padding: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; overflow-x: auto; font: 12px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.update button { min-height: 32px; }

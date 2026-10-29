@@ -142,7 +142,7 @@ test('doctor: healthy project reports each check; board down is not an error', a
   const r = await u.crewAsync(['--json', 'doctor'], repo);
   const d = JSON.parse(r.out);
   const by = Object.fromEntries(d.checks.map((c) => [c.name, c]));
-  assert.deepEqual(Object.keys(by), ['node', 'config', 'registration', 'files', 'engine', 'hooks', 'board']);
+  assert.deepEqual(Object.keys(by), ['node', 'config', 'registration', 'files', 'engine', 'hooks', 'board', 'update']);
   assert.equal(by.node.status, 'ok');
   assert.equal(by.config.status, 'ok');
   assert.equal(by.registration.status, 'ok');
@@ -229,7 +229,7 @@ test('workflow i18n tables have identical keys and cover every key used in the c
     }
   }
   for (const a of ['created', 'kept', 'overwritten']) used.add(`wf.init.${a}`);
-  for (const n of ['node', 'config', 'registration', 'files', 'engine', 'hooks', 'board']) used.add(`wf.doctor.name.${n}`);
+  for (const n of ['node', 'config', 'registration', 'files', 'engine', 'hooks', 'board', 'update']) used.add(`wf.doctor.name.${n}`);
   const missing = [...used].filter((k) => !(k in en));
   assert.deepEqual(missing, []);
   for (const k of Object.keys(en)) {

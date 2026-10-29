@@ -124,7 +124,7 @@ test('page source: private mode switch and filters persist through guarded stora
   assert.match(src, /function store\(key, val\) \{\s*try \{/, 'every storage access goes through the try/catch wrapper');
   const outside = src.split('function store(')[1].split('\n  }\n').slice(1).join('');
   assert.doesNotMatch(outside, /localStorage/, 'localStorage only inside store()');
-  assert.match(read('index.html'), /<script src="\/sessions-model\.js"><\/script>\s*<script src="\/app\.js">/);
+  assert.match(read('index.html'), /<script src="\/sessions-model\.js"><\/script>\s*<script src="\/update-model\.js"><\/script>\s*<script src="\/app\.js">/);
   assert.doesNotMatch(read('sessions-model.js'), /innerHTML|eval\(|https?:\/\//);
   const en = table('en');
   const zh = table('zh-TW');

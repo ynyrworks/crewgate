@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Update notice and one-click update. The board server asks GitHub once a day (global config `updates.check`, default on; off means no request at all) whether a newer release exists and shows a banner on every page: fix / new features / major, release notes, **Update now**, **Skip this version**. **Update now** runs fixed commands only (`claude plugin marketplace update crewgate`, `claude plugin update crewgate@crewgate`, `codex plugin marketplace upgrade crewgate`) for an installed plugin, then restarts the board from the updated code; a development checkout or a machine without the CLIs gets copyable commands. New `crew update check|apply`; `crew doctor` shows the cached latest release. New endpoints `GET /api/update`, `POST /api/update/check`, `POST /api/update/apply`, `GET /api/update/status`.
+
 ## 0.10.1 — 2026-10-29
 
 - Board: a finished one-shot run is `done`, not `waiting for you`: `codex exec` rollouts (`session_meta.payload.originator` `codex_exec` / `source` `exec`) and headless Claude runs (`entrypoint` `sdk-*`, e.g. `claude -p`). Interactive sessions whose turn ended still wait. `session.end` events from Codex hooks now end Codex sessions too (the rollout's `session_meta.payload.id` is the hook's `session_id`).

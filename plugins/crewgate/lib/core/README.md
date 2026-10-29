@@ -130,3 +130,12 @@ Free text is redacted (not rejected).
 
 ## cli.js
 - `main(argv, io?)` -> exit code; `extractGlobals`, `listGroups()`, `loadGroup(name)`, `createContext(globals, io)`.
+
+## update-check.js / update-apply.js
+- `update-check.js`: `check({ current, force })` asks GitHub (the only outbound request of crewgate) at most once per 24 h
+  when global `updates.check` is on, caches answers and failures in `<home>/update-check.json` (failures back off
+  1 h, 2 h ... 24 h); `checkState()` reads the cache only. `parseVersion`, `compareVersions`, `kindOf` (`patch|minor|major`).
+  A release body line `<!-- crewgate:rehook -->` sets `rehook`.
+- `update-apply.js`: `createRunner({ pluginRoot, env, restart })` runs the fixed update commands (see DESIGN section 10) one
+  update at a time (`<home>/update.lock`); `status()` feeds `GET /api/update/status`. `locateNewRoot`, `launchReplacement`
+  start the updated board on the same port. Used by `board/update-routes.js` and `crew update`.
