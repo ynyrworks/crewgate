@@ -1,6 +1,7 @@
 'use strict';
 
 // PostToolUse: foreground subagent completion (Agent/Task) and git/PR commands (Bash).
+const path = require('path');
 const events = require('../core/events');
 const tasks = require('../core/tasks');
 const C = require('./common');
@@ -59,9 +60,24 @@ function mergeEvents(f, merges, mergeCommands) {
   return [{ ...d, merged: merges.length, outcome: merges[0].outcome, ...(merges[0].range ? { range: merges[0].range } : {}) }];
 }
 
+// Git-Bash style /c/work/x (and /cygdrive/c/...) -> C:/work/x; only on Windows, other words pass through.
+function nativeDir(w) {
+  if (process.platform !== 'win32') return w;
+  const m = /^(?:\/cygdrive)?\/([A-Za-z])(?:\/(.*))?$/.exec(w);
+  return m ? `${m[1].toUpperCase()}:/${m[2] || ''}` : w;
+}
+
+// The directory a command's cd / git -C words lead to, starting at the session cwd; null for no words.
+function targetDir(cwd, steps) {
+  if (!steps || !steps.length) return null;
+  let dir = cwd;
+  for (const w of steps) dir = path.resolve(dir, nativeDir(w));
+  return dir;
+}
+
 // A push, PR or merge whose gate is "ask" needs a recorded yes (crew gate answer) from the last 30 minutes.
-// Without one: a gate.missing event and a non-blocking reminder for the model.
-function gateReminder(h, payload, found, tuid) {
+// Without one: a gate.missing event and reminder lines for the model.
+function gateLines(h, found, tuid) {
   const wanted = new Map();
   for (const f of found) {
     const gate = gates.gateOf(f);
@@ -70,7 +86,7 @@ function gateReminder(h, payload, found, tuid) {
   const lines = [];
   for (const [gate, what] of wanted) {
     let cfg;
-    try { cfg = h.cfg(); } catch { return null; }
+    try { cfg = h.cfg(); } catch { return []; }
     if (gates.modeOf(cfg, gate) !== 'ask') continue;
     let approved = true;
     try { approved = gates.hasApproval(h.pid, gate, h.sid); } catch { /* cannot tell: stay quiet */ }
@@ -83,7 +99,7 @@ function gateReminder(h, payload, found, tuid) {
     } catch { /* ignore */ }
     lines.push(h.t('gate.missing', { what, gate, cmd: C.crewCmd() }));
   }
-  return lines.length ? C.withContext('PostToolUse', lines.join('\n')) : null;
+  return lines;
 }
 
 function onBash(payload) {
@@ -91,24 +107,45 @@ function onBash(payload) {
   const gitish = GIT_WORDS.test(command.slice(0, 20000));
   // Ordinary commands only use the session file (no git); git-like ones may resolve the project.
   const h = C.open(payload, { fastOnly: !gitish });
-  if (!h) return null;
-  sess.bumpTool(h, 'Bash');
+  if (h) sess.bumpTool(h, 'Bash');
   if (!gitish) return null;
   const tuid = C.str(payload.tool_use_id);
   const merges = gitcmd.mergesIn(responseText(payload.tool_response));
   const found = gitcmd.detect(command);
+  if (!h && !found.some((f) => f.cd.length)) return null;
+  const sessionCwd = C.str(payload.cwd) || process.cwd();
+  // A command that cd's or uses git -C acts on that directory's project, not on the session's.
+  // A directory outside every registered project records nothing (and is never registered here).
+  const handles = new Map();
+  const handleFor = (f) => {
+    const dir = targetDir(sessionCwd, f.cd);
+    if (!dir) return h;
+    if (!handles.has(dir)) {
+      let t = null;
+      try { t = C.open({ ...payload, cwd: dir }); } catch { /* unusable directory */ }
+      handles.set(dir, t);
+    }
+    return handles.get(dir);
+  };
+  const byProject = new Map(); // pid -> { h, found }
   found.forEach((f, i) => {
+    const fh = handleFor(f);
+    if (!fh) return;
+    if (!byProject.has(fh.pid)) byProject.set(fh.pid, { h: fh, found: [] });
+    byProject.get(fh.pid).found.push(f);
     const list = f.type === 'git.merge' ? mergeEvents(f, merges, found.filter((x) => x.type === 'git.merge').length) : [f.data];
     list.forEach((data, k) => {
       try {
-        events.append(h.pid, {
-          type: f.type, src: 'hook', session: h.sid, tool_use_id: tuid,
+        events.append(fh.pid, {
+          type: f.type, src: 'hook', session: fh.sid, tool_use_id: tuid,
           data, key: `${tuid || Date.now()}:${i}${k ? `:${k}` : ''}`,
         });
       } catch { /* ignore */ }
     });
   });
-  return gateReminder(h, payload, found, tuid);
+  const lines = [];
+  for (const g of byProject.values()) lines.push(...gateLines(g.h, g.found, tuid));
+  return lines.length ? C.withContext('PostToolUse', lines.join('\n')) : null;
 }
 
 function run(payload) {
