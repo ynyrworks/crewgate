@@ -9,6 +9,7 @@ const common = require('../features/common');
 const execx = require('../core/exec');
 const hookseen = require('../core/hookseen');
 const store = require('../core/store');
+const hooklog = require('../core/hooklog');
 
 // GET http://127.0.0.1:<port>/api/health -> { state: 'running'|'down'|'other', detail }
 function probeBoard(port, timeoutMs = 1500) {
@@ -77,6 +78,12 @@ async function run(argv, ctx) {
     if (dups.length) add('work', 'warn', ctx.t('wf.doctor.workDuplicates', { items: dups.map((x) => `${x.stream} / ${x.title} (${x.count})`).join('; ') }));
   }
 
+  const hookErrors = hooklog.counts();
+  const fmtBy = (by) => Object.entries(by).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(', ');
+  add('hookerrors', hookErrors.h24.total ? 'warn' : 'ok', hookErrors.d7.total
+    ? ctx.t('wf.doctor.hookErrors', { h24: hookErrors.h24.total, d7: hookErrors.d7.total, by: fmtBy(hookErrors.d7.by), file: hooklog.file() })
+    : ctx.t('wf.doctor.hookErrorsNone'));
+
   const engines = config.globalEngines();
   for (const [name, eng] of Object.entries(engines)) {
     const command = eng && typeof eng.command === 'string' ? eng.command : '';
@@ -116,7 +123,7 @@ async function run(argv, ctx) {
 
   const ok = checks.every((c) => c.status !== 'fail');
   const mark = { ok: 'OK  ', warn: 'WARN', fail: 'FAIL' };
-  ctx.emit({ ok, checks, ...(seen ? { hook_seen: seen.rows } : {}) }, [
+  ctx.emit({ ok, checks, hook_errors: hookErrors, ...(seen ? { hook_seen: seen.rows } : {}) }, [
     ...checks.map((c) => `${mark[c.status]}  ${ctx.t(`wf.doctor.name.${c.name}`)}: ${c.detail}`),
     ctx.t(ok ? 'wf.doctor.allOk' : 'wf.doctor.problems'),
   ]);

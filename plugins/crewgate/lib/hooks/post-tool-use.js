@@ -60,6 +60,17 @@ function mergeEvents(f, merges, mergeCommands) {
   return [{ ...d, merged: merges.length, outcome: merges[0].outcome, ...(merges[0].range ? { range: merges[0].range } : {}) }];
 }
 
+// True when `crew task merge` (src cli) recorded a git.merge for one of these branches in the last minute:
+// the hook then keeps quiet so the merge is not counted twice. Reading the log only happens for named merges.
+const CLI_MERGE_WINDOW_MS = 60 * 1000;
+function cliMergeRecorded(pid, data) {
+  if (!Array.isArray(data.branches) || !data.branches.length) return false;
+  try {
+    return events.read(pid, { types: 'git.merge', since: Date.now() - CLI_MERGE_WINDOW_MS }).some((e) => e.src === 'cli'
+      && e.data && Array.isArray(e.data.branches) && e.data.branches.some((b) => data.branches.includes(b)));
+  } catch { return false; }
+}
+
 // Git-Bash style /c/work/x (and /cygdrive/c/...) -> C:/work/x; only on Windows, other words pass through.
 function nativeDir(w) {
   if (process.platform !== 'win32') return w;
@@ -134,6 +145,7 @@ function onBash(payload) {
     if (!fh) return;
     if (!byProject.has(fh.pid)) byProject.set(fh.pid, { h: fh, found: [] });
     byProject.get(fh.pid).found.push(f);
+    if (f.type === 'git.merge' && cliMergeRecorded(fh.pid, f.data)) return; // `crew task merge` already recorded it
     const list = f.type === 'git.merge' ? mergeEvents(f, merges, found.filter((x) => x.type === 'git.merge').length) : [f.data];
     list.forEach((data, k) => {
       try {

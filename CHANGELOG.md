@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+Stability fixes from a day of real local use (3 projects, about 490 events).
+
+- Redirects are not words. `git push origin main 2>&1 | tail -2` recorded a bogus `2>` ref (76% of hook push / merge events): the command tokenizer treated the `&` of `2>&1` as an operator. Redirect operators and their targets (`2>&1`, `>&2`, `&>f`, `>f`, `>>f`, `<f`, `2>/dev/null`) are now dropped before refs and branches are read.
+- Heredoc bodies are not commands. Text inside `cat > f <<'EOF' ... EOF` (also `<<-`, quoted or unquoted delimiters, several heredocs on one line) produced fake `git.merge` / `git.push` events and false `gate.missing`; the bodies are skipped up to the delimiter line.
+- Hook failures are no longer silent. A handler error, a worker crash and a guard expiry append one line `{ts, event, kind: error|guard|worker_exit, msg, version}` to `<home>/hook-errors.jsonl` (message redacted and cut to 300 characters, file trimmed near 1 MiB, logging never throws). `crew doctor` shows the counts of the last 24 hours and 7 days by event and kind (`hook_errors` in `--json`).
+- `subagent.stop` `last` no longer takes mid-run text such as "Now build.": the transcript fallback accepts only the final assistant entry (no tool call in it, no tool result after it); otherwise `last_src` is `transcript_partial` and `last` is empty. The event also records `had_transcript_path` and `had_last_message` (booleans) for diagnosis.
+- Codex no longer records `session.start` / `session.end` twice: the dedupe keys use the session id, the source and the session file's start time instead of counters that change between the two calls.
+- A merge is recorded once. When `crew task merge` has recorded a `git.merge` for a branch in the last minute, the PostToolUse hook does not record the same branch again (the CLI record is kept; the gate check is unchanged).
+- A `subagent.stop` with no `subagent.start` and no task link (the compaction / summary agent) gets `orphan: true`, so counts of real subagents are not inflated. Existing fields are unchanged.
+- `board.log` lines carry an ISO timestamp.
+
 - Git events and gates follow the repo a command targets. PostToolUse(Bash) used the project of the session cwd for `git.push` / `git.merge` events and the push / open_pr / merge gate check, so `cd <other repo> && git push` or `git -C <other repo> push` was recorded (and reminded) against the wrong project. The `cd` / `pushd` words before the command and `git -C` are now resolved from the session cwd (Git-Bash `/c/work/x` paths on Windows included) and the owning registered project is used for the events, `gate.missing` and the approval lookup; one command line can touch several projects. A directory outside every registered project records nothing (it is never registered), and a dynamic directory (`cd "$DIR"`, `$(...)`, `cd -`, `cd ~`) falls back to the session project as before.
 - Search box on the timeline page: filters the loaded steps (tool name, target, prompt snippet, crewgate event type, task id) as you type, case-insensitive, all words must match, with a match count. In private mode only names and kinds are searched. It searches loaded steps only; load older steps to search further back.
 - Tool durations across the page edge: a call opened on an older page now gets its duration, failure flag and subagent link from a forward look-ahead past the page edge (at most 512 KiB, stops when every open call is answered). The answer gains an additive field `ahead` (bytes read forward).

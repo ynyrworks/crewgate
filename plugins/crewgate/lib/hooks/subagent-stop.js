@@ -22,19 +22,27 @@ function textOf(m) {
 
 // The last assistant text of the stopped subagent -> { text, src }. The payload field first
 // (last_assistant_message: a string, or content blocks); when it is empty or in an unexpected shape,
-// the newest assistant text block at the end of the subagent's own transcript.
+// the text of the FINAL assistant entry at the end of the subagent's own transcript. An earlier text
+// (mid-run narration such as "Now build.") is never taken: when the newest assistant entry holds a tool
+// call, or a user entry (a tool result) follows it, the run did not end there -> src 'transcript_partial', no text.
 function lastMessage(payload) {
   const direct = textOf(payload.last_assistant_message).trim();
   if (direct) return { text: direct, src: 'payload' };
   const lines = C.readTail(C.str(payload.agent_transcript_path), TAIL).split('\n');
+  let userAfter = false;
   for (let i = lines.length - 1; i >= 0; i--) {
-    if (!lines[i] || lines[i].indexOf('"assistant"') < 0) continue; // also drops a first line cut in half
+    const line = lines[i];
+    if (!line || (line.indexOf('"assistant"') < 0 && line.indexOf('"user"') < 0)) continue; // also drops a first line cut in half
     let o;
-    try { o = JSON.parse(lines[i]); } catch { continue; }
+    try { o = JSON.parse(line); } catch { continue; }
     const m = o && (o.message || o);
-    if (!m || (m.role || o.type) !== 'assistant') continue;
+    const role = m && (m.role || o.type);
+    if (role === 'user') { userAfter = true; continue; }
+    if (role !== 'assistant') continue;
+    const blocks = Array.isArray(m.content) ? m.content : [];
+    if (userAfter || m.stop_reason === 'tool_use' || blocks.some((b) => b && b.type === 'tool_use')) return { text: '', src: 'transcript_partial' };
     const t = textOf(m.content).trim();
-    if (t) return { text: t, src: 'transcript' };
+    return t ? { text: t, src: 'transcript' } : { text: '', src: 'transcript_partial' };
   }
   return { text: '', src: 'none' };
 }
@@ -50,6 +58,12 @@ function link(h, payload, agentId) {
   return fromMessage ? { id: fromMessage, rec: null } : null;
 }
 
+// True when a subagent.start event names this agent id.
+function hasStart(h, agentId) {
+  if (!agentId) return false;
+  try { return events.read(h.pid, { types: 'subagent.start' }).some((e) => e.agent === agentId); } catch { return true; }
+}
+
 function run(payload) {
   const h = C.open(payload);
   if (!h) return null;
@@ -60,10 +74,16 @@ function run(payload) {
   let task = null;
   if (found) { try { task = tasks.load(h.pid, found.id); } catch { found = null; } }
 
+  // A stop with no start event and no task is not a worker: the harness's own summary / compaction agent.
+  const orphan = !found && !hasStart(h, agentId);
   try {
     events.append(h.pid, {
       type: 'subagent.stop', src: 'hook', session: h.sid, agent: agentId || null, task: found && found.id,
-      data: { ...typeFields(payload.agent_type), last: C.snippet(last.text, LAST_MAX), last_src: last.src },
+      data: {
+        ...typeFields(payload.agent_type), last: C.snippet(last.text, LAST_MAX), last_src: last.src,
+        had_transcript_path: !!C.str(payload.agent_transcript_path), had_last_message: !!textOf(payload.last_assistant_message).trim(),
+        ...(orphan ? { orphan: true } : {}),
+      },
       key: agentId || `${found ? found.id : 'x'}:${Date.now()}`,
     });
   } catch { /* ignore */ }
