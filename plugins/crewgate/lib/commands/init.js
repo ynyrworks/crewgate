@@ -17,7 +17,9 @@ const SPEC = {
 function run(argv, ctx) {
   // --lang is also a global option, so the dispatcher hands it over as ctx.langOption
   const a = parse(argv, SPEC);
-  const root = project.detectRoot(ctx.cwd) || ctx.cwd;
+  // repo files go to the work tree the user is in (a linked worktree gets its own copy); the
+  // project identity still maps to the main checkout (project.add inside init() does that)
+  const root = project.detectWorkTree(ctx.cwd) || ctx.cwd;
   const res = init(root, { lang: a.lang || ctx.langOption, force: a.force, resetReviewFiles: a.resetReviewFiles, fallbackLang: ctx.lang });
   // Codex (experimental): asked for with --engine codex, or detected from an existing .codex folder
   if (a.engine === 'codex' || (a.engine !== 'claude' && codexinit.detectCodex(root))) {

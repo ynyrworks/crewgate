@@ -119,14 +119,14 @@ test('renderAgent applies models, checks, forbidden lists, cap and language', ()
   assert.ok(w.includes('vendor/**'));
 });
 
-test('init in a linked worktree writes to the main checkout', () => {
+test('init in a linked worktree writes into that worktree, not the main checkout', () => {
   const repo = h.makeRepo();
   const wt = path.join(h.tmpDir(), 'wt');
   h.git(repo, 'worktree', 'add', '-q', '-b', 'feat/w', wt);
   const r = h.crew(['init'], wt);
   assert.equal(r.code, 0, r.err);
-  assert.ok(fs.existsSync(path.join(repo, '.claude', 'crew.json')));
-  assert.ok(!fs.existsSync(path.join(wt, '.claude', 'crew.json')));
+  assert.ok(fs.existsSync(path.join(wt, '.claude', 'crew.json')));
+  assert.ok(!fs.existsSync(path.join(repo, '.claude', 'crew.json')));
 });
 
 test('init usage error: unknown option exits 2', () => {

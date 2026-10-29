@@ -28,7 +28,7 @@ function run(argv, ctx) {
   const a = parse(argv.slice(1), SPECS[sub]);
   const proj = ctx.requireProject();
   const cfg = ctx.config().config;
-  const root = proj.path;
+  const root = ctx.workTree(); // LESSONS.md and the rules file are tracked files: use the work tree
   if (sub === 'add') {
     need(a.key, '--key');
     need(a.text, '--text');

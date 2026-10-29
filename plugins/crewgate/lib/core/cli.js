@@ -70,11 +70,13 @@ function loadGroup(name) {
 //   ctx.emit(data, lines)     --json prints data; otherwise prints lines (array or string)
 //   ctx.project()             registered project { id, path, name, added } or null
 //   ctx.requireProject()      same, but throws CrewError project.none
-//   ctx.config()              project config (config.load) or defaults when no project
+//   ctx.workTree()            root of the work tree holding cwd (= project path outside linked worktrees)
+//   ctx.config()              project config (the work tree's file first, then the project's) or defaults
 function createContext(g, io) {
   const cwd = process.cwd();
   let proj;
   let resolved = false;
+  let wt = null;
   const ctx = {
     cwd,
     json: g.json,
@@ -100,9 +102,23 @@ function createContext(g, io) {
       if (!p) throw new CrewError('project.none');
       return p;
     },
+    // Root of the work tree holding cwd, when it belongs to the resolved project; else the project root.
+    // Files tracked in the repo (config, agents, .crew/*) live here; runtime data uses the project id.
+    workTree() {
+      const p = ctx.project();
+      if (!p) return null;
+      if (!wt) {
+        wt = p.path;
+        try {
+          const info = project.inspect(cwd);
+          if (info.root && info.workTree && project.projectId(info.root) === p.id) wt = info.workTree;
+        } catch { /* keep the project root */ }
+      }
+      return wt;
+    },
     config() {
       const p = ctx.project();
-      return p ? config.load(p.path) : { config: config.load(cwd).config, errors: [] };
+      return p ? config.loadFor(ctx.workTree(), p.path) : { config: config.load(cwd).config, errors: [] };
     },
   };
   // language: --lang, then the project's config, then the global config
@@ -111,7 +127,7 @@ function createContext(g, io) {
   } else {
     try {
       const p = ctx.project();
-      const proj0 = p ? config.load(p.path) : null;
+      const proj0 = p ? ctx.config() : null;
       if (proj0 && proj0.exists && proj0.config.language) ctx.lang = normalizeLang(proj0.config.language);
       else ctx.lang = normalizeLang(config.loadGlobal().config.language);
     } catch { /* stay on en */ }

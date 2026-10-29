@@ -248,7 +248,17 @@ function globalEngines() {
   return isObj(e) ? e : {};
 }
 
+// Directory whose .claude/crew.json applies: the work tree when it has its own file (a branch may change
+// the config), else the project root. Both may be the same directory.
+function configDir(workTree, root) {
+  if (workTree && root && workTree !== root && fs.existsSync(configFile(workTree))) return workTree;
+  return workTree && !root ? workTree : root;
+}
+
 function configFile(root) { return paths.projectConfigFile(root); }
+
+// loadFor(workTree, root) = load(configDir(workTree, root)).
+function loadFor(workTree, root) { return load(configDir(workTree, root)); }
 
 // load(root) -> { config, errors, file, exists }. Never throws: a missing, unreadable or invalid
 // file gives defaults (invalid fields fall back to their default); `errors` names file and field.
@@ -365,5 +375,5 @@ function saveGlobal(obj, opts = {}) {
 
 module.exports = {
   DEFAULTS, GLOBAL_DEFAULTS, SCHEMA, GLOBAL_SCHEMA,
-  globalEngines, validate, validateGlobal, load, save, loadGlobal, saveGlobal, configFile, deepMerge,
+  globalEngines, validate, validateGlobal, load, loadFor, configDir, save, loadGlobal, saveGlobal, configFile, deepMerge,
 };

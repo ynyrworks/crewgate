@@ -53,6 +53,7 @@ function open(payload, opts = {}) {
     if (s && s.project && s.root && within(cwd, s.root)) {
       ctx = {
         cwd, isSubagent: !!p.agent_id, isMainWorktree: null, projectRoot: s.root,
+        workTreeRoot: project.workTreeWithin(cwd, s.root),
         projectId: s.project, registered: true, project: null, fast: true,
       };
     }
@@ -64,9 +65,9 @@ function open(payload, opts = {}) {
   }
   let cfg = null;
   return {
-    payload: p, ctx, sid, pid: ctx.projectId, root: ctx.projectRoot,
+    payload: p, ctx, sid, pid: ctx.projectId, root: ctx.projectRoot, workTree: ctx.workTreeRoot || ctx.projectRoot,
     cfg() {
-      if (!cfg) { try { cfg = config.load(ctx.projectRoot).config; } catch { cfg = config.DEFAULTS; } }
+      if (!cfg) { try { cfg = config.loadFor(ctx.workTreeRoot, ctx.projectRoot).config; } catch { cfg = config.DEFAULTS; } }
       return cfg;
     },
     lang() { return this.cfg().language; },

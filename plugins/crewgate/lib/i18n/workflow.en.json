@@ -131,6 +131,8 @@
   "wf.doctor.name.node": "Node.js",
   "wf.doctor.name.config": "Project config",
   "wf.doctor.name.registration": "Registration",
+  "wf.doctor.name.worktree": "Work tree",
+  "wf.doctor.worktree": "linked worktree {workTree} (project root: {root}); repo files are read from the work tree",
   "wf.doctor.name.files": "Project files",
   "wf.doctor.name.hooks": "Plugin hooks",
   "wf.doctor.name.board": "Board",
