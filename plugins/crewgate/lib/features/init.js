@@ -8,6 +8,7 @@ const config = require('../core/config');
 const project = require('../core/project');
 const { normalizeLang } = require('../core/i18n');
 const common = require('./common');
+const { detectChecks } = require('./stack');
 
 const TEMPLATES = path.join(common.PLUGIN_ROOT, 'templates');
 const AGENTS = ['crew-worker', 'crew-reviewer', 'crew-refuter'];
@@ -75,6 +76,23 @@ function put(root, rel, text, force, out) {
   out.push({ file: rel, action: exists ? 'overwritten' : 'created', ...(backup ? { backup } : {}) });
 }
 
+// When the config has no checks yet, proposes the stack's usual test commands and writes them into the
+// file. Existing checks are never touched. -> { detected: [...], written: boolean, kept?: number }
+function fillChecks(root, cfgRel, files) {
+  const detected = detectChecks(root);
+  const file = path.join(root, cfgRel);
+  let raw;
+  try { raw = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return { detected, written: false }; }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { detected, written: false };
+  if (Array.isArray(raw.checks) && raw.checks.length) return { detected: [], written: false, kept: raw.checks.length };
+  if (!detected.length) return { detected, written: false };
+  raw.checks = detected;
+  json.saveRaw(file, `${JSON.stringify(raw, null, 2)}\n`);
+  const row = files.find((f) => f.file === cfgRel);
+  if (row && row.action === 'kept') row.action = 'updated';
+  return { detected, written: true };
+}
+
 // init(root, { lang, force, resetReviewFiles, fallbackLang }) -> { root, project, created, files: [{ file, action, backup? }], language }
 function init(root, opts = {}) {
   const force = !!opts.force;
@@ -92,6 +110,7 @@ function init(root, opts = {}) {
   }
   base.language = language;
   put(root, cfgRel, `${JSON.stringify(base, null, 2)}\n`, force, files);
+  const checks = fillChecks(root, cfgRel, files);
   const cfg = config.load(root).config;
   for (const name of AGENTS) put(root, path.join('.claude', 'agents', `${name}.md`), renderAgent(name, cfg), force, files);
   // REVIEW.md and LESSONS.md hold the user's own rules and notes: --force leaves them alone,
@@ -104,7 +123,7 @@ function init(root, opts = {}) {
   if (fs.existsSync(path.join(root, ledger))) files.push({ file: ledger, action: 'kept' });
   else put(root, ledger, '', false, files);
   const { project: p, created } = project.add(root);
-  return { root, project: p, created, language, files: files.map((f) => ({ ...f, file: slash(f.file), ...(f.backup ? { backup: slash(f.backup) } : {}) })) };
+  return { root, project: p, created, language, checks, files: files.map((f) => ({ ...f, file: slash(f.file), ...(f.backup ? { backup: slash(f.backup) } : {}) })) };
 }
 
 module.exports = { AGENTS, renderAgent, init, fill, HEADINGS, LANGUAGE_NAME };

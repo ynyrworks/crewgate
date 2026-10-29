@@ -78,7 +78,7 @@
   "need.stateOpen": "waiting",
   "need.empty": "Nothing is waiting for you.",
 
-  "work.usage": "work takes set STREAM \"TITLE\" STATE [\"NOTE\"] | rm STREAM \"TITLE\" | list",
+  "work.usage": "work takes set STREAM \"TITLE\" STATE [\"NOTE\"] [--id ID | --new] | rm STREAM \"TITLE\" | list",
   "work.set": "{stream} / {title}: {state}",
   "work.removed": "Removed",
   "work.empty": "No work items.",
@@ -107,5 +107,14 @@
   "import.done": "Imported project {from} into {id}: {files}",
   "import.counts": "needs {needs}, work items {items}, log entries {log}, merge requests {mrs}, validation templates {validation}",
   "import.backups": "Backed up existing files: {files}",
-  "import.unmapped": "{n} work item(s) had an unknown state and were set to todo"
+  "import.unmapped": "{n} work item(s) had an unknown state and were set to todo",
+  "work.idAndNew": "--id and --new cannot be used together",
+  "gate.usage": "gate takes ask GATE [--task ID] [--detail TEXT] | answer GATE-ID yes|no [--note TEXT]",
+  "gate.unknown": "Unknown gate \"{gate}\" (choose: {choices})",
+  "gate.never": "The \"{gate}\" gate is set to never: do not do this.",
+  "gate.notFound": "No gate request with id {id}",
+  "gate.alreadyAnswered": "Gate {id} was already answered ({answer})",
+  "gate.asked": "Gate {gate} asked: {id}. Ask the user in chat, then run: gate answer {id} yes|no",
+  "gate.askedAuto": "Gate {gate} is auto: approved ({id}).",
+  "gate.answered": "Gate {gate} ({id}): {answer}"
 }

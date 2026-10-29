@@ -129,7 +129,7 @@ test('git command detection', () => {
 });
 
 test('Bash PostToolUse records git.push / git.merge with redacted args only', () => {
-  const f = H.fixture();
+  const f = H.fixture({ config: { gates: { push: 'auto', merge: 'auto' } } });
   H.start(f);
   const post = (command, id) => H.runHook('post-tool-use', H.base(f, { tool_name: 'Bash', tool_use_id: id, tool_input: { command }, tool_response: { stdout: 'secret output' } }), { cwd: f.repo });
   assert.equal(post('git push origin feat/x', 'b1').out, '{}');

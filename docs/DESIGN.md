@@ -163,9 +163,13 @@ All fields are optional; defaults below. The board's Settings page edits this fi
   `claude` or the name of an engine defined in the **global** config (`engines` is read from
   `~/.crewgate/config.json` only; a project-level `engines` block is ignored with a warning). `model` is `inherit`, `opus`, `sonnet`, `haiku` or a
   full model id.
-- `gates` values: `auto` (just do it), `ask` (ask the user in chat first), `never`.
+- `gates` values: `auto` (just do it), `ask` (ask the user in chat first), `never`. Gates are recorded, not only
+  advised: `crew gate ask <gate> --task <id> [--detail "..."]` writes `gate.asked` and prints a gate id (`auto`: answered
+  yes at once with `auto: true`; `never`: answered no, exit 1); after asking the user in chat the orchestrator runs
+  `crew gate answer <gate-id> yes|no [--note]` (`gate.answered`). A PostToolUse(Bash) hook checks the same gates (§8).
 - `orchestrator_edit`: `off` | `warn` | `block` (see §8).
-- `checks`: commands a worker must run before reporting (e.g. `["npm test"]`).
+- `checks`: commands a worker must run before reporting (e.g. `["npm test"]`). `crew init` fills an **empty** list from
+  the project files (§13); a non-empty list is never touched.
 - `forbidden`: plain strings rendered into the worker agent file.
 - Unknown keys are preserved on write. Invalid files: CLI and board report the exact
   path and field; hooks fall back to defaults and never fail.
@@ -192,7 +196,25 @@ must skip a malformed trailing line).
   `review.finding_dismissed`, `gate.asked`, `gate.answered`, `handoff.created`,
   `handoff.accepted`, `handoff.cancelled`, `lesson.added`, `lesson.promoted`,
   `need.added`, `need.done`, `orchestrator.warned`, `subagent.start`, `subagent.stop`,
-  `git.push`, `git.merge`, `config.changed`.
+  `git.push`, `git.merge`, `gate.missing`, `config.changed`.
+- `gate.asked` `{ id, gate, mode, detail }`, `gate.answered` `{ id, gate, answer: yes|no, auto, note }`; `gate.missing`
+  `{ gate, mode, command }` is written by the hook when a push/PR/merge happened under an `ask` gate with no yes of the
+  last 30 minutes (same session, or an answer recorded by the CLI, which cannot tell the session).
+- `via` says which path wrote a task transition: `task.dispatched` `pre-tool-use` | `subagent-start` | `codex-run` |
+  `cli-report` (implicit dispatch by a report); `task.returned` `cli-report` | `subagent-stop` | `post-tool-use` |
+  `codex-run`; `task.merged` `cli-merge`.
+- `agent_type` in `subagent.start/stop` and `task.dispatched` is the bare agent name (`crew-reviewer`), the original
+  spelling (`crewgate:crew-reviewer`) stays in `agent_type_raw`. A project copy in `.claude/agents/` takes precedence
+  over the plugin copy, so both spellings occur; `lib/core/agents.js` is the one place that normalises them.
+- `subagent.stop` `last` is a redacted snippet (up to 200 chars) of the subagent final message: the payload
+  `last_assistant_message` (string or content blocks), else the last assistant text at the end of `agent_transcript_path`;
+  `last_src` is `payload` | `transcript` | `none`. The board shows it only when `board.show_text` is on.
+- `git.merge` `branches` never holds an unexpanded shell word (`$b`, backticks, `%VAR%`): such a command records
+  `branches: []` + `dynamic: true`. The hook counts merges from the command output ("Merge made by", "Fast-forward",
+  "Squash commit", "Updating a..b"): a loop with unknown branches yields one event per merge (`seq`/`of`), otherwise
+  one event with `merged`, `outcome`, `range`. `crew task merge` is the authoritative record: `task.merged` carries the
+  branch, and when git shows the branch is part of HEAD it adds `git.merge` with the real branch and tip `commit` unless a
+  hook event already names that branch.
 
 The board derives agent and task state from events plus task.json; the store files
 (work/needs/log/mrs/validation) hold manually curated items and are also writable
@@ -247,7 +269,8 @@ finish in < 200 ms typical; unregistered project → `{}`.
 | SubagentStart / SubagentStop | Record `subagent.start/stop`; on stop of a task-linked worker, show the user a `systemMessage` (not `additionalContext`, which would keep the subagent running): "task <id> returned — review it: `crew task show <id>`". |
 | PreToolUse (Edit/Write/MultiEdit/NotebookEdit, main session, main worktree) | If the target is not matched by `orchestrator_edit_allow`: `warn` → non-blocking reminder to delegate + `orchestrator.warned`; `block` → deny with reason. Never applies inside subagents or linked worktrees. |
 | PreToolUse (Read, main session) | If the file has more lines than `orchestrator_read_warn_lines` and no `limit` was given, add a reminder to read the report/diff stat first and use line ranges. Never blocks. |
-| PostToolUse (Bash) | Detect `git push`, `git merge`, `gh pr create`, `glab mr create` in the command; record `git.push` / `git.merge`. |
+| PostToolUse (Bash) | Detect `git push`, `git merge`, `gh pr create`, `glab mr create` in the command; record `git.push` / `git.merge` (merge parsing: §6). Then the gate check: push → `push`, `gh pr create` / `glab mr create` → `open_pr`, merge → `merge`; if that gate is `ask` and no `gate.answered yes` of the last 30 minutes exists, record `gate.missing` and add a non-blocking reminder (`additionalContext`) to run `crew gate ask` / `answer` first. |
+| every event | Whenever a hook resolves a registered project it notes the event in `runtime/hook-seen.json` (`{ events: { SessionStart: iso, ... } }`, at most one write per event type per 60 s). `crew doctor` and the board show it; SessionStart/Stop/SessionEnd never seen means the session began before the plugin was installed (or the wiring is broken). |
 | Stop | If tasks are `returned` but not reviewed, or dispatched background tasks are still running, add a one-line reminder. Respect `stop_hook_active` (never loop). |
 | PreCompact | Record `session.compact` with a digest checkpoint. |
 | SessionEnd | Deterministic digest (no LLM): prompt count, tool counts, duration, end reason, first/last prompt (truncated), last tool, tasks touched. Abnormal-end flags: dispatched-but-not-returned tasks; last assistant turn ended with a question; no Stop seen. Each flag adds a need ("waiting for you"). |
@@ -344,25 +367,33 @@ to override detection. Exit codes: 0 ok, 1 runtime error, 2 usage error.
 
 - `crew init [--lang en|zh-TW] [--force] [--reset-review-files] [--engine claude|codex]` — write `.claude/crew.json`, render
   `.claude/agents/crew-*.md`, create `.crew/REVIEW.md`, `.crew/LESSONS.md`, register
-  project. Never overwrites without `--force` (then backs up).
+  project. Never overwrites without `--force` (then backs up). Detects the stack and fills an empty `checks`
+  (`package.json` `scripts.test` → `npm test`; `go.mod` → `go test ./...` + `go vet ./...`; pytest in `pyproject.toml`,
+  `pytest.ini` or `conftest.py` → `pytest`; `Cargo.toml` → `cargo test`; `*.csproj`/`*.sln` → `dotnet test`; a `test:`
+  Makefile target → `make test`), prints what it chose and never overwrites existing checks. It also explains that
+  agent copies in `.claude/agents/` take precedence over the plugin copies.
 - `crew project add|list|rm`
 - `crew task create|list|show|report|send-back|accept|merge|cancel|run`
 - `crew review run|filter|finalize|dismiss|show`
 - `crew handoff create|list|show|accept|cancel`
 - `crew lesson add|list|suggest|promote|retire`
-- `crew need add|done|list`, `crew work set|rm|list`, `crew log add|list`,
+- `crew gate ask <gate> [--task ID] [--detail T]` / `crew gate answer <gate-id> yes|no [--note T]` — §5, §6, §8.
+- `crew need add|done|list`, `crew work set|rm|list` (`work set STREAM "title" state` updates the item with the same
+  normalised title in that stream — trimmed, spaces collapsed, case-insensitive; `--id ID` targets an item by the id
+  `work list` shows, `--new` forces a new item), `crew log add|list`,
   `crew mr set|list`, `crew validate set|list`
 - `crew board start|stop|status|serve [--port] [--no-open]`
 - `crew import agent-board <data dir> --from-project <id> [--force]`
 - `crew update check [--force]|apply` — the update notice and one-click update of section 10, for the terminal.
-- `crew doctor` — checks node version, config validity, registration, hook wiring,
+- `crew doctor` — checks node version, config validity, empty `checks` (warn), registration, hook wiring,
+  per-event "hooks last seen" (warn when SessionStart/Stop/SessionEnd never fired), duplicate-looking work items,
   board reachability, and the cached latest release (no request).
 
 ## 14. Board
 
 Pages: Overview (all projects) · Project (tasks by state with returns count, live
 subagents, needs waiting for the user, work streams, log, MRs, validation, handoffs,
-lessons, review stats) · Sessions (live list of local Claude Code / Codex sessions:
+lessons, review stats, approval-gate history asked/answered/missing, hooks last seen, per-event `via`/branches) · Sessions (live list of local Claude Code / Codex sessions:
 working / running a tool / waiting for user / idle / done, read-only from
 `~/.claude/projects` and `~/.codex/sessions`) · Usage (tokens/cost by model and day) ·
 Settings (edit `crew.json` of a project through a form with validation; global

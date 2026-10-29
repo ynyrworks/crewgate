@@ -142,7 +142,7 @@ test('doctor: healthy project reports each check; board down is not an error', a
   const r = await u.crewAsync(['--json', 'doctor'], repo);
   const d = JSON.parse(r.out);
   const by = Object.fromEntries(d.checks.map((c) => [c.name, c]));
-  assert.deepEqual(Object.keys(by), ['node', 'config', 'registration', 'files', 'engine', 'hooks', 'board', 'update']);
+  assert.deepEqual(Object.keys(by), ['node', 'config', 'checks', 'registration', 'files', 'hookseen', 'engine', 'hooks', 'board', 'update']);
   assert.equal(by.node.status, 'ok');
   assert.equal(by.config.status, 'ok');
   assert.equal(by.registration.status, 'ok');

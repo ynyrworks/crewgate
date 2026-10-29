@@ -5,6 +5,7 @@ const path = require('path');
 const { parse } = require('../core/args');
 const { UsageError, CrewError } = require('../core/errors');
 const tasks = require('../core/tasks');
+const events = require('../core/events');
 const paths = require('../core/paths');
 const { clean } = require('../core/redact');
 const { LANGUAGE_NAME } = require('../features/init');
@@ -128,6 +129,31 @@ function showLines(ctx, d, max) {
   return L;
 }
 
+// `crew task merge` is the authoritative merge record. When git shows the task branch is part of the
+// current HEAD, also record a git.merge event with the real branch name and tip commit, unless a hook
+// event already recorded this branch (same commit, or no commit and not older than the task).
+// -> { status: 'recorded' | 'already' | 'not-merged' | 'no-branch', commit? }
+function recordGitMerge(proj, task, cwd) {
+  const branch = task.branch;
+  if (!branch || !/^[A-Za-z0-9][A-Za-z0-9._/@+-]*$/.test(branch) || branch.includes('..')) return { status: 'no-branch' };
+  const tip = common.git(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], cwd);
+  const sha = tip && tip.trim();
+  if (!sha) return { status: 'not-merged' };
+  if (common.git(['merge-base', '--is-ancestor', sha, 'HEAD'], cwd) === null) return { status: 'not-merged' };
+  const commit = sha.slice(0, 12);
+  const seen = events.read(proj.id, { types: 'git.merge' }).some((e) => {
+    const d = e.data || {};
+    if (!Array.isArray(d.branches) || !d.branches.includes(branch)) return false;
+    return d.commit ? String(d.commit).slice(0, 12) === commit : Date.parse(e.ts) >= Date.parse(task.created);
+  });
+  if (seen) return { status: 'already', commit };
+  events.append(proj.id, {
+    type: 'git.merge', src: 'cli', task: task.id,
+    data: { command: 'crew task merge', branches: [branch], flags: [], commit, via: 'cli-merge' }, key: `merge:${branch}:${sha}`,
+  });
+  return { status: 'recorded', commit };
+}
+
 function run(argv, ctx) {
   const sub = argv[0];
   if (!Object.prototype.hasOwnProperty.call(SPECS, sub)) throw new UsageError('wf.task.usage');
@@ -191,8 +217,8 @@ function run(argv, ctx) {
       err.errors = v.errors;
       throw err;
     }
-    if (cur.state === 'created') tasks.transition(proj.id, cur.id, 'dispatched', { ...opts, note: 'dispatched implicitly by report' });
-    const { task, tokens } = tasks.recordReport(proj.id, cur.id, { report, packet }, { ...opts, maxTokens: cfg.limits.report_max_tokens });
+    if (cur.state === 'created') tasks.transition(proj.id, cur.id, 'dispatched', { ...opts, note: 'dispatched implicitly by report', data: { via: 'cli-report' } });
+    const { task, tokens } = tasks.recordReport(proj.id, cur.id, { report, packet }, { ...opts, maxTokens: cfg.limits.report_max_tokens, data: { via: 'cli-report' } });
     ctx.emit({ task, tokens, limit: cfg.limits.report_max_tokens }, ctx.t('wf.task.reported', { id: task.id, tokens, max: cfg.limits.report_max_tokens }));
   } else if (sub === 'send-back') {
     const note = need(a.note, '--note');
@@ -221,8 +247,12 @@ function run(argv, ctx) {
     ctx.emit({ task, open_findings: open }, L);
   } else if (sub === 'merge') {
     if (cfg.gates.merge === 'never') throw new CrewError('wf.task.mergeNever');
-    const task = tasks.transition(proj.id, a.id, 'merged', { ...opts, note: a.note || '' });
-    ctx.emit({ task }, ctx.t('wf.task.merged', { id: task.id }));
+    const before = tasks.load(proj.id, a.id);
+    const task = tasks.transition(proj.id, a.id, 'merged', { ...opts, note: a.note || '', data: { branch: before.branch || null, via: 'cli-merge' } });
+    const git = recordGitMerge(proj, task, ctx.workTree() || proj.path);
+    const L = [ctx.t('wf.task.merged', { id: task.id })];
+    if (git.status === 'recorded') L.push(ctx.t('wf.task.mergeGit', { branch: task.branch, commit: git.commit }));
+    ctx.emit({ task, git_merge: git }, L);
   } else {
     const task = tasks.transition(proj.id, a.id, 'cancelled', { ...opts, note: a.note || '' });
     ctx.emit({ task }, ctx.t('wf.task.cancelled', { id: task.id }));

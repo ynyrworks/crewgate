@@ -12,6 +12,8 @@ const paths = require('../core/paths');
 const project = require('../core/project');
 const { clean } = require('../core/redact');
 const sess = require('./session');
+const agents = require('../core/agents');
+const hookseen = require('../core/hookseen');
 
 const PLUGIN_ROOT = path.resolve(__dirname, '..', '..');
 const MAX_CONTEXT = 9000; // hook limit is 10,000 chars
@@ -39,6 +41,10 @@ function within(dir, root) {
   } catch { return false; }
 }
 
+// The hook event being handled (set by scripts/crew-hook.js), so open() can note that it fired.
+let currentEvent = null;
+const setEvent = (e) => { currentEvent = e || null; };
+
 // Opens the hook handle for a payload, or returns null for an unregistered project.
 // Fast path (no git): the session file written at SessionStart names the project, and cwd is
 // inside its root. The fast path cannot tell main from linked worktree: pass { full: true }
@@ -63,6 +69,7 @@ function open(payload, opts = {}) {
     ctx = context.resolve(p);
     if (!ctx.registered || !ctx.projectId || !ctx.projectRoot) return null;
   }
+  if (currentEvent) hookseen.note(ctx.projectId, currentEvent);
   let cfg = null;
   return {
     payload: p, ctx, sid, pid: ctx.projectId, root: ctx.projectRoot, workTree: ctx.workTreeRoot || ctx.projectRoot,
@@ -165,9 +172,9 @@ function codexSpawnMarker(payload) {
   return null;
 }
 
-const normType = (t) => String(t || 'general-purpose').split(':').pop().toLowerCase();
+const normType = (t) => agents.bareName(t);
 
 module.exports = {
-  PLUGIN_ROOT, AGENT_TOOLS, CODEX_SPAWN, agentPrompt, agentTypeOf, EDIT_TOOLS, obj, str, sessionKey, open, crewCmd, snippet,
+  setEvent, PLUGIN_ROOT, AGENT_TOOLS, CODEX_SPAWN, agentPrompt, agentTypeOf, EDIT_TOOLS, obj, str, sessionKey, open, crewCmd, snippet,
   withContext, notice, deny, readHead, readTail, codexSpawnMarker, normType,
 };

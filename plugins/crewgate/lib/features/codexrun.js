@@ -184,9 +184,9 @@ async function runCodex(ctx, proj, cfg, task, a) {
   const wt = ensureWorktree(root, task);
   tasks.setFields(proj.id, task.id, { branch: wt.branch, worktree: wt.worktree });
   if (task.state === 'created') {
-    tasks.transition(proj.id, task.id, 'dispatched', { src: 'cli', note: `dispatched by crew task run (${name})`, data: { engine: name, model: model || null, background: false } });
+    tasks.transition(proj.id, task.id, 'dispatched', { src: 'cli', note: `dispatched by crew task run (${name})`, data: { engine: name, model: model || null, background: false, via: 'codex-run' } });
   } else {
-    events.append(proj.id, { type: 'task.dispatched', src: 'cli', task: task.id, data: { engine: name, model: model || null, redispatch: true }, key: `${task.id}:run:${Date.now()}` });
+    events.append(proj.id, { type: 'task.dispatched', src: 'cli', task: task.id, data: { engine: name, model: model || null, redispatch: true, via: 'codex-run' }, key: `${task.id}:run:${Date.now()}` });
   }
 
   const fail = (kind, detail, extra = '') => {
@@ -248,7 +248,7 @@ async function runCodex(ctx, proj, cfg, task, a) {
   if (!report) return fail('report', 'the report does not fit the token limit');
   const packet = ['# Packet', '', '## Raw model output', '```json', raw.trim() || res.stdout.trim(), '```', '', '## Diff', '```diff', shorten(diff, MAX_DIFF), '```', ''].join('\n');
   const { task: done, tokens } = tasks.recordReport(proj.id, task.id, { report, packet }, {
-    src: 'cli', maxTokens: cfg.limits.report_max_tokens, note: `returned by crew task run (${name})`, data: { engine: name, commit: sha, files: files.length },
+    src: 'cli', maxTokens: cfg.limits.report_max_tokens, note: `returned by crew task run (${name})`, data: { engine: name, commit: sha, files: files.length, via: 'codex-run' },
   });
   const line = ctx.t('wf.task.run.done', { id: done.id, name, n: files.length, sha, branch: wt.branch, tokens });
   ctx.emit({ task: done, engine: name, branch: wt.branch, worktree: wt.worktree, commit: sha, files, tokens }, line);

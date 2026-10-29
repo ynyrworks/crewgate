@@ -9,6 +9,8 @@ const projects = require('../lib/core/project');
 const config = require('../lib/core/config');
 const tasks = require('../lib/core/tasks');
 const store = require('../lib/core/store');
+const gates = require('../lib/core/gates');
+const hookseen = require('../lib/core/hookseen');
 const { CrewError } = require('../lib/core/errors');
 const { t } = require('../lib/core/i18n');
 const { createWatcher } = require('./watcher');
@@ -308,6 +310,14 @@ function createApi(opts = {}) {
     };
   }
 
+  // Free text a subagent produced (`last`) is shown only when board.show_text is on.
+  function publicData(e) {
+    const d = e.data;
+    if (!d || typeof d !== 'object' || showText() || !('last' in d)) return d;
+    const { last, ...rest } = d;
+    return rest;
+  }
+
   function projectDetail({ id }) {
     const p = projectOr404(id);
     const cfg = config.load(p.path);
@@ -332,7 +342,10 @@ function createApi(opts = {}) {
       validation: store.validateList(p.id),
       handoffs: handoffsOf(p.id),
       lessons: lessonsOf(p.path, days),
-      events: tailEvents(p.id, 40).reverse().map((e) => ({ ts: e.ts, type: e.type, src: e.src, task: e.task, agent: e.agent, data: e.data })),
+      gates: gates.history(p.id, 30),
+      hook_seen: hookseen.read(p.id),
+      show_text: showText(),
+      events: tailEvents(p.id, 40).reverse().map((e) => ({ ts: e.ts, type: e.type, src: e.src, task: e.task, agent: e.agent, data: publicData(e) })),
       last_activity: lastActivity(p.id, taskList, sessions),
     };
   }

@@ -79,12 +79,19 @@ function pushInfo(args) {
   return info;
 }
 
+// A word the shell has not expanded yet (a loop variable, a command substitution, a Windows variable):
+// its text is not a branch name.
+const isDynamic = (w) => /[$`]|%[A-Za-z_][^%\s]*%/.test(w);
+
 function mergeInfo(args) {
-  const info = { branches: [], flags: [] };
+  const info = { branches: [], flags: [], dynamic: false };
   const valued = new Set(['-m', '-F', '-s', '-X', '--strategy', '--strategy-option', '--into-name', '-S']);
   for (let i = 0; i < args.length; i++) {
     const w = args[i];
-    if (isPositional(w)) { if (info.branches.length < 5) info.branches.push(w); }
+    if (isPositional(w)) {
+      if (isDynamic(w)) info.dynamic = true;
+      else if (info.branches.length < 5) info.branches.push(w);
+    }
     else if (valued.has(w)) i++;
     else if (['--abort', '--quit', '--continue'].includes(w)) return null;
     else if (['--no-ff', '--ff-only', '--squash', '--no-commit'].includes(w)) info.flags.push(w.slice(2));
@@ -135,7 +142,7 @@ function analyse(seg) {
     }
     if (sub === 'merge') {
       const m = mergeInfo(args);
-      return m ? { type: 'git.merge', data: { command: 'git merge', branches: m.branches, flags: m.flags } } : null;
+      return m ? { type: 'git.merge', data: { command: 'git merge', branches: m.branches, flags: m.flags, ...(m.dynamic ? { dynamic: true } : {}) } } : null;
     }
     return null;
   }
@@ -168,4 +175,21 @@ function detect(command) {
   return out;
 }
 
-module.exports = { detect, tokenize };
+// What a finished shell command says about its merges: one entry per merge that happened, in order.
+// Reads git's own words ("Merge made by", "Fast-forward", "Squash commit", "Updating a..b").
+// -> [{ outcome: 'merge'|'fast-forward'|'squash', range? }] ([] = no merge reported, or no output at all)
+function mergesIn(output) {
+  const out = [];
+  let range = null;
+  for (const line of String(output || '').slice(0, 1 << 20).split(/\r?\n/)) {
+    const u = /^Updating ([0-9a-f]{7,40}\.\.[0-9a-f]{7,40})\s*$/.exec(line);
+    if (u) { range = u[1]; continue; }
+    if (/^Fast-forward\b/.test(line)) { out.push({ outcome: 'fast-forward', ...(range ? { range } : {}) }); range = null; }
+    else if (/^Merge made by the /.test(line)) out.push({ outcome: 'merge' });
+    else if (/^Squash commit -- /.test(line)) out.push({ outcome: 'squash' });
+    if (out.length >= 20) break;
+  }
+  return out;
+}
+
+module.exports = { detect, tokenize, mergesIn, isDynamic };

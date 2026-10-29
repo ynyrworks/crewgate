@@ -7,6 +7,8 @@ const config = require('../core/config');
 const project = require('../core/project');
 const common = require('../features/common');
 const execx = require('../core/exec');
+const hookseen = require('../core/hookseen');
+const store = require('../core/store');
 
 // GET http://127.0.0.1:<port>/api/health -> { state: 'running'|'down'|'other', detail }
 function probeBoard(port, timeoutMs = 1500) {
@@ -54,10 +56,25 @@ async function run(argv, ctx) {
       add('config', 'warn', loaded.warnings.map((w) => w.message).join('; '));
     } else add('config', 'ok', loaded.file);
     if (loaded.exists && !loaded.errors.length) cfg = { ...cfg, port: loaded.config.board.port, boardEnabled: loaded.config.board.enabled };
+    if (loaded.exists && !loaded.errors.length) {
+      const empty = !(loaded.config.checks && loaded.config.checks.length);
+      add('checks', empty ? 'warn' : 'ok', empty ? ctx.t('wf.doctor.checksEmpty') : loaded.config.checks.join('; '));
+    }
     add('registration', proj ? 'ok' : 'warn', proj ? `${proj.id} (${proj.name})` : ctx.t('wf.doctor.notRegistered'));
     const expected = ['.claude/agents/crew-worker.md', '.claude/agents/crew-reviewer.md', '.claude/agents/crew-refuter.md', '.crew/REVIEW.md', '.crew/LESSONS.md'];
     const missing = expected.filter((f) => !fs.existsSync(path.join(dir, ...f.split('/'))));
     add('files', missing.length ? 'warn' : 'ok', missing.length ? ctx.t('wf.doctor.filesMissing', { files: missing.join(', ') }) : ctx.t('wf.doctor.filesOk'));
+  }
+
+  let seen = null;
+  if (proj) {
+    seen = hookseen.read(proj.id);
+    const fmt = (r) => `${r.event} ${r.last || ctx.t('wf.doctor.neverSeen')}`;
+    const detail = seen.rows.filter((r) => r.last || hookseen.LIFECYCLE.includes(r.event)).map(fmt).join('; ');
+    add('hookseen', seen.missing.length ? 'warn' : 'ok', seen.missing.length
+      ? `${ctx.t('wf.doctor.hookSeenMissing', { events: seen.missing.join(', ') })} (${detail})` : detail);
+    const dups = store.workDuplicates(proj.id);
+    if (dups.length) add('work', 'warn', ctx.t('wf.doctor.workDuplicates', { items: dups.map((x) => `${x.stream} / ${x.title} (${x.count})`).join('; ') }));
   }
 
   const engines = config.globalEngines();
@@ -99,7 +116,7 @@ async function run(argv, ctx) {
 
   const ok = checks.every((c) => c.status !== 'fail');
   const mark = { ok: 'OK  ', warn: 'WARN', fail: 'FAIL' };
-  ctx.emit({ ok, checks }, [
+  ctx.emit({ ok, checks, ...(seen ? { hook_seen: seen.rows } : {}) }, [
     ...checks.map((c) => `${mark[c.status]}  ${ctx.t(`wf.doctor.name.${c.name}`)}: ${c.detail}`),
     ctx.t(ok ? 'wf.doctor.allOk' : 'wf.doctor.problems'),
   ]);

@@ -32,7 +32,8 @@ When a gate is `ask`, ask once, concretely, and wait:
 
 > Ready to merge `feat/list-done` (task t-20260301-ab12, 2 files, tests green) into `main`. Merge now?
 
-Not: "Should I continue?". Name the action, the target and what you checked. Record nothing as
+Not: "Should I continue?". Name the action, the target and what you checked. Run `crew gate ask <gate> --task <id> --detail "..."` first (it prints a gate id), ask in chat, and only
+after the user answers run `crew gate answer <gate-id> yes|no --note "<their words>"`. Record nothing as
 approved until the user answers in chat. If the user says yes to one push, the next push asks again.
 
 ## Handoff body template

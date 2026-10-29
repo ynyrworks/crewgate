@@ -4,10 +4,11 @@ Call as `node "${CLAUDE_PLUGIN_ROOT}/bin/crew.js" ...`. Global options: `--json`
 `--lang en|zh-TW`. Exit codes: 0 ok, 1 runtime error, 2 usage error.
 
 ## Setup
-- `crew init [--lang en|zh-TW] [--force] [--reset-review-files] [--engine claude|codex]`: (`--engine codex`, or an existing `.codex/` folder, also writes `.codex/agents/crew-reviewer.toml`, `crew-refuter.toml` and a marked crewgate block in `AGENTS.md`) config, three agent copies, `.crew/` files, registers the
+- `crew init [--lang en|zh-TW] [--force] [--reset-review-files] [--engine claude|codex]`: (`--engine codex`, or an existing `.codex/` folder, also writes `.codex/agents/crew-reviewer.toml`, `crew-refuter.toml` and a marked crewgate block in `AGENTS.md`) config (an empty `checks` is filled from the detected stack and printed; existing checks are never overwritten), three agent copies (project copies in `.claude/agents/` take precedence over the plugin agents, so both `crew-worker` and `crewgate:crew-worker` may appear), `.crew/` files, registers the
   project. Never overwrites without `--force` (then `*.bak-<timestamp>` copies; your config values are kept; `.crew/REVIEW.md` and `.crew/LESSONS.md` are never touched by `--force`, only `--reset-review-files` replaces them, with a backup).
 - `crew update check [--force]` / `crew update apply`: the update notice (cached once a day, `updates.check` in the global config turns it off) and the one-click update with fixed commands; `apply` prints the commands instead when nothing can run.
-- `crew doctor`: Node version, config validity (with field paths), registration, hooks file, board.
+- `crew doctor`: Node version, config validity (with field paths), empty `checks`, registration, hooks file, when each hook last fired in this project, duplicate-looking work items, board.
+- `crew gate ask <gate> [--task ID] [--detail T]`: records `gate.asked`, prints a gate id (gate: push, open_pr, merge, remote_hosts, large_task, install_or_download). `auto` answers yes at once; `never` exits 1. `crew gate answer <gate-id> yes|no [--note T]` records the user reply.
 - `crew project add|list|rm`
 
 ## Tasks
@@ -18,8 +19,8 @@ a send-back goes back to `dispatched`.
 - `crew task show <id>`: state, returns, capped report, diff stat, packet path, latest findings summary.
 - `crew task report <id> --report-file F [--packet-file F]`: the worker's call; validates sections and the size cap.
 - `crew task send-back <id> --note "..."`: refused at `max_returns_before_takeover` (records a takeover lesson).
-- `crew task accept <id> [--note]`, `crew task merge <id> [--note]` (records only; refused if `gates.merge` is
-  `never`), `crew task cancel <id> [--note]`.
+- `crew task accept <id> [--note]`, `crew task merge <id> [--note]` (records only, runs no git merge; refused if `gates.merge` is
+  `never`; also records `git.merge` with the real branch when git shows it merged into HEAD), `crew task cancel <id> [--note]`.
 - `crew task run <id> [--engine codex] [--timeout 1800] [--model M]`: runs the Codex CLI as the worker in the task's worktree (created from HEAD when missing), then commits as the repository user (trailer `Co-Authored-By: Codex`), files report and packet and moves the task to `returned`. Failure (bad output, timeout, non-zero exit, no changes): nothing committed, `task.failed` event, a need, task stays `dispatched`. Log: `codex.log` in the task folder.
 
 ## Review
@@ -37,7 +38,7 @@ a send-back goes back to `dispatched`.
 
 ## Board data (manual items)
 - `crew need add "text"` / `done N` / `list`: things waiting for the user
-- `crew work set STREAM "title" todo|doing|done|waiting|parked ["note"]`, `work rm`, `work list`
+- `crew work set STREAM "title" todo|doing|done|waiting|parked ["note"] [--id ID | --new]`, `work rm STREAM "title" | --id ID`, `work list [--json]`: `set` updates the item with the same title in the stream (trimmed, spaces collapsed, case-insensitive) instead of adding another; `work list` shows item ids; `--new` forces a new item.
 - `crew log add WHO "text"`, `crew mr set N "title" [--ci ..] [--merged yes|no]`, `crew validate set ...`
 
 ## Where things live

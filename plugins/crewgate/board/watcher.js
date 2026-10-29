@@ -143,12 +143,7 @@ function promptText(o) {
   return t;
 }
 
-const ROLE_BY_TYPE = { 'crew-worker': 'worker', worker: 'worker', 'crew-reviewer': 'reviewer', reviewer: 'reviewer', 'crew-refuter': 'refuter', refuter: 'refuter' };
-// agent type (with or without the plugin prefix) -> worker | reviewer | refuter | other
-function roleOf(type) {
-  const t = String(type || '').split(':').pop().toLowerCase();
-  return ROLE_BY_TYPE[t] || 'other';
-}
+const { roleOf, bareName } = require('../lib/core/agents');
 
 // Records Claude Code appends around a session's close. `last-prompt` is the marker; the rest are
 // bookkeeping lines that may follow it. Anything else after it (a message) means the session went on.
@@ -354,7 +349,7 @@ function createWatcher(opts = {}) {
     if (row.subagent) {
       const rec = info.agentId ? idx.agent(info.agentId) : null;
       row.role = roleOf(rec && rec.type);
-      if (rec && rec.type) row.agent_type = String(rec.type).split(':').pop().slice(0, 60);
+      if (rec && rec.type) row.agent_type = bareName(rec.type).slice(0, 60);
       if (rec && rec.task) row.task = { id: rec.task, title: null };
     } else if (info.sessionId && idx.dispatched(info.sessionId)) {
       row.role = 'orchestrator';

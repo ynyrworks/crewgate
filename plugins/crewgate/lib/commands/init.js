@@ -30,6 +30,9 @@ function run(argv, ctx) {
     L.push(`  ${ctx.t(`wf.init.${f.action}`)}  ${f.file}${f.backup ? `  (${ctx.t('wf.init.backup', { file: f.backup })})` : ''}`);
   }
   if (res.files.some((f) => f.action === 'kept')) L.push(ctx.t('wf.init.keptHint'));
+  if (res.checks.written) L.push(ctx.t('wf.init.checksChosen', { checks: res.checks.detected.join(', ') }));
+  else if (!res.checks.kept) L.push(ctx.t('wf.init.checksNone'));
+  L.push(ctx.t('wf.init.agentsPrecedence'));
   L.push(ctx.t('wf.init.next'));
   ctx.emit(res, L);
   return 0;
