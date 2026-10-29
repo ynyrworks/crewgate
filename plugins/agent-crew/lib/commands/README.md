@@ -52,3 +52,20 @@ Rules
 | `mr` | `set N "title" [--ci passed\|failed\|running] [--merged yes\|no]`, `list` |
 | `validate` | `set ID YYYY-MM-DD "host" "result"`, `list` |
 | `import` | `agent-board <data dir> --from-project <id> [--force]` |
+
+## Workflow groups (workflow step)
+
+Logic lives in `lib/features/` (`common`, `init`, `review`, `handoff`, `lessons`); the command
+files only parse arguments and print. Strings: `lib/i18n/workflow.*.json` (prefix `wf.`).
+
+| Group | Actions |
+|---|---|
+| `init` | `[--lang en\|zh-TW] [--force]` — config, agent copies, `.crew/` files, registration; `--force` backs up (`*.bak-<ts>`) and keeps config values; the dismissed ledger is never replaced |
+| `task` | `create --title --brief-file [--role --branch --worktree --allow --deny]`, `list [--state]`, `show <id>`, `report <id> --report-file [--packet-file]`, `send-back <id> --note`, `accept`, `merge`, `cancel` |
+| `review` | `run <task> [--engine] [--round]`, `submit <task> [--kind findings\|refutations] [--file]` (stdin by default), `filter`, `finalize [--refutations-file]`, `show`, `dismiss <task> <finding> --scope once\|always --reason` |
+| `handoff` | `create --title --body-file [--task]`, `list [--all]`, `show <id>`, `accept <id>` (atomic claim, body fenced as untrusted), `cancel <id>` |
+| `lesson` | `add --key --text [--kind --date]`, `list`, `suggest`, `promote <key> --rule`, `retire <key>` |
+| `doctor` | node, config (field paths), registration, project files, hooks file, board `GET /api/health` (connection refused = not running, not an error) |
+
+Review files per round under `tasks/<id>/findings/`: `N.raw.json` (reviewer), `N.filtered.json`
+(dropped + reason), `N.kept.json` (filter survivors), `N.refutations.json` (refuter), `N.json` (final).
