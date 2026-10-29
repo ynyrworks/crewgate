@@ -242,11 +242,12 @@
   }
 
   // ------------------------------------------------------------------ routing
-  function parseRoute() {
-    var p = (location.hash || '#/').replace(/^#/, '').split('/').filter(Boolean);
+  function parseRoute() { return parseHash(location.hash); }
+  function parseHash(hash) {
+    var p = (hash || '#/').replace(/^#/, '').split('/').filter(Boolean);
     if (!p.length) return { page: 'overview' };
     if (p[0] === 'p' && p[1]) return p[2] === 'settings' ? { page: 'psettings', id: p[1] } : { page: 'project', id: p[1] };
-    if (['sessions', 'usage', 'settings'].indexOf(p[0]) >= 0) return { page: p[0] };
+    if (['sessions', 'office', 'usage', 'settings'].indexOf(p[0]) >= 0) return { page: p[0] };
     return { page: 'overview' };
   }
 
@@ -256,7 +257,7 @@
     $('skip').textContent = t('skip');
     $('nav').setAttribute('aria-label', t('nav'));
     var page = S.route.page;
-    var items = [['overview', '#/', t('nav.overview')], ['sessions', '#/sessions', t('nav.sessions')], ['usage', '#/usage', t('nav.usage')], ['settings', '#/settings', t('nav.settings')]];
+    var items = [['overview', '#/', t('nav.overview')], ['sessions', '#/sessions', t('nav.sessions')], ['office', '#/office', t('office.nav')], ['usage', '#/usage', t('nav.usage')], ['settings', '#/settings', t('nav.settings')]];
     var nav = $('nav');
     nav.textContent = '';
     items.forEach(function (it) {
@@ -672,6 +673,18 @@
     return h('div', null, h('h1', { text: t(projectId ? 'settings.project' : 'settings.global') }), h('p', { class: 'muted', text: t('settings.hint') }), intro, form);
   }
 
+  // ------------------------------------------------------------------ office (drawn by office.js)
+  function officePage(d) {
+    if (!window.Office) return empty('office.none');
+    // a session page is used when this build has one (#/s/<id>); otherwise the sessions list, filtered to that project
+    var hasSession = parseHash('#/s/x').page !== 'overview';
+    return window.Office.page(d, {
+      t: t, ago: ago, pname: pname, mask: S.mask,
+      href: function (r) { return hasSession ? '#/s/' + encodeURIComponent(r.id) : '#/sessions'; },
+      prepare: function (r) { if (!hasSession) saveFilter({ project: r.project || '-', state: 'all', engine: 'all' }); }
+    });
+  }
+
   // ------------------------------------------------------------------ refresh loop
   function render(node, sig) {
     var main = $('main');
@@ -706,11 +719,11 @@
       }).then(done, fail);
       return;
     }
-    var path = r.page === 'overview' ? '/api/overview' : r.page === 'project' ? '/api/project/' + encodeURIComponent(r.id) : r.page === 'sessions' ? '/api/sessions' : '/api/usage';
+    var path = r.page === 'overview' ? '/api/overview' : r.page === 'project' ? '/api/project/' + encodeURIComponent(r.id) : r.page === 'sessions' || r.page === 'office' ? '/api/sessions' : '/api/usage';
     api(path).then(function (res) {
       if (res.status >= 400) { render(card(t('error'), h('p', { class: 'err', text: res.data.error ? res.data.error.message : 'Error' })), 'err' + tag); return; }
       var d = res.data;
-      var node = r.page === 'overview' ? overviewPage(d) : r.page === 'project' ? projectPage(d) : r.page === 'sessions' ? sessionsPage(d) : usagePage(d);
+      var node = r.page === 'overview' ? overviewPage(d) : r.page === 'project' ? projectPage(d) : r.page === 'sessions' ? sessionsPage(d) : r.page === 'office' ? officePage(d) : usagePage(d);
       render(node, tag + JSON.stringify(d));
     }).then(done, fail);
   }

@@ -6,9 +6,9 @@
 // (global WebSocket). Point it at the demo board, never at a board with real data:
 //
 //   node scripts/demo-board.js            # prints http://127.0.0.1:<port>/
-//   node scripts/screenshots.js http://127.0.0.1:<port>/ [--out docs/images] [--browser <path>]
+//   node scripts/screenshots.js http://127.0.0.1:<port>/ [--out docs/images] [--browser <path>] [--only <page>]
 //
-// Writes <page>-<light|dark>[-zh-TW].png for overview, project, sessions and settings.
+// Writes <page>-<light|dark>[-zh-TW].png for overview, project, sessions, office, usage and settings.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -72,11 +72,13 @@ async function main() {
     const evalJs = async (expression) => (await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })).result.value;
 
     const project = (await getJson(`${origin}/api/overview`)).projects.find((p) => p.name === 'todo-cli').id;
-    const pages = [['overview', '#/'], ['project', `#/p/${project}`], ['sessions', '#/sessions'], ['settings', '#/settings'], ['usage', '#/usage']];
+    const pages = [['overview', '#/'], ['project', `#/p/${project}`], ['sessions', '#/sessions'], ['office', '#/office'], ['settings', '#/settings'], ['usage', '#/usage']];
+    const only = opt('only', '');
     await send('Page.enable');
     for (const lang of ['en', 'zh-TW']) {
       for (const theme of ['light', 'dark']) {
         for (const [name, hash] of pages) {
+          if (only && name !== only) continue;
           await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: theme }] });
           await send('Emulation.setDeviceMetricsOverride', { width: W, height: 900, deviceScaleFactor: 1, mobile: false });
           await send('Page.navigate', { url: `${origin}/` });

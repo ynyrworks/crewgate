@@ -158,6 +158,13 @@ claude --plugin-dir crewgate/plugins/crewgate
   <img alt="工作階段：Claude 與 Codex 併在同一棵樹，等你回覆的排最前面。" src="docs/images/sessions-light-zh-TW.png" width="100%">
 </picture>
 
+**辦公室（實驗性）：同樣的工作階段，用像素風小辦公室呈現，每個專案一個房間。** 帽子代表角色、衣服顏色代表引擎；泡泡顯示思考、用工具、撰寫與「等你回覆」。全部在 canvas 上自行繪製，沒有外部素材，下方的清單仍可用鍵盤操作。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/office-dark-zh-TW.png">
+  <img alt="辦公室：工作階段化為像素風角色坐在辦公桌前" src="docs/images/office-light-zh-TW.png" width="100%">
+</picture>
+
 **用量：依模型與日期的 token 與估算費用。**
 
 <picture>

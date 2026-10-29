@@ -19,8 +19,9 @@ what matters. Details of how things work today are in [DESIGN.md](DESIGN.md).
 
 ## Exploring
 
-- An optional visual "office" view of the agents (2D or 3D), built from scratch. The list view stays the
-  default and the only one that must work everywhere. Contributions are welcome; open an issue first.
+- **Office view (done, experimental).** `#/office` shows live sessions as a pixel-art office, drawn from
+  scratch on a canvas. The list view stays the default and the only one that must work everywhere. Still
+  open: feedback from real use, more poses and room decoration, and whether a 3D variant is worth it.
 
 ## 1.0 criteria
 
