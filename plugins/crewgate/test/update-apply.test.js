@@ -87,9 +87,10 @@ test('neither CLI found: nothing runs, the exact commands come back for copying'
   assert.equal(s.state, 'manual');
   assert.deepEqual(s.steps, []);
   assert.deepEqual(s.manual, [
-    { tool: 'claude', commands: ['claude plugin marketplace update crewgate', 'claude plugin update crewgate@crewgate'] },
-    { tool: 'codex', commands: ['codex plugin marketplace upgrade crewgate'] },
+    { tool: 'claude', reason: 'cliNotFound', commands: ['claude plugin marketplace update crewgate', 'claude plugin update crewgate@crewgate'] },
+    { tool: 'codex', reason: 'cliNotFound', commands: ['codex plugin marketplace upgrade crewgate'] },
   ]);
+  assert.deepEqual(s.results.map((x) => [x.tool, x.status, x.reason]), [['claude', 'manual', 'cliNotFound'], ['codex', 'manual', 'cliNotFound']]);
   assert.deepEqual(m.calls(), []);
 });
 
@@ -153,18 +154,19 @@ test('a stale lock of a dead process is taken over', async () => {
   await r.done;
 });
 
-test('Windows Store codex is only used when codex is not on PATH', () => {
+test('Windows Store codex is only used when codex is not on PATH', async () => {
   const store = u.tmpDir('crew-store-');
   const exe = path.join(store, 'OpenAI.Codex_26.1.0.0_x64__abc', 'app', 'resources', 'codex.exe');
   const older = path.join(store, 'OpenAI.Codex_9.0.0.0_x64__abc', 'app', 'resources', 'codex.exe');
   for (const f of [exe, older]) { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, ''); }
   const env = { PATH: u.tmpDir('crew-empty-'), CREWGATE_CODEX_STORE_DIR: store };
-  assert.equal(ua.findCli('codex', env, 'win32'), exe, 'newest package');
-  assert.equal(ua.findCli('codex', env, 'linux'), null, 'only on Windows');
-  assert.equal(ua.findCli('claude', env, 'win32'), null, 'only codex has the fallback');
+  env.CREWGATE_POWERSHELL = path.join(store, 'no-powershell');
+  assert.equal(await ua.findCli('codex', env, 'win32'), exe, 'newest package');
+  assert.equal(await ua.findCli('codex', env, 'linux'), null, 'only on Windows');
+  assert.equal(await ua.findCli('claude', env, 'win32'), null, 'only codex has the fallback');
   const onPath = u.tmpDir('crew-bin-');
   fs.writeFileSync(path.join(onPath, 'codex.exe'), '');
-  assert.equal(ua.findCli('codex', { ...env, PATH: onPath }, 'win32').toLowerCase(), path.join(onPath, 'codex.exe').toLowerCase());
+  assert.equal((await ua.findCli('codex', { ...env, PATH: onPath }, 'win32')).toLowerCase(), path.join(onPath, 'codex.exe').toLowerCase());
 });
 
 test('locateNewRoot: a version-named cache folder moves to the newest sibling, a marketplace clone stays', () => {

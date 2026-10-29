@@ -209,7 +209,7 @@ What is next, what comes later and what is 1.0: [docs/ROADMAP.md](docs/ROADMAP.m
   fixed commands (`claude plugin marketplace update crewgate`, `claude plugin update crewgate@crewgate`,
   `codex plugin marketplace upgrade crewgate`), only for an installed plugin; a development checkout or a machine
   without those CLIs gets the commands to copy instead. The board then restarts itself from the updated code.
-  Terminal: `crew update check`, `crew update apply`.
+  Terminal: `crew update check`, `crew update apply`, `crew update cleanup` (old versions the update leaves in the plugin caches; also a button on the board).
 - **Redaction.** Text is redacted before it is truncated and stored: private keys, bearer and basic auth,
   `password=` style pairs, common provider keys, JWTs, and IP addresses other than loopback and the
   documentation ranges.

@@ -14,6 +14,7 @@ const execx = require('./exec');
 const paths = require('./paths');
 const redact = require('./redact');
 const { parseVersion, compareVersions } = require('./update-check');
+const cleanup = require('./update-cleanup');
 
 const ID = 'crewgate@crewgate';
 const COMMANDS = {
@@ -51,25 +52,60 @@ function isManaged(pluginRoot, env = process.env) {
   });
 }
 
-// Codex ships through the Microsoft Store on Windows and is not always on PATH.
-// CREWGATE_CODEX_STORE_DIR replaces the WindowsApps folder (tests).
-function storeCodex(env, platform) {
-  if (platform !== 'win32') return null;
-  const dir = env.CREWGATE_CODEX_STORE_DIR || 'C:\\Program Files\\WindowsApps';
-  let names;
-  try { names = fs.readdirSync(dir); } catch { return null; }
-  const hits = names.filter((n) => /^OpenAI\.Codex_/i.test(n)).sort((a, b) => b.localeCompare(a, 'en', { numeric: true }));
-  for (const n of hits) {
-    const exe = path.join(dir, n, 'app', 'resources', 'codex.exe');
-    try { if (fs.statSync(exe).isFile()) return exe; } catch { /* next */ }
-  }
+// Codex ships through the Microsoft Store on Windows and is often not on PATH. C:\Program Files\WindowsApps
+// cannot be listed by a normal user, so the package is asked for through PowerShell first.
+// CREWGATE_CODEX_STORE_DIR replaces the WindowsApps folder and CREWGATE_POWERSHELL the PowerShell program (tests).
+const APPX_QUERY = '(Get-AppxPackage -Name OpenAI.Codex | Select-Object -First 1).InstallLocation';
+const POWERSHELL_TIMEOUT_MS = 10000;
+
+const isFile = (p) => { try { return fs.statSync(p).isFile(); } catch { return false; } };
+const storeExe = (loc) => path.join(loc, 'app', 'resources', 'codex.exe');
+
+function listedStoreCodex(env) {
+  const dir = env.CREWGATE_CODEX_STORE_DIR || 'C:\Program Files\WindowsApps';
+  try {
+    const hits = fs.readdirSync(dir).filter((n) => /^OpenAI\.Codex_/i.test(n)).sort((a, b) => b.localeCompare(a, 'en', { numeric: true }));
+    for (const n of hits) if (isFile(storeExe(path.join(dir, n)))) return storeExe(path.join(dir, n));
+  } catch { /* a normal user may not list this folder */ }
   return null;
 }
 
-function findCli(tool, env, platform) {
-  const found = execx.resolveCommand(tool, { env, platform });
-  if (found) return found;
-  return tool === 'codex' ? storeCodex(env, platform) : null;
+async function appxCodex(env, o) {
+  const ps = env.CREWGATE_POWERSHELL
+    || execx.resolveCommand('powershell.exe', { env, platform: 'win32' })
+    || path.join(env.SystemRoot || env.windir || 'C:\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const r = await runCommand(ps, ['-NoProfile', '-NonInteractive', '-Command', APPX_QUERY], { env, platform: o.platform, timeoutMs: o.powershellTimeoutMs || POWERSHELL_TIMEOUT_MS });
+  if (r.code !== 0 || r.timedOut || r.error) return null;
+  const loc = r.output.split(/\r?\n/).map((x) => x.trim()).filter(Boolean).pop();
+  if (!loc || !path.isAbsolute(loc)) return null;
+  const exe = storeExe(loc);
+  return isFile(exe) ? exe : null;
+}
+
+function configuredCodex() {
+  try {
+    const c = require('./config').loadGlobal().config.engines;
+    const cmd = c && c.codex && c.codex.command;
+    return typeof cmd === 'string' && cmd.trim() ? cmd.trim() : null;
+  } catch { return null; }
+}
+
+// Order: engines.codex.command of the global config, `codex` on PATH, Get-AppxPackage (Windows), the
+// WindowsApps listing. -> absolute path or null.
+async function findCodex(env, platform, o = {}) {
+  const configured = configuredCodex();
+  for (const cmd of configured && configured !== 'codex' ? [configured, 'codex'] : ['codex']) {
+    const found = execx.resolveCommand(cmd, { env, platform });
+    if (found) return found;
+  }
+  if (platform !== 'win32') return null;
+  try { const viaAppx = await appxCodex(env, { ...o, platform }); if (viaAppx) return viaAppx; } catch { /* next */ }
+  return listedStoreCodex(env);
+}
+
+async function findCli(tool, env, platform, o = {}) {
+  if (tool === 'codex') return findCodex(env, platform, o);
+  return execx.resolveCommand(tool, { env, platform });
 }
 
 // Runs one fixed command. -> { code, timedOut, output, error }. stdin is closed.
@@ -107,20 +143,60 @@ function codexInstalled(env) {
   } catch { return false; }
 }
 
-function manualList() {
-  return Object.keys(COMMANDS).map((tool) => ({ tool, commands: COMMANDS[tool].map((a) => display(tool, a)) }));
+const underDir = (root, dir) => {
+  let real;
+  try { real = fs.realpathSync(root); } catch { real = path.resolve(root); }
+  let base = path.join(dir, 'plugins');
+  try { base = fs.realpathSync(base); } catch { /* lexical */ }
+  return lower(real).startsWith(lower(base) + path.sep);
+};
+
+// Is the plugin installed in Claude Code, judged from files (used when the CLI cannot be found)?
+function claudeInstalledOnDisk(pluginRoot, env) {
+  const dir = configDirs(env).claude;
+  if (underDir(pluginRoot, dir)) return true;
+  try { if (fs.readFileSync(path.join(dir, 'plugins', 'installed_plugins.json'), 'utf8').includes(ID)) return true; } catch { /* next */ }
+  try { return fs.statSync(cleanup.cacheDir({ claude: dir }, 'claude')).isDirectory(); } catch { return false; }
 }
 
-// -> { managed, steps: [{ tool, file, args, cmd }], manual }; manual is non-empty when nothing can run.
+// reason: why the commands are only shown (cliNotFound, devCheckout, notInstalled).
+function manualList(reason, tools = Object.keys(COMMANDS)) {
+  return tools.map((tool) => ({ tool, reason, commands: COMMANDS[tool].map((a) => display(tool, a)) }));
+}
+
+// -> { managed, steps: [{ tool, file, args, cmd }], tools: [{ tool, status: run|skipped|manual, reason }], manual }.
+// Nothing is dropped silently: a tool that is installed but whose CLI cannot be found is `manual`.
 async function plan(o) {
   const managed = isManaged(o.pluginRoot, o.env);
-  if (!managed) return { managed, steps: [], manual: manualList() };
+  if (!managed) {
+    const manual = manualList('devCheckout');
+    return { managed, steps: [], tools: manual.map((m) => ({ tool: m.tool, status: 'manual', reason: m.reason })), manual };
+  }
   const steps = [];
-  const claude = findCli('claude', o.env, o.platform);
-  if (claude && await claudeInstalled(claude, o)) for (const a of COMMANDS.claude) steps.push({ tool: 'claude', file: claude, args: a, cmd: display('claude', a) });
-  const codex = findCli('codex', o.env, o.platform);
-  if (codex && codexInstalled(o.env)) for (const a of COMMANDS.codex) steps.push({ tool: 'codex', file: codex, args: a, cmd: display('codex', a) });
-  return { managed, steps, manual: steps.length ? [] : manualList() };
+  const tools = [];
+  const claude = await findCli('claude', o.env, o.platform, o);
+  if (claude) {
+    if (await claudeInstalled(claude, o)) {
+      for (const a of COMMANDS.claude) steps.push({ tool: 'claude', file: claude, args: a, cmd: display('claude', a) });
+      tools.push({ tool: 'claude', status: 'run' });
+    } else tools.push({ tool: 'claude', status: 'skipped', reason: 'notInstalled' });
+  } else if (claudeInstalledOnDisk(o.pluginRoot, o.env)) tools.push({ tool: 'claude', status: 'manual', reason: 'cliNotFound' });
+  else tools.push({ tool: 'claude', status: 'skipped', reason: 'notInstalled' });
+  if (!codexInstalled(o.env)) tools.push({ tool: 'codex', status: 'skipped', reason: 'notInstalled' });
+  else {
+    const codex = await findCli('codex', o.env, o.platform, o);
+    if (codex) {
+      for (const a of COMMANDS.codex) steps.push({ tool: 'codex', file: codex, args: a, cmd: display('codex', a) });
+      tools.push({ tool: 'codex', status: 'run' });
+    } else tools.push({ tool: 'codex', status: 'manual', reason: 'cliNotFound' });
+  }
+  let manual = [];
+  for (const t of tools) if (t.status === 'manual') manual.push(...manualList(t.reason, [t.tool]));
+  if (!steps.length && !manual.length) {   // nothing recognised: show the commands rather than nothing
+    manual = manualList('notInstalled');
+    for (const t of tools) { t.status = 'manual'; t.reason = 'notInstalled'; }
+  }
+  return { managed, steps, tools, manual };
 }
 
 function readVersion(root) {
@@ -200,7 +276,7 @@ function createRunner(opts = {}) {
   const pluginRoot = opts.pluginRoot || path.resolve(__dirname, '..', '..');
 
   function blank() {
-    return { state: 'idle', current: null, steps: [], manual: [], error: null, new_version: null, restart_command: RESTART_COMMAND };
+    return { state: 'idle', current: null, steps: [], manual: [], results: [], old_versions: null, error: null, new_version: null, restart_command: RESTART_COMMAND };
   }
   let st = blank();
   let newRootDir = null;
@@ -211,20 +287,28 @@ function createRunner(opts = {}) {
     const drop = () => { held(); held = () => {}; };
     try {
       const p = await plan({ pluginRoot, env, platform });
-      if (!p.steps.length) { st.state = 'manual'; st.manual = p.manual; return; }
+      st.manual = p.manual;
+      // updated | skipped (not installed) | manual (CLI not found) | failed
+      const result = (tool) => { let x = st.results.find((y) => y.tool === tool); if (!x) { x = { tool, status: 'skipped', reason: null }; st.results.push(x); } return x; };
+      for (const t of p.tools) Object.assign(result(t.tool), { status: t.status === 'run' ? 'skipped' : t.status, reason: t.reason || null });
+      if (!p.steps.length) { st.state = 'manual'; return; }
       let allOk = true;
       for (const s of p.steps) {
         st.current = s.cmd;
         const r = await runCommand(s.file, s.args, { env, platform, timeoutMs: opts.stepTimeoutMs || STEP_TIMEOUT_MS });
         const ok = r.code === 0 && !r.timedOut && !r.error;
         st.steps.push({ tool: s.tool, cmd: s.cmd, ok, code: r.code, timed_out: r.timedOut, output: r.output || r.error || '' });
-        if (!ok) { allOk = false; break; }
+        if (!ok) { allOk = false; Object.assign(result(s.tool), { status: 'failed', reason: null }); break; }
+        result(s.tool).status = 'updated';
       }
+      // a tool that was planned but never reached because an earlier command failed did not update either
+      if (!allOk) for (const s of p.steps) { const x = result(s.tool); if (x.status === 'skipped') Object.assign(x, { status: 'failed', reason: 'notReached' }); }
       st.current = null;
       if (!allOk) { st.state = 'failed'; st.error = 'update.stepFailed'; return; }
       const newRoot = locateNewRoot(pluginRoot);
       newRootDir = newRoot;
       st.new_version = readVersion(newRoot);
+      try { st.old_versions = cleanup.scan({ dirs: configDirs(env), pluginRoot }); } catch { st.old_versions = null; }
       if (!opts.restart) { st.state = 'done'; return; }
       if (!hasCli(newRoot)) { st.state = 'failed'; st.error = 'update.noNewRoot'; return; }
       st.state = 'restarting';
@@ -254,6 +338,6 @@ function createRunner(opts = {}) {
 }
 
 module.exports = {
-  createRunner, plan, runCommand, isManaged, locateNewRoot, readVersion, launchReplacement, findCli, codexInstalled,
+  createRunner, plan, runCommand, isManaged, locateNewRoot, readVersion, launchReplacement, findCli, findCodex, codexInstalled,
   configDirs, manualList, COMMANDS, RESTART_COMMAND, RESTART_WAIT_MS,
 };
