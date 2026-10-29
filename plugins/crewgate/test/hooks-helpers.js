@@ -8,6 +8,8 @@ const { setupHome, makeRepo, GOOD_BRIEF } = require('./helpers');
 const project = require('../lib/core/project');
 const events = require('../lib/core/events');
 const tasks = require('../lib/core/tasks');
+const gates = require('../lib/core/gates');
+const sess = require('../lib/hooks/session');
 
 const HOOK = path.join(__dirname, '..', 'scripts', 'crew-hook.js');
 
@@ -40,6 +42,19 @@ function writeConfig(repo, cfg) {
   fs.writeFileSync(path.join(repo, '.claude', 'crew.json'), JSON.stringify(cfg));
 }
 
+// A user message in the session (UserPromptSubmit); an approval needs one between "gate ask" and "gate answer".
+const prompt = (f) => runHook('user-prompt-submit', { session_id: f.sid, cwd: f.repo, prompt: 'go ahead' }, { cwd: f.repo });
+
+// ask -> (a user message) -> answer yes, as the orchestrator does inside one session. -> gate id
+function approve(f, opts = {}) {
+  const { gate = 'push', pid = f.pid, session = f.sid, userMessage = true, answer = 'yes' } = opts;
+  const id = gates.ask(pid, {}, { gate }, { session }).id;
+  if (userMessage) prompt(f);
+  const s = sess.read(session);
+  gates.answer(pid, id, answer, 'ok', { session, prompts: s && Array.isArray(s.prompt_ts) ? s.prompt_ts : [] });
+  return id;
+}
+
 const base = (f, extra) => ({ session_id: f.sid, cwd: f.repo, ...extra });
 
 // Starts the session (creates the session file that the fast paths rely on).
@@ -54,4 +69,4 @@ const agentPayload = (f, task, extra) => base(f, {
   tool_input: { prompt: `crew-task: ${task.id}\n\ndo it`, subagent_type: 'crew-worker', description: 'x' }, ...extra,
 });
 
-module.exports = { HOOK, runHook, fixture, writeConfig, base, start, evs, newTask, agentPayload };
+module.exports = { HOOK, runHook, fixture, writeConfig, prompt, approve, base, start, evs, newTask, agentPayload };

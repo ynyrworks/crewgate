@@ -166,7 +166,7 @@ All fields are optional; defaults below. The board's Settings page edits this fi
 - `gates` values: `auto` (just do it), `ask` (ask the user in chat first), `never`. Gates are recorded, not only
   advised: `crew gate ask <gate> --task <id> [--detail "..."]` writes `gate.asked` and prints a gate id (`auto`: answered
   yes at once with `auto: true`; `never`: answered no, exit 1); after asking the user in chat the orchestrator runs
-  `crew gate answer <gate-id> yes|no [--note]` (`gate.answered`). A PostToolUse(Bash) hook checks the same gates (§8).
+  `crew gate answer <gate-id> yes|no [--note]` (`gate.answered`). A PostToolUse(Bash) hook checks the same gates (§8); `gates.enforce` (`remind` | `confirm` | `block`) moves the check before the command and `gates.require_user_turn` (default true) makes an approval count only after a user message (§8.1).
 - `orchestrator_edit`: `off` | `warn` | `block` (see §8).
 - `checks`: commands a worker must run before reporting (e.g. `["npm test"]`). `crew init` fills an **empty** list from
   the project files (§13); a non-empty list is never touched.
@@ -196,7 +196,7 @@ must skip a malformed trailing line).
   `review.finding_dismissed`, `gate.asked`, `gate.answered`, `handoff.created`,
   `handoff.accepted`, `handoff.cancelled`, `lesson.added`, `lesson.promoted`,
   `need.added`, `need.done`, `orchestrator.warned`, `subagent.start`, `subagent.stop`,
-  `git.push`, `git.merge`, `gate.missing`, `config.changed`.
+  `git.push`, `git.merge`, `gate.missing`, `gate.prompted`, `gate.blocked`, `gate.confirmed`, `config.changed`.
 - `gate.asked` `{ id, gate, mode, detail }`, `gate.answered` `{ id, gate, answer: yes|no, auto, note }`; `gate.missing`
   `{ gate, mode, command }` is written by the hook when a push/PR/merge happened under an `ask` gate with no yes of the
   last 30 minutes (same session, or an answer recorded by the CLI, which cannot tell the session).
@@ -269,11 +269,107 @@ finish in < 200 ms typical; unregistered project → `{}`.
 | SubagentStart / SubagentStop | Record `subagent.start/stop`; on stop of a task-linked worker, show the user a `systemMessage` (not `additionalContext`, which would keep the subagent running): "task <id> returned — review it: `crew task show <id>`". |
 | PreToolUse (Edit/Write/MultiEdit/NotebookEdit, main session, main worktree) | If the target is not matched by `orchestrator_edit_allow`: `warn` → non-blocking reminder to delegate + `orchestrator.warned`; `block` → deny with reason. Never applies inside subagents or linked worktrees. |
 | PreToolUse (Read, main session) | If the file has more lines than `orchestrator_read_warn_lines` and no `limit` was given, add a reminder to read the report/diff stat first and use line ranges. Never blocks. |
-| PostToolUse (Bash) | Detect `git push`, `git merge`, `gh pr create`, `glab mr create` in the command; record `git.push` / `git.merge` (merge parsing: §6). Then the gate check: push → `push`, `gh pr create` / `glab mr create` → `open_pr`, merge → `merge`; if that gate is `ask` and no `gate.answered yes` of the last 30 minutes exists, record `gate.missing` and add a non-blocking reminder (`additionalContext`) to run `crew gate ask` / `answer` first. |
+| PreToolUse (Bash) | Only when `gates.enforce` is `confirm` or `block` (§8.1): a push / PR / merge under an `ask` gate with no approval gets `permissionDecision` `ask` or `deny`. Skipped for Codex payloads. |
+| PostToolUse (Bash) | Detect `git push`, `git merge`, `gh pr create`, `glab mr create` in the command; record `git.push` / `git.merge` (merge parsing: §6). Then the gate check: push → `push`, `gh pr create` / `glab mr create` → `open_pr`, merge → `merge`; if that gate is `ask` and no `gate.answered yes` of the last 30 minutes exists, record `gate.missing` and add a non-blocking reminder (`additionalContext`) to run `crew gate ask` / `answer` first (with `gates.enforce: confirm`, a command that was put to the user and ran records `gate.confirmed` instead). |
 | every event | Whenever a hook resolves a registered project it notes the event in `runtime/hook-seen.json` (`{ events: { SessionStart: iso, ... } }`, at most one write per event type per 60 s). `crew doctor` and the board show it; SessionStart/Stop/SessionEnd never seen means the session began before the plugin was installed (or the wiring is broken). |
 | Stop | If tasks are `returned` but not reviewed, or dispatched background tasks are still running, add a one-line reminder. Respect `stop_hook_active` (never loop). |
 | PreCompact | Record `session.compact` with a digest checkpoint. |
 | SessionEnd | Deterministic digest (no LLM): prompt count, tool counts, duration, end reason, first/last prompt (truncated), last tool, tasks touched. Abnormal-end flags: dispatched-but-not-returned tasks; last assistant turn ended with a question; no Stop seen. Each flag adds a need ("waiting for you"). |
+
+### 8.1 Gate enforcement (`gates.enforce`, `gates.require_user_turn`)
+
+A push (`git push`), a PR (`gh pr create`, `glab mr create`) or a merge (`git merge`, `gh pr merge`, `glab mr merge`) under an
+`ask` gate needs an **approval**: a `gate.answered yes` of the last 30 minutes, recorded by the orchestrator with
+`crew gate answer` after the user answered in chat. `gates.enforce` decides *when* that is checked:
+
+| `gates.enforce` | Hook | What happens, step by step |
+|---|---|---|
+| `remind` (default) | PostToolUse(Bash) | 1. The command runs. 2. The hook finds the push / PR / merge and records `git.push` / `git.merge`. 3. The gate is `ask` and there is no approval: `gate.missing` is recorded and a non-blocking reminder goes to the model. Nothing is stopped. |
+| `confirm` | PreToolUse(Bash), then PostToolUse(Bash) | 1. Before the command, the hook finds the push / PR / merge, resolves the target project (below) and checks the approval. 2. No approval: it records `gate.prompted` and answers `permissionDecision: "ask"` with a reason (which command, which project, which gate). Claude Code then shows its own permission prompt. 3. You allow: the command runs; PostToolUse sees the `gate.prompted` of the same `tool_use_id`, records `gate.confirmed` (`via: "permission-prompt"`, plus the `permission_mode` seen) and writes no `gate.missing`. You deny: nothing runs. 4. An approval exists: the hook is silent and the command goes on as it would without crewgate. |
+| `block` | PreToolUse(Bash) | 1. Same detection and approval check. 2. No approval: `gate.blocked` is recorded and the hook answers `permissionDecision: "deny"` with instructions. The command does not run. 3. The model runs `crew gate ask <gate>`, asks you in chat, waits for your reply, runs `crew gate answer <id> yes` and retries; now the check passes. |
+
+Only gates set to `ask` are enforced; `auto` and `never` are not touched by the hook (`crew gate ask` already refuses
+`never`). One command line may touch several gates (`git push && gh pr create`): one reason lists all of them.
+
+**Target project.** Detection is the one used for events: `cd` / `pushd` words and `git -C` are resolved from the session
+working directory, a subshell's `cd` does not leak out of it, and redirections, comments and heredoc bodies are not
+commands. The *target* project's `.claude/crew.json` decides `gates.enforce`, the gate modes and `require_user_turn`,
+and the approval is looked up in the target project's events. A directory outside every registered project is never
+enforced (and never registered). A dynamic directory (`cd "$DIR"`) falls back to the session project.
+
+**Pros and cons**
+
+| | `remind` | `confirm` | `block` |
+|---|---|---|---|
+| Stops an unapproved push | no | yes, until you click allow | yes |
+| Who decides | nobody (the model is only told) | you, in the client's own prompt | the model, by recording an approval after your reply |
+| A false detection costs | nothing | one click | a stopped command; the model must ask and retry |
+| Unattended (CI, `claude -p`) | fine, never blocks | no human to click; depends on the permission mode | fine; use it with `auto` gates for what the run may do |
+| Depends on | PostToolUse only | client support for PreToolUse `ask`, and the permission mode | PreToolUse `deny` |
+| A security boundary | no | partly: the click is yours, but see the limits below | no: the model can still call `crew gate answer` itself |
+
+**Permission modes (`confirm`).** Claude Code documents PreToolUse `ask` as "prompt the user for this tool call". What
+it does in `bypassPermissions` ("skip all permission prompts") or `dontAsk` mode was **not verified** in this change:
+do not rely on `confirm` there. The hook records the `permission_mode` it saw in `gate.prompted` / `gate.confirmed`, so a
+run can be audited afterwards. crewgate cannot tell from a hook whether a prompt was really shown, so `gate.confirmed`
+means "the command ran after an ask was returned", not "a human clicked".
+
+**Codex.** The Codex hook table does not register the Bash PreToolUse entry, and a payload with a `turn_id` (Codex) is
+answered with `{}`: whether Codex honours `ask` / `deny` from PreToolUse is not in the facts crewgate holds
+(docs/PLUGIN-FACTS.md), so Codex sessions stay on `remind`. `crew doctor` says so.
+
+**User-turn rule (`gates.require_user_turn`, default `true`).** An approval made by hand counts only if a *user message*
+arrived between its `gate.asked` and its `gate.answered yes`. The rule is judged **once, when the answer is recorded**
+(`crew gate answer`), and the verdict is stored on the `gate.answered` event as `data.user_turn` (`true`, `false` or
+`"project"`) with `data.ask_session`; later checks (`hasApproval`, the hooks) read only that verdict, the 30-minute answer
+window and the session match. The ask is found by its gate id (the whole log, no time cutoff). The CLI takes the session
+id from `CLAUDE_CODE_SESSION_ID` (exported by Claude Code to the Bash tool, equal to the hook payload `session_id`), then
+`CLAUDE_SESSION_ID` for compatibility; `CLAUDE_CODE_HOST_SESSION_ID` is a different value and is not used. (Before this
+version the CLI read only `CLAUDE_SESSION_ID`, which Claude Code does not set, so every earlier `gate.asked` /
+`gate.answered` has no session.) The verdict depends on what is known:
+
+| Ask session | Answer session | Rule | `user_turn` |
+|---|---|---|---|
+| known | known, same | a prompt of that session lies between ask and answer | `true` / `false` |
+| known | known, different | never valid | `false` |
+| known | unknown (or the reverse) | a prompt of the known session lies between | `true` / `false` |
+| unknown | unknown (Codex CLI: no session variable is known) | a prompt of **any** session of the project lies between | `"project"` / `false` |
+
+`"project"` is weaker: with several sessions open on one project, a message in another session satisfies it. A parent /
+subagent link is not followed. `prompt_ts` is the list the `UserPromptSubmit` hook keeps in the session file (time in ms,
+never the text, newest 20); it is read while fresh, right after your reply. The automatic yes of an `auto` gate needs
+no verdict. `crew gate answer ... yes` prints a warning when the verdict is `false`. A `gate.answered` written before
+this field existed has no verdict (unknown) and is **not valid** while `require_user_turn` is `true`. With `false` the old
+rule applies (any yes of the last 30 minutes). The rule applies in all three modes.
+
+What it prevents: the model asking and answering "yes" itself inside one turn (`gate ask` and `gate answer yes` in a row)
+without you having replied, and another session validating an ask. What it does not prevent: the model answering "yes"
+after you replied about something else (any message counts, the text is not read); a false `--note`; the model editing
+`~/.crewgate`. It is a speed bump against careless self-approval, not authentication.
+
+**Cost.** PreToolUse(Bash) runs for every Bash call. `scripts/crew-hook.js` therefore reads stdin and tests the command
+with `lib/hooks/prefilter.js` (no `require`s) before it starts the worker thread or loads any other module; a command
+without push / merge / create answers `{}` at about the cost of a bare `node` start. Only git-like commands load the
+handler and resolve the project (full resolution of the current directory and of `cd` / `git -C` targets, like
+PostToolUse).
+
+**Detection limits** (all modes): only the command text of the Bash tool is read. A script that pushes (`./deploy.sh`,
+`make release`), a shell alias or function, a command assembled from variables (`$GIT push`), `eval`, and a push by
+another tool (an IDE, a Git GUI, an MCP server, `curl` against a hosting API) are not seen. Treat the gate as protection
+against the model's ordinary habits, not against a determined bypass; use the client's own permission rules (deny
+`Bash(git push:*)`) for that.
+
+**Recommended settings**
+
+| Situation | Setting |
+|---|---|
+| Interactive session, you are at the keyboard | `gates.enforce: "confirm"` (keep `require_user_turn: true`) |
+| CI / headless / scheduled runs with nobody to click | `gates.enforce: "block"`, and set the gates the run may use to `auto` (`push: "auto"` ...) so they pass; leave the others `ask` / `never` so they stop |
+| Solo experiments, throw-away repos | `remind` (the default) |
+
+Events: `gate.prompted` `{ gate, command, mode, tool_use_id, permission_mode }`, `gate.blocked` (same fields),
+`gate.confirmed` `{ gate, command, via, permission_mode }`. They are information for the board's timeline; none of them
+counts as an approval.
 
 Main session vs subagent and main worktree vs linked worktree are detected from the
 hook payload and `git rev-parse`; see `lib/core/context.js`.

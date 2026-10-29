@@ -132,6 +132,7 @@ default language) in `~/.crewgate/config.json`. The full, generated key referenc
 | `checks` | Commands a worker must run before reporting. |
 | `forbidden.paths`, `forbidden.actions` | Boundaries rendered into the worker agent file. |
 | `gates.*` | `auto`, `ask` or `never` for push, PR, merge, remote hosts, large tasks, installs. |
+| `gates.enforce`, `gates.require_user_turn` | When a push, PR or merge without approval is checked (`remind`, `confirm`, `block`) and whether an approval needs a user message after the ask. See Gates below. |
 | `limits.orchestrator_edit` | `off`, `warn` or `block` when the orchestrator edits code. |
 | `limits.max_parallel_workers`, `limits.max_returns_before_takeover` | Concurrency and send-back limits. |
 | `review.min_confidence`, `review.report_inference`, `review.nit_cap` | How strict the filter is. |
@@ -217,12 +218,30 @@ What is next, what comes later and what is 1.0: [docs/ROADMAP.md](docs/ROADMAP.m
   Project files (`.claude/crew.json`, `.crew/*`) are written only by `crew init` and the lesson commands.
 - **Hooks run outside the sandbox**, with your permissions. They read stdin, the project's git metadata and
   crewgate files, and write only under the data folder. They never register a project and never block a
-  stop. The one deliberate refusal is the edit guard when you set `orchestrator_edit` to `block`.
+  stop. The deliberate refusals are the edit guard when you set `orchestrator_edit` to `block`, and the push / PR / merge gate when you set `gates.enforce` to `block` (or make Claude Code ask you with `confirm`).
 - **Text is data.** File contents, reports, handoff bodies and findings are fenced and marked untrusted when
   shown to a model; commands found in them are not to be executed.
 - **Worker boundaries** in the generated agent file: only the assigned worktree and branch, commit but never
   push, no network or downloads, no secrets, no skipping tests or hooks. These are instructions to a model, not
   a sandbox; gates and review exist because instructions can be ignored.
+
+## Gates: approvals before push, PR and merge
+
+`gates.push`, `gates.open_pr` and `gates.merge` default to `ask`: the orchestrator must run `crew gate ask`, ask you in chat
+and record your answer with `crew gate answer`. `gates.enforce` decides when crewgate checks that this happened:
+
+| `gates.enforce` | What happens to a push, PR or merge with no approval | Good for |
+|---|---|---|
+| `remind` (default) | It runs. After it, the hook records `gate.missing` and reminds the model. Never blocks. | Solo experiments |
+| `confirm` | Before it runs, the hook makes Claude Code ask **you** (its own permission prompt: allow or deny). If you allow, it is recorded as `gate.confirmed` and nothing is reported missing. A false detection costs one click. Needs a client that honours PreToolUse `ask`; behaviour in bypass-permissions mode is not verified. | Interactive sessions (recommended) |
+| `block` | Before it runs, the hook denies it. The model must `gate ask`, ask you, wait for your reply, `gate answer yes` and retry. A false detection stops work. Not a security boundary: the model can still record an approval itself. | CI and headless runs, together with `auto` gates |
+
+`gates.require_user_turn` (default `true`) adds one rule to all three modes: a hand-recorded approval counts only if you sent
+a message between its `gate ask` and its `gate answer yes`. That stops the model from asking and approving in one go; it
+does not stop it from answering "yes" after you wrote something unrelated. Detection only reads the Bash command: a script
+that pushes, an alias, a variable (`$GIT push`) or a push by another tool is not seen. The target repo of `cd` / `git -C`
+decides which project's config applies, and an unregistered repo is never enforced. Codex sessions stay on `remind`.
+Step by step, limits and recommended settings: [docs/DESIGN.md §8.1](docs/DESIGN.md).
 
 ## Using Codex or another CLI as the reviewer
 

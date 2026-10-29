@@ -22,6 +22,20 @@ function read(sid) {
   } catch { return null; }
 }
 
+// Prompt times (ms) of every live session file of a project (for answers whose session id is unknown).
+function promptsOfProject(pid) {
+  const out = [];
+  try {
+    const dir = sessionsDir();
+    for (const n of fs.readdirSync(dir).slice(0, 300)) {
+      if (!n.endsWith('.json')) continue;
+      const s = read(n.slice(0, -5));
+      if (s && s.project === pid && Array.isArray(s.prompt_ts)) out.push(...s.prompt_ts);
+    }
+  } catch { /* no sessions */ }
+  return out;
+}
+
 function init(s, h) {
   s.v = 1;
   s.project = h.pid;
@@ -135,6 +149,6 @@ function byToolUse(pid, toolUseId) {
 function markStopped(pid, toolUseId) { return updateUses(pid, (u) => { if (u[toolUseId]) u[toolUseId].stopped = true; }); }
 
 module.exports = {
-  read, touch, bumpTool, addTask, remove, prune,
+  read, promptsOfProject, touch, bumpTool, addTask, remove, prune,
   remember, bindAgent, byAgent, byToolUse, readUses, markStopped, sessionFile,
 };

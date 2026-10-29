@@ -10,6 +10,7 @@ const execx = require('../core/exec');
 const hookseen = require('../core/hookseen');
 const store = require('../core/store');
 const hooklog = require('../core/hooklog');
+const gates = require('../core/gates');
 
 // GET http://127.0.0.1:<port>/api/health -> { state: 'running'|'down'|'other', detail }
 function probeBoard(port, timeoutMs = 1500) {
@@ -60,6 +61,10 @@ async function run(argv, ctx) {
     if (loaded.exists && !loaded.errors.length) {
       const empty = !(loaded.config.checks && loaded.config.checks.length);
       add('checks', empty ? 'warn' : 'ok', empty ? ctx.t('wf.doctor.checksEmpty') : loaded.config.checks.join('; '));
+    }
+    if (loaded.exists && !loaded.errors.length) {
+      const enforce = gates.enforceOf(loaded.config);
+      add('gates', 'ok', ctx.t(`wf.doctor.gates.${enforce}`, { turn: ctx.t(gates.requiresUserTurn(loaded.config) ? 'wf.doctor.gates.turnOn' : 'wf.doctor.gates.turnOff'), ask: ['push', 'open_pr', 'merge'].filter((k) => gates.modeOf(loaded.config, k) === 'ask').join(', ') || '-' }));
     }
     add('registration', proj ? 'ok' : 'warn', proj ? `${proj.id} (${proj.name})` : ctx.t('wf.doctor.notRegistered'));
     const expected = ['.claude/agents/crew-worker.md', '.claude/agents/crew-reviewer.md', '.claude/agents/crew-refuter.md', '.crew/REVIEW.md', '.crew/LESSONS.md'];

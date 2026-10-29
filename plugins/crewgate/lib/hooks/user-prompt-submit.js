@@ -1,9 +1,11 @@
 'use strict';
 
 // UserPromptSubmit: only keeps the session digest counters (prompt count, first/last prompt).
-// It never adds context, so it costs the model nothing.
+// Also keeps the times of the last prompts (for the gate user-turn rule). It never adds context, so it costs the model nothing.
 const C = require('./common');
 const sess = require('./session');
+
+const PROMPT_KEEP = 20;
 
 function run(payload) {
   const h = C.open(payload);
@@ -13,6 +15,8 @@ function run(payload) {
     s.prompts = (s.prompts || 0) + 1;
     if (!s.first_prompt) s.first_prompt = snip;
     s.last_prompt = snip;
+    // Times only (no text): the gate rule "a user message between ask and answer" reads them.
+    s.prompt_ts = [...(Array.isArray(s.prompt_ts) ? s.prompt_ts : []), Date.now()].slice(-PROMPT_KEEP);
     s.turn_open = true;
     s.ends_question = false;
   });

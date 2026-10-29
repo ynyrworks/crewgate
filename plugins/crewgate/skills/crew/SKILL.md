@@ -102,6 +102,17 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
 - `never`: refuse and say which gate blocks it (`crew gate ask` exits 1). `crew task merge` itself refuses when
   `gates.merge` is `never`.
 
+`gates.enforce` decides when a push, PR or merge under an `ask` gate is checked against your recorded approvals:
+
+- `remind` (default): after the command; a missing approval only gives you a reminder.
+- `confirm`: before the command, Claude Code asks the user to allow or deny it. If a prompt like that appears, wait for
+  the user; do not retry the command in another form. After the user allows, nothing more to record.
+- `block`: before the command, it is denied until an approval exists. Run `crew gate ask <gate> --task <id>`, ask in
+  chat, wait, then `crew gate answer <gate-id> yes` and retry. Never try to get around a block.
+
+`gates.require_user_turn` (default on): an answer counts only if the user wrote a message after your `gate ask`. So ask,
+end your turn, and answer only after the user replied, in the same session that asked (the CLI reads `CLAUDE_CODE_SESSION_ID`; the verdict is fixed when `crew gate answer` runs). `crew gate answer` warns when it saw no user message since the ask.
+
 Workers are told never to push, use the network or touch remote hosts; if a task needs one, that
 is a gate decision for you and the user, not the worker.
 

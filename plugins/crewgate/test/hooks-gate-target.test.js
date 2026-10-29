@@ -55,10 +55,10 @@ test('cd into another registered project: events, gate.missing and approval live
   assert.equal(missing(f.pid).length, 0);
 
   // a yes in the session project does not count for the other one
-  gates.answer(f.pid, gates.ask(f.pid, {}, { gate: 'push' }).id, 'yes', 'ok');
+  H.approve(f);
   assert.match(post(f, `cd ${fwd(other)} && git push`, 'c2').json.hookSpecificOutput.additionalContext, /"push" gate/);
   // a yes in the target project does
-  gates.answer(otherPid, gates.ask(otherPid, {}, { gate: 'push' }).id, 'yes', 'ok');
+  H.approve(f, { pid: otherPid });
   assert.equal(post(f, `cd ${fwd(other)} && git push`, 'c3').out, '{}');
   assert.equal(pushes(otherPid).length, 3);
 });

@@ -120,6 +120,7 @@ claude --plugin-dir crewgate/plugins/crewgate
 | `checks` | 工人回報前必須執行的指令。 |
 | `forbidden.paths`、`forbidden.actions` | 寫進工人 agent 檔的禁止事項。 |
 | `gates.*` | 推送、開 PR、合併、遠端主機、大型任務、安裝下載各自用 `auto`、`ask` 或 `never`。 |
+| `gates.enforce`、`gates.require_user_turn` | 沒有核准的推送、PR、合併何時檢查（`remind`、`confirm`、`block`），以及核准是否需要使用者在 ask 之後送出訊息。見下方「關卡」。 |
 | `limits.orchestrator_edit` | 統籌自己改程式時：`off`、`warn` 或 `block`。 |
 | `limits.max_parallel_workers`、`limits.max_returns_before_takeover` | 同時工人數與退回次數上限。 |
 | `review.min_confidence`、`review.report_inference`、`review.nit_cap` | 過濾的嚴格程度。 |
@@ -200,12 +201,28 @@ claude --plugin-dir crewgate/plugins/crewgate
 - **資料放哪裡。** 執行期資料寫在 `~/.crewgate/`（可用 `CREWGATE_HOME` 改位置）。專案內的檔案
   （`.claude/crew.json`、`.crew/*`）只會由 `crew init` 與經驗相關指令寫入。
 - **Hook 在沙盒之外執行**，使用你自己的權限。它們只讀取標準輸入、專案的 git 資訊與 crewgate 的檔案，只寫入資料目錄。
-  它們不會自動登錄專案，也不會擋住 Stop。唯一刻意的拒絕，是你把 `orchestrator_edit` 設成 `block` 時的編輯守門。
+  它們不會自動登錄專案，也不會擋住 Stop。刻意的拒絕只有兩種：你把 `orchestrator_edit` 設成 `block` 時的編輯守門，以及把 `gates.enforce` 設成 `block`（或用 `confirm` 讓 Claude Code 問你）時的推送／PR／合併關卡。
 - **文字一律當資料。** 檔案內容、報告、交接內容與審查發現，交給模型時都會加上圍欄並標示為不可信，
   裡面出現的指令不應被執行。
 - **工人的界線**寫在產生出來的 agent 檔：只在指定的 worktree 與分支工作、可以 commit 但絕不 push、
   不連網不下載、不碰機敏資料、不略過測試或 hook。這些是對模型的指示，不是沙盒；關卡與審查的存在，
   正是因為指示有可能被忽略。
+
+## 關卡：推送、PR、合併前的核准
+
+`gates.push`、`gates.open_pr`、`gates.merge` 預設為 `ask`：統籌必須先執行 `crew gate ask`、在聊天裡問你，再用
+`crew gate answer` 記錄你的回答。`gates.enforce` 決定 crewgate 何時檢查這件事有沒有做：
+
+| `gates.enforce` | 沒有核准的推送、PR、合併會怎樣 | 適用 |
+|---|---|---|
+| `remind`（預設） | 照常執行；執行後 hook 記錄 `gate.missing` 並提醒模型。從不擋。 | 個人實驗 |
+| `confirm` | 執行前由 hook 讓 Claude Code 問**你**（它自己的權限提示：允許或拒絕）。你允許就記錄為 `gate.confirmed`，不會被當成漏掉。誤判的代價是多點一下。需要用戶端支援 PreToolUse 的 `ask`；在 bypass-permissions 模式下的行為尚未驗證。 | 互動式工作階段（建議） |
+| `block` | 執行前由 hook 直接拒絕；模型必須 `gate ask`、問你、等你回覆、`gate answer yes` 再重試。誤判會讓工作停下。不是安全邊界：模型仍可自己記錄核准。 | CI、無人值守，搭配 `auto` 關卡 |
+
+`gates.require_user_turn`（預設 `true`）對三種模式都多加一條規則：手動記錄的核准，要在 `gate ask` 與 `gate answer yes`
+之間有你送出的訊息才算數。這能防止模型一口氣自問自答；防不了你寫了不相干的訊息後它回答「yes」。偵測只讀 Bash 指令文字：
+會推送的腳本、alias、變數（`$GIT push`）、其他工具的推送都看不到。`cd`／`git -C` 指到的專案決定採用哪份設定，
+未註冊的專案永遠不攔。Codex 工作階段維持 `remind`。逐步流程、限制與建議設定見 [docs/DESIGN.md §8.1](docs/DESIGN.md)。
 
 ## 用 Codex 或其他 CLI 當審查員
 

@@ -173,5 +173,11 @@
   "wf.doctor.workDuplicates": "疑似重複的項目（標題只差大小寫或空白）：{items}。多的請用 `crew work rm` 移除",
   "wf.doctor.hookErrors": "hook 失敗：近 24 小時 {h24} 次、近 7 天 {d7} 次（{by}）；詳見 {file}",
   "wf.doctor.hookErrorsNone": "近 7 天沒有 hook 失敗",
-  "wf.doctor.name.hookerrors": "Hook 錯誤"
+  "wf.doctor.name.hookerrors": "Hook 錯誤",
+  "wf.doctor.name.gates": "關卡",
+  "wf.doctor.gates.remind": "enforce remind：沒有核准的推送、PR、合併只在執行後提醒；使用者回合規則 {turn}；ask 關卡：{ask}",
+  "wf.doctor.gates.confirm": "enforce confirm：沒有核准的推送、PR、合併會先由 Claude Code 詢問你；使用者回合規則 {turn}；ask 關卡：{ask}。Codex 工作階段退回 remind（Codex PreToolUse 的 ask 尚未驗證）",
+  "wf.doctor.gates.block": "enforce block：沒有核准的推送、PR、合併在執行前被拒絕；使用者回合規則 {turn}；ask 關卡：{ask}。Codex 工作階段退回 remind（Codex PreToolUse 的 deny 尚未驗證）",
+  "wf.doctor.gates.turnOn": "開",
+  "wf.doctor.gates.turnOff": "關"
 }

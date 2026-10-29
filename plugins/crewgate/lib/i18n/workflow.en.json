@@ -173,5 +173,11 @@
   "wf.doctor.workDuplicates": "items that look like duplicates (same title apart from case or spaces): {items}. Remove the extra ones with `crew work rm`",
   "wf.doctor.hookErrors": "hook failures: {h24} in the last 24 h, {d7} in the last 7 days ({by}); details in {file}",
   "wf.doctor.hookErrorsNone": "no hook failures in the last 7 days",
-  "wf.doctor.name.hookerrors": "Hook errors"
+  "wf.doctor.name.hookerrors": "Hook errors",
+  "wf.doctor.name.gates": "Gates",
+  "wf.doctor.gates.remind": "enforce remind: a push, PR or merge without approval is only reminded after it ran; user-turn rule {turn}; ask gates: {ask}",
+  "wf.doctor.gates.confirm": "enforce confirm: Claude Code asks you before a push, PR or merge without approval; user-turn rule {turn}; ask gates: {ask}. Codex sessions fall back to remind (Codex PreToolUse \"ask\" is unverified)",
+  "wf.doctor.gates.block": "enforce block: a push, PR or merge without approval is denied before it runs; user-turn rule {turn}; ask gates: {ask}. Codex sessions fall back to remind (Codex PreToolUse deny is unverified)",
+  "wf.doctor.gates.turnOn": "on",
+  "wf.doctor.gates.turnOff": "off"
 }

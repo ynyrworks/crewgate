@@ -1,6 +1,6 @@
 'use strict';
 
-// PreToolUse: Agent/Task dispatch tracking, orchestrator edit guard, big-file read reminder.
+// PreToolUse: Agent/Task dispatch tracking, orchestrator edit guard, big-file read reminder, gate enforcement for Bash.
 const fs = require('fs');
 const path = require('path');
 const events = require('../core/events');
@@ -10,6 +10,9 @@ const C = require('./common');
 const sess = require('./session');
 const { typeFields } = require('../core/agents');
 const glob = require('./glob');
+const gitcmd = require('./gitcmd');
+const gates = require('../core/gates');
+const G = require('./gatecheck');
 
 const MAX_READ_BYTES = 20 * 1024 * 1024;
 
@@ -132,11 +135,59 @@ function onRead(payload) {
   return C.withContext('PreToolUse', h.t('warn.read', { limit }));
 }
 
+// ---------------------------------------------------------------- Bash (gates.enforce)
+// A push, PR or merge under an "ask" gate without a usable approval, in a project whose gates.enforce is
+// confirm (Claude Code asks the user) or block (denied). remind (the default) is handled after the command by
+// PostToolUse. Only registered projects are looked at; a cd / git -C target outside them is never enforced.
+function onBash(payload) {
+  if (G.isCodex(payload)) return null; // Codex: "ask" support unverified, stays on remind
+  const command = C.str(C.obj(payload.tool_input).command);
+  if (!G.GIT_WORDS.test(command.slice(0, 20000))) return null;
+  const found = gitcmd.detect(command).filter((f) => gates.gateOf(f));
+  if (!found.length) return null;
+  // Same resolution as PostToolUse: the session file only short-cuts when cwd is inside its project, so a shell
+  // that moved to another registered repository is resolved from its own cwd.
+  const h = C.open(payload);
+  if (!h && !found.some((f) => f.cd.length)) return null;
+  const handleFor = G.makeHandleFor(payload, h);
+  const byProject = new Map();
+  for (const f of found) {
+    const fh = handleFor(f);
+    if (!fh) continue;
+    if (!byProject.has(fh.pid)) byProject.set(fh.pid, { h: fh, found: [] });
+    byProject.get(fh.pid).found.push(f);
+  }
+  const tuid = C.str(payload.tool_use_id);
+  const reasons = [];
+  let verdict = null; // 'ask' unless some project says block
+  for (const g of byProject.values()) {
+    let enforce;
+    try { enforce = gates.enforceOf(g.h.cfg()); } catch { continue; }
+    if (enforce === 'remind') continue;
+    for (const m of G.unapproved(g.h, G.wantedGates(g.found))) {
+      const vars = { what: m.text, gate: m.gate, project: path.basename(g.h.root), cmd: C.crewCmd() };
+      reasons.push(g.h.t(enforce === 'block' ? 'gate.block' : 'gate.confirm', vars));
+      verdict = enforce === 'block' || verdict === 'block' ? 'block' : 'ask';
+      try {
+        events.append(g.h.pid, {
+          type: enforce === 'block' ? 'gate.blocked' : 'gate.prompted', src: 'hook', session: g.h.sid, tool_use_id: tuid,
+          data: { gate: m.gate, command: m.command, mode: enforce, tool_use_id: C.snippet(tuid, 80) || null, permission_mode: C.snippet(payload.permission_mode, 40) || null },
+          key: `${tuid || Date.now()}:${m.gate}:${enforce}`,
+        });
+      } catch { /* ignore */ }
+    }
+  }
+  if (!reasons.length) return null;
+  const text = reasons.join(' ');
+  return verdict === 'block' ? C.deny(text) : C.ask(text);
+}
+
 function run(payload) {
   const tool = C.str(payload.tool_name);
   if (C.AGENT_TOOLS.has(tool)) return onAgent(payload);
   if (C.EDIT_TOOLS.has(tool)) return onEdit(payload);
   if (tool === 'Read') return onRead(payload);
+  if (tool === 'Bash') return onBash(payload);
   return null;
 }
 

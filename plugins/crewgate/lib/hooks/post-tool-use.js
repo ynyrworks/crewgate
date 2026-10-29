@@ -1,7 +1,6 @@
 'use strict';
 
 // PostToolUse: foreground subagent completion (Agent/Task) and git/PR commands (Bash).
-const path = require('path');
 const { spawnSync } = require('child_process');
 const project = require('../core/project');
 const events = require('../core/events');
@@ -10,9 +9,7 @@ const C = require('./common');
 const sess = require('./session');
 const gitcmd = require('./gitcmd');
 const gates = require('../core/gates');
-
-// Cheap pre-filter so ordinary Bash calls never pay for project resolution.
-const GIT_WORDS = /\b(push|merge|create)\b/;
+const G = require('./gatecheck');
 
 function onAgent(payload) {
   if (payload.agent_id) return null;
@@ -86,51 +83,43 @@ function cliMergeRecorded(pid, data, dir) {
   } catch { return false; }
 }
 
-// Git-Bash style /c/work/x (and /cygdrive/c/...) -> C:/work/x; only on Windows, other words pass through.
-function nativeDir(w) {
-  if (process.platform !== 'win32') return w;
-  const m = /^(?:\/cygdrive)?\/([A-Za-z])(?:\/(.*))?$/.exec(w);
-  return m ? `${m[1].toUpperCase()}:/${m[2] || ''}` : w;
-}
-
-// The directory a command's cd / git -C words lead to, starting at the session cwd; null for no words.
-function targetDir(cwd, steps) {
-  if (!steps || !steps.length) return null;
-  let dir = cwd;
-  for (const w of steps) dir = path.resolve(dir, nativeDir(w));
-  return dir;
-}
-
 // A push, PR or merge whose gate is "ask" needs a recorded yes (crew gate answer) from the last 30 minutes.
-// Without one: a gate.missing event and reminder lines for the model.
+// Without one: a gate.missing event and reminder lines for the model. With gates.enforce=confirm the
+// PreToolUse hook already put the command to the user (gate.prompted for this tool call): the command ran, so the
+// user allowed it; that is recorded as gate.confirmed and nothing is reminded.
 function gateLines(h, found, tuid) {
-  const wanted = new Map();
-  for (const f of found) {
-    const gate = gates.gateOf(f);
-    if (gate && !wanted.has(gate)) wanted.set(gate, f.data.command);
-  }
   const lines = [];
-  for (const [gate, what] of wanted) {
-    let cfg;
-    try { cfg = h.cfg(); } catch { return []; }
-    if (gates.modeOf(cfg, gate) !== 'ask') continue;
-    let approved = true;
-    try { approved = gates.hasApproval(h.pid, gate, h.sid); } catch { /* cannot tell: stay quiet */ }
-    if (approved) continue;
+  let prompted = null;
+  for (const m of G.unapproved(h, G.wantedGates(found))) {
+    if (tuid && gates.enforceOf(h.cfg()) === 'confirm') {
+      if (!prompted) {
+        try { prompted = events.read(h.pid, { types: 'gate.prompted', since: Date.now() - 30 * 60 * 1000 }).filter((e) => e.data && e.data.tool_use_id === tuid); } catch { prompted = []; }
+      }
+      const p = prompted.find((e) => e.data && e.data.gate === m.gate);
+      if (p) {
+        try {
+          events.append(h.pid, {
+            type: 'gate.confirmed', src: 'hook', session: h.sid, tool_use_id: tuid,
+            data: { gate: m.gate, command: m.command, via: 'permission-prompt', permission_mode: p.data.permission_mode || null }, key: `${tuid}:${m.gate}:confirmed`,
+          });
+        } catch { /* ignore */ }
+        continue;
+      }
+    }
     try {
       events.append(h.pid, {
         type: 'gate.missing', src: 'hook', session: h.sid, tool_use_id: tuid,
-        data: { gate, mode: 'ask', command: what }, key: `${tuid || Date.now()}:${gate}`,
+        data: { gate: m.gate, mode: 'ask', command: m.command }, key: `${tuid || Date.now()}:${m.gate}`,
       });
     } catch { /* ignore */ }
-    lines.push(h.t('gate.missing', { what, gate, cmd: C.crewCmd() }));
+    lines.push(h.t('gate.missing', { what: m.command, gate: m.gate, cmd: C.crewCmd() }));
   }
   return lines;
 }
 
 function onBash(payload) {
   const command = C.str(C.obj(payload.tool_input).command);
-  const gitish = GIT_WORDS.test(command.slice(0, 20000));
+  const gitish = G.GIT_WORDS.test(command.slice(0, 20000));
   // Ordinary commands only use the session file (no git); git-like ones may resolve the project.
   const h = C.open(payload, { fastOnly: !gitish });
   if (h) sess.bumpTool(h, 'Bash');
@@ -142,25 +131,14 @@ function onBash(payload) {
   const sessionCwd = C.str(payload.cwd) || process.cwd();
   // A command that cd's or uses git -C acts on that directory's project, not on the session's.
   // A directory outside every registered project records nothing (and is never registered here).
-  const handles = new Map();
-  // Full resolution (no session-file shortcut): a registered repo nested inside the session repo is its own project.
-  const handleFor = (f) => {
-    const dir = targetDir(sessionCwd, f.cd);
-    if (!dir) return h;
-    if (!handles.has(dir)) {
-      let t = null;
-      try { t = C.open({ ...payload, cwd: dir }, { full: true }); } catch { /* unusable directory */ }
-      handles.set(dir, t);
-    }
-    return handles.get(dir);
-  };
+  const handleFor = G.makeHandleFor(payload, h);
   const byProject = new Map(); // pid -> { h, found }
   found.forEach((f, i) => {
     const fh = handleFor(f);
     if (!fh) return;
     if (!byProject.has(fh.pid)) byProject.set(fh.pid, { h: fh, found: [] });
     byProject.get(fh.pid).found.push(f);
-    if (f.type === 'git.merge' && cliMergeRecorded(fh.pid, f.data, targetDir(sessionCwd, f.cd) || sessionCwd)) return; // `crew task merge` already recorded it
+    if (f.type === 'git.merge' && cliMergeRecorded(fh.pid, f.data, G.targetDir(sessionCwd, f.cd) || sessionCwd)) return; // `crew task merge` already recorded it
     const list = f.type === 'git.merge' ? mergeEvents(f, merges, found.filter((x) => x.type === 'git.merge').length) : [f.data];
     list.forEach((data, k) => {
       try {
