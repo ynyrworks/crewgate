@@ -206,6 +206,7 @@ function createApi(opts = {}) {
     return watcher.sessions({
       showText: showText(),
       resolveProject,
+      detectClosed: b.detect_closed_transcripts === true,
       idleMs: Number.isInteger(b.session_idle_minutes) ? b.session_idle_minutes * 60 * 1000 : undefined,
       doneMs: Number.isInteger(b.session_done_hours) ? b.session_done_hours * 60 * 60 * 1000 : undefined,
     });

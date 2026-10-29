@@ -57,22 +57,23 @@ test('rule a: an end event older than the last message (resumed session) does no
   assert.deepEqual(byFile(rows), ['main:waiting', 'main:waiting']);
 });
 
-test('rule b: a closing record at the tail makes a quiet session done; a following message cancels it', () => {
+test('rule b (flag on): a closing record at the tail makes a quiet session done; a following message cancels it', () => {
   const { claudeRoot, w } = setup();
   const t = Date.now() - 10 * MIN;
   const closing = [{ type: 'last-prompt', sessionId: 's' }, { type: 'cost-state', sessionId: 's' }];
   const f = writeSession(claudeRoot, 'sess-1', [user(t - 5000), asst(t), ...closing]);
   fs.utimesSync(f, new Date(t), new Date(t));
-  assert.deepEqual(byFile(w.sessions()), ['main:done']);
+  assert.deepEqual(byFile(w.sessions({ detectClosed: true })), ['main:done']);
+  assert.deepEqual(byFile(w.sessions()), ['main:waiting']);   // flag off: stays waiting
   // resumed: a message after the closing record
   fs.appendFileSync(f, jl([user(t + 1000)]));
   fs.utimesSync(f, new Date(t + 1000), new Date(t + 1000));
-  assert.deepEqual(byFile(w.sessions({ now: t + 2000 })), ['main:working']);
+  assert.deepEqual(byFile(w.sessions({ now: t + 2000, detectClosed: true })), ['main:working']);
   // just written (a prompt may still follow): not yet closed
   const roots2 = setup();
   const t2 = Date.now() - 10 * 1000;
   writeSession(roots2.claudeRoot, 'sess-2', [user(t2 - 1000), asst(t2), ...closing]);
-  assert.deepEqual(byFile(roots2.w.sessions()), ['main:waiting']);
+  assert.deepEqual(byFile(roots2.w.sessions({ detectClosed: true })), ['main:waiting']);
 });
 
 test('rule c: idle and done thresholds are configurable', () => {
@@ -96,7 +97,7 @@ test('a subagent takes its parent state when the parent is done, and keeps its o
   const sub = writeSub(claudeRoot, 'sess-1', 'agent-a', [user(t - 8000), asst(t - 7000)]);
   const other = writeSub(claudeRoot, 'sess-2', 'agent-b', [user(t - 8000), asst(t - 7000)]);
   for (const f of [parent, sub, other]) fs.utimesSync(f, new Date(t), new Date(t));
-  const rows = w.sessions().sort((a, b) => a.id.localeCompare(b.id));
+  const rows = w.sessions({ detectClosed: true }).sort((a, b) => a.id.localeCompare(b.id));
   assert.equal(rows.filter((r) => r.status === 'done').length, 2);   // parent + its subagent
   assert.equal(rows.filter((r) => r.status === 'waiting').length, 1);   // the unrelated subagent
 });

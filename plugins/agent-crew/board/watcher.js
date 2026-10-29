@@ -225,9 +225,9 @@ function createWatcher(opts = {}) {
   // sessions({ showText, resolveProject, now, idleMs, doneMs }) -> rows, newest first. `cwd` is for
   // server-side use only; the API strips it. idleMs / doneMs come from board.session_idle_minutes /
   // board.session_done_hours. A session is done when agent-crew recorded its end (newer than its last
-  // message), when its transcript ends in a closing record, or after doneMs of silence; a subagent
+  // message), when (detectClosed, off by default) its transcript ends in a closing record, or after doneMs of silence; a subagent
   // follows its parent session.
-  function sessions({ showText = false, resolveProject = null, now = Date.now(), idleMs, doneMs } = {}) {
+  function sessions({ showText = false, resolveProject = null, now = Date.now(), idleMs, doneMs, detectClosed = false } = {}) {
     const lim = { ...o };
     if (Number.isFinite(idleMs) && idleMs > 0) lim.waitMs = idleMs;
     if (Number.isFinite(doneMs) && doneMs > 0) lim.doneMs = doneMs;
@@ -241,7 +241,7 @@ function createWatcher(opts = {}) {
       if (engine === 'claude' && info.sessionId) {
         const endedAt = o.sessionEnds ? o.sessionEnds.get(info.sessionId) : null;
         const ended = endedAt !== null && endedAt >= (info.lastTs || st.mtimeMs);
-        const closed = info.closed && !info.subagent && now - st.mtimeMs > lim.closedMs;
+        const closed = detectClosed === true && info.closed && !info.subagent && now - st.mtimeMs > lim.closedMs;
         if (ended || closed) status = 'done';
         if (status === 'done' && !info.subagent) doneIds.add(info.sessionId);
       }
