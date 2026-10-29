@@ -22,7 +22,8 @@ let taskId;
 const get = (p) => h.request(port, { path: p });
 const post = (p, body) => h.post(port, token, p, body);
 const jl = (objs) => objs.map((o) => JSON.stringify(o)).join('\n') + '\n';
-const iso = (sec) => new Date(Date.now() - 3600 * 1000 + sec * 1000).toISOString();
+const T0 = Date.now() - 3600 * 1000;   // one base time, so fixture timestamps never drift by a millisecond
+const iso = (sec) => new Date(T0 + sec * 1000).toISOString();
 const U = (i, o) => ({ input_tokens: i, output_tokens: o, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 });
 
 test.before(async () => {
