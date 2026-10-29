@@ -111,7 +111,7 @@
   // S.upd: { info, phase: idle|running|restarting|manual|failed|done, status, oldVersion, since, doneVersion }
   var UM = window.UpdateModel;
   var UPD_LIMIT = 45000;
-  S.upd = { info: null, phase: 'idle', status: null, oldVersion: '', since: 0, doneVersion: '' };
+  S.upd = { info: null, phase: 'idle', status: null, oldVersion: '', since: 0, doneVersion: '', old: null, cleaning: false, cleanMsg: '' };
 
   function loadUpdate() {
     if (S.upd.phase !== 'idle') return;
@@ -132,6 +132,65 @@
     ];
   }
 
+  function toolName(x) { return x === 'codex' ? 'Codex' : 'Claude'; }
+  function reasonText(code, tool) { var key = 'update.reason.' + code;
+    return t(key, { tool: toolName(tool) }); }
+
+  // one line per tool: updated / skipped (not installed) / manual (CLI not found) / failed
+  function resultList(results) {
+    if (!results || !results.length) return [];
+    return [h('ul', { class: 'results' }, results.map(function (r) {
+      var why = r.reason ? ' (' + reasonText(r.reason, r.tool) + ')' : '';
+      var key = 'update.result.' + r.status;
+      return h('li', { text: t(key, { tool: toolName(r.tool) }) + why });
+    }))];
+  }
+
+  // the exact commands of every tool that has to be run by hand, each with its reason and a Copy button
+  function manualBlocks(manual) {
+    var out = [];
+    (manual || []).forEach(function (g) {
+      out.push(h('p', { class: 'note', text: toolName(g.tool) + (g.reason ? ' - ' + reasonText(g.reason, g.tool) : '') }));
+      commandBlock(g.commands).forEach(function (x) { out.push(x); });
+    });
+    return out;
+  }
+
+  // old versions that stay behind after an update; removing them is the user's call
+  function loadOld() {
+    api('/api/update/cleanup').then(function (r) {
+      if (r.status < 400) { S.upd.old = r.data; renderUpdate(); }
+    }).catch(function () { /* optional */ });
+  }
+
+  function removeOld() {
+    var u = S.upd;
+    u.cleaning = true;
+    u.cleanMsg = '';
+    renderUpdate();
+    api('/api/update/cleanup', { body: {} }).then(function (r) {
+      u.cleaning = false;
+      var d = r.data || {};
+      var kept = (d.kept || []).length;
+      u.cleanMsg = r.status >= 400 ? ((d.error && d.error.message) || '') : t('update.removedOld', { count: (d.removed || []).length, mb: mb(d.freed || 0) }) + (kept ? ' ' + t('update.keptOld', { count: kept }) : '');
+      u.old = null;
+      loadOld();
+      renderUpdate();
+    }).catch(function () { u.cleaning = false; renderUpdate(); });
+  }
+
+  function mb(n) { return (n / 1048576).toFixed(1); }
+
+  function oldBlock(u) {
+    var out = [];
+    if (u.old && u.old.count) {
+      out.push(h('p', { class: 'note', text: t('update.oldVersions', { count: u.old.count, mb: mb(u.old.bytes) }) }));
+      out.push(h('span', { class: 'btns' }, h('button', { type: 'button', disabled: u.cleaning ? 'disabled' : null, onclick: removeOld, text: t(u.cleaning ? 'update.removing' : 'update.removeOld') })));
+    }
+    if (u.cleanMsg) out.push(h('p', { class: 'note', role: 'status', text: u.cleanMsg }));
+    return out;
+  }
+
   function dismissBtn(then) {
     return h('span', { class: 'btns' }, h('button', { type: 'button', onclick: function () { S.upd.phase = 'idle'; renderUpdate(); if (then) then(); }, text: t('update.dismiss') }));
   }
@@ -144,7 +203,7 @@
     var extra = [];
     var fail = false;
     // the page refreshes every few seconds: rebuild only when something shown has changed (keeps focus and clicks)
-    var sig = JSON.stringify([S.lang, u.phase, info, u.status, u.doneVersion, store('crew.skipUpdate') || '']);
+    var sig = JSON.stringify([S.lang, u.phase, info, u.status, u.doneVersion, u.old, u.cleaning, u.cleanMsg, store('crew.skipUpdate') || '']);
     if (el.getAttribute('data-sig') === sig) return;
     el.setAttribute('data-sig', sig);
     el.setAttribute('aria-label', t('update.region'));
@@ -155,12 +214,14 @@
       line = [h('span', { class: 'msg', role: 'status', text: t('update.restarting') })];
     } else if (u.phase === 'done') {
       line = [h('span', { class: 'msg', role: 'status', text: t('update.done', { version: u.doneVersion }) }), dismissBtn(loadUpdate)];
+      extra = resultList(u.status && u.status.results);
+      var left = (u.status && u.status.manual) || [];
+      if (left.length) extra = extra.concat([h('p', { class: 'note', text: t('update.manual') })], manualBlocks(left));
+      extra = extra.concat(oldBlock(u));
     } else if (u.phase === 'manual') {
-      var cmds = [];
-      ((u.status && u.status.manual) || []).forEach(function (g) { g.commands.forEach(function (c) { cmds.push(c); }); });
-      cmds.push((u.status && u.status.restart_command) || 'crew board start');
+      var mst = u.status || {};
       line = [h('span', { class: 'msg', text: t('update.manual') }), dismissBtn()];
-      extra = commandBlock(cmds);
+      extra = resultList(mst.results).concat(manualBlocks(mst.manual), [h('p', { class: 'note', text: t('update.restartLine') })], commandBlock([mst.restart_command || 'crew board start']));
     } else if (u.phase === 'failed') {
       fail = true;
       var st = u.status || {};
@@ -211,7 +272,12 @@
     if (u.phase === 'restarting') {
       fetch('/api/health', { cache: 'no-store' }).then(function (r) { return r.json(); }).catch(function () { return null; }).then(function (hl) {
         var v = UM.restartVerdict(u.oldVersion, hl, Date.now() - u.since, UPD_LIMIT);
-        if (v === 'ok') { store('crew.updated', hl.version); window.location.reload(); return; }
+        if (v === 'ok') {
+          store('crew.updated', hl.version);
+          store('crew.updatedInfo', JSON.stringify({ results: (u.status && u.status.results) || [], manual: (u.status && u.status.manual) || [] }));
+          window.location.reload();
+          return;
+        }
         if (v === 'timeout') { u.phase = 'failed'; u.status = { restart_command: 'crew board start', steps: [] }; renderUpdate(); return; }
         // the old board may be back already and say the restart failed
         fetch('/api/update/status', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
@@ -227,7 +293,7 @@
       if (d.state === 'restarting') { toRestart(); return; }
       if (d.state === 'manual') u.phase = 'manual';
       else if (d.state === 'failed') u.phase = 'failed';
-      else if (d.state === 'done') { u.phase = 'done'; u.doneVersion = d.new_version || ''; } else u.phase = 'idle';
+      else if (d.state === 'done') { u.phase = 'done'; u.doneVersion = d.new_version || ''; loadOld(); } else u.phase = 'idle';
       renderUpdate();
     }).catch(toRestart);   // the board stopped answering: it is restarting itself
   }
@@ -239,6 +305,9 @@
     store('crew.updated', '');
     S.upd.phase = 'done';
     S.upd.doneVersion = v;
+    try { S.upd.status = JSON.parse(store('crew.updatedInfo') || '{}'); } catch (e) { S.upd.status = {}; }
+    store('crew.updatedInfo', '');
+    loadOld();
   }
 
   // ------------------------------------------------------------------ routing

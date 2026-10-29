@@ -141,6 +141,7 @@ Free text is redacted (not rejected).
   when global `updates.check` is on, caches answers and failures in `<home>/update-check.json` (failures back off
   1 h, 2 h ... 24 h); `checkState()` reads the cache only. `parseVersion`, `compareVersions`, `kindOf` (`patch|minor|major`).
   A release body line `<!-- crewgate:rehook -->` sets `rehook`.
+- `update-cleanup.js`: `scan` / `cleanup` for older version folders in the two plugin caches (semver names only, never the newest or the running one, never through a link).
 - `update-apply.js`: `createRunner({ pluginRoot, env, restart })` runs the fixed update commands (see DESIGN section 10) one
   update at a time (`<home>/update.lock`); `status()` feeds `GET /api/update/status`. `locateNewRoot`, `launchReplacement`
-  start the updated board on the same port. Used by `board/update-routes.js` and `crew update`.
+  start the updated board on the same port. Codex is found through the global `engines.codex.command`, PATH, PowerShell `Get-AppxPackage` (Windows Store) and last the WindowsApps listing; an installed plugin whose CLI is not found is reported as a `manual` entry. Used by `board/update-routes.js` and `crew update`.

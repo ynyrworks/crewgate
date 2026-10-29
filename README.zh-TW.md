@@ -194,7 +194,7 @@ claude --plugin-dir crewgate/plugins/crewgate
   版本說明連結、「立即更新」與「略過此版本」。立即更新只會執行固定指令（`claude plugin marketplace update crewgate`、
   `claude plugin update crewgate@crewgate`、`codex plugin marketplace upgrade crewgate`），且只限已安裝的外掛；
   開發用的 checkout 或沒有這些 CLI 的機器只會顯示可複製的指令。更新後看板會用新程式自動重新啟動。
-  終端機：`crew update check`、`crew update apply`。
+  終端機：`crew update check`、`crew update apply`、`crew update cleanup`（移除更新後留在外掛快取的舊版本，看板上也有按鈕）。
 - **遮蔽。** 文字會先遮蔽再截斷才儲存：私鑰、Bearer／Basic 認證、`password=` 之類的鍵值、常見服務金鑰、JWT，
   以及除了本機迴路與文件保留網段以外的 IP 位址。
 - **資料放哪裡。** 執行期資料寫在 `~/.crewgate/`（可用 `CREWGATE_HOME` 改位置）。專案內的檔案

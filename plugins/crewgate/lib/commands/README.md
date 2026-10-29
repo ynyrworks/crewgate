@@ -58,7 +58,7 @@ Rules
 
 `crew update check [--force]` prints the cached or fresh answer (a forced check is limited to once a minute and
 makes no request when `updates.check` is false); `crew update apply` runs the same fixed commands as the board's
-**Update now** (or prints them when nothing can run) and then restarts a running board from the updated code.
+**Update now** (or prints them when nothing can run), reports per tool updated / skipped (not installed) / manual (CLI not found) / failed, and then restarts a running board from the updated code. `crew update cleanup [--dry-run]` removes (or lists) older version folders under `<claude>/plugins/cache/crewgate/crewgate` and the Codex twin; it never removes the newest or the running one.
 Test hooks: `CREWGATE_UPDATE_URL` (only `http://127.0.0.1...` or the real GitHub API host is accepted),
 `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `CREWGATE_CODEX_STORE_DIR` (replaces `C:\Program Files\WindowsApps`).
 
@@ -79,7 +79,7 @@ Endpoints (all JSON; reads are GET, every write is POST with `Content-Type: appl
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/health` | `{ ok: true, name: "crewgate", version }` (used by `crew doctor`) |
-| `GET /api/update`, `POST /api/update/check`, `POST /api/update/apply`, `GET /api/update/status` | update notice `{ enabled, current, latest, kind, notes_url, rehook, checked_at }`; forced re-check; start the one-click update (no parameters); its progress `{ state, current, steps, manual, error, new_version, restart_command }` (`board/update-routes.js`) |
+| `GET /api/update`, `POST /api/update/check`, `POST /api/update/apply`, `GET /api/update/status`, `GET|POST /api/update/cleanup` | update notice `{ enabled, current, latest, kind, notes_url, rehook, checked_at }`; forced re-check; start the one-click update (no parameters); its progress `{ state, current, steps, manual, results, old_versions, error, new_version, restart_command }`; old plugin versions that can be removed / removing them (POST has no parameters) (`board/update-routes.js`) |
 | `GET /api/meta`, `/api/schema` | defaults, and `config.SCHEMA` / `GLOBAL_SCHEMA` for the Settings form |
 | `GET /api/overview` | every registered project: tasks by state, open needs, live subagents, last activity |
 | `GET /api/project/<id>` | tasks (history, returns, review stats), sessions, store data, handoffs, lessons, events |

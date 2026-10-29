@@ -89,6 +89,7 @@ function fakeEnv({ bin, claudeDir, codexDir, extra = {} }) {
     CLAUDE_CONFIG_DIR: claudeDir,
     CODEX_HOME: codexDir,
     CREWGATE_CODEX_STORE_DIR: h.tmpDir('crew-store-'),
+    CREWGATE_POWERSHELL: path.join(h.tmpDir('crew-nops-'), 'powershell-missing'),   // never the real PowerShell
     CREWGATE_HOME: process.env.CREWGATE_HOME,
     ...extra,
   };

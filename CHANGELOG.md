@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.12.1 — 2026-10-29
+
+Fixes from the first real one-click update (0.11.0 to 0.12.0 on Windows), where the Claude Code plugin updated but Codex was silently skipped.
+
+- Codex is found on Windows even when it is not on PATH. Resolution order: `engines.codex.command` of the global config (an explicit path), `codex` on PATH / PATHEXT, then on Windows `powershell.exe -NoProfile -NonInteractive -Command "(Get-AppxPackage -Name OpenAI.Codex | Select-Object -First 1).InstallLocation"` (fixed command, 10 s limit, stdin closed) and `<InstallLocation>\app\resources\codex.exe`, and only last the `WindowsApps` listing, which a normal user cannot enumerate (now wrapped so a denied listing is harmless).
+- Nothing is skipped silently any more. When the Codex plugin is installed (`[plugins."crewgate@crewgate"]` in `config.toml`) or the Claude plugin is installed but its CLI cannot be found, the result has a `manual` entry with the exact command (for example `codex plugin marketplace upgrade crewgate`) and the reason "Codex CLI not found on PATH"; the banner shows it with a Copy button, also after the board restarted. The final status per tool is `updated`, `skipped` (not installed), `manual` (CLI not found) or `failed` (`results` in `GET /api/update/status`, one line per tool in `crew update apply`).
+- Old plugin versions. An update leaves the previous version folders in `~/.claude/plugins/cache/crewgate/crewgate/` (and the Codex twin), because open sessions may still use their hooks. The banner now says how many there are and how much space they use, and offers **Remove old versions** (`POST /api/update/cleanup`, token protected, no parameters; `GET` lists them). `crew update cleanup [--dry-run]` does the same in a terminal. Only folders named like a version and strictly older than the newest one are removed; the newest, the folder the running code lives in, links and anything outside the two cache folders are never touched, and a folder in use (EBUSY / EPERM on Windows) is reported and kept. Nothing is removed automatically.
+- Hook commands are unchanged since 0.12.0 (`hooks.json` and the Codex hook file are byte for byte the same), so Codex does not need `/hooks` re-approval for this release.
+
 ## 0.12.0 — 2026-10-29
 
 Highlights: the experimental office view, session statistics and the activity timeline, and fixes from an analysis of real use (gate commands and reminders, hooks-last-seen, merge records, `via`, agent name normalisation, work item updates, default checks detection, flaky test fixes).

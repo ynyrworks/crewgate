@@ -7,9 +7,12 @@
 //   POST /api/update/check    ask GitHub now (rate limited), return the answer
 //   POST /api/update/apply    start the update in the background (one at a time)
 //   GET  /api/update/status   progress of the update
+//   GET  /api/update/cleanup  old plugin versions that could be removed { count, bytes, items }
+//   POST /api/update/cleanup  remove them (no parameters; never the newest or the running one)
 const { t } = require('../lib/core/i18n');
 const updateCheck = require('../lib/core/update-check');
 const updateApply = require('../lib/core/update-apply');
+const updateCleanup = require('../lib/core/update-cleanup');
 
 const TICK_MS = 60 * 60 * 1000;
 const FIRST_DELAY_MS = 3000;
@@ -25,6 +28,8 @@ function createUpdateRoutes(opts) {
     pluginRoot: opts.pluginRoot, env: opts.env, stepTimeoutMs: opts.stepTimeoutMs, restart: opts.restart,
   });
   const checkOpts = (extra) => ({ current, apiUrl: opts.apiUrl, timeoutMs: opts.timeoutMs, ...extra });
+  const pluginRoot = opts.pluginRoot || require('path').resolve(__dirname, '..');
+  const cleanupOpts = () => ({ dirs: updateApply.configDirs(opts.env || process.env), pluginRoot });
   let timers = [];
 
   const backgroundCheck = () => { updateCheck.check(checkOpts()).catch(() => { /* the notice is optional */ }); };
@@ -45,7 +50,14 @@ function createUpdateRoutes(opts) {
       r.done.catch(() => { /* recorded in the status */ });
       return { status: 200, data: { ok: true, ...runner.status() } };
     }
-    if (path === '/api/update' || path === '/api/update/status' || path === '/api/update/check' || path === '/api/update/apply') {
+    if (path === '/api/update/cleanup' && method === 'GET') return { status: 200, data: { ok: true, ...updateCleanup.scan(cleanupOpts()) } };
+    if (path === '/api/update/cleanup' && method === 'POST') {
+      if (body && Object.keys(body).length) return failure(lang, 400, 'api.badRequest');
+      const state = runner.status().state;
+      if (state === 'running' || state === 'restarting') return failure(lang, 409, 'update.busy');
+      return { status: 200, data: { ok: true, ...updateCleanup.cleanup(cleanupOpts()) } };
+    }
+    if (path === '/api/update/cleanup' || path === '/api/update' || path === '/api/update/status' || path === '/api/update/check' || path === '/api/update/apply') {
       return failure(lang, 405, 'api.method');
     }
     return null;
