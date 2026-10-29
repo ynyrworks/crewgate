@@ -1,0 +1,8 @@
+{
+  "name": "agent-crew",
+  "version": "0.1.0",
+  "description": "Delegated development for Claude Code: an orchestrator dispatches worker and reviewer subagents in git worktrees; progress is recorded by hooks and shown on a local board.",
+  "author": { "name": "Ynyr" },
+  "license": "MIT",
+  "keywords": ["subagents", "orchestration", "code-review", "worktree", "hooks", "workflow"]
+}

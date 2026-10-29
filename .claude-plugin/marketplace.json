@@ -1,0 +1,11 @@
+{
+  "name": "agent-crew",
+  "owner": { "name": "Ynyr" },
+  "plugins": [
+    {
+      "name": "agent-crew",
+      "source": "./plugins/agent-crew",
+      "description": "Delegated development for Claude Code: orchestrator, worker and reviewer subagents with hook-recorded progress and a local board."
+    }
+  ]
+}
