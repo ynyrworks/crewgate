@@ -10,3 +10,6 @@
   JSON writes and strict CSP; Overview, Project, Sessions, Usage and Settings pages (en, zh-TW); live session
   list read from local Claude Code / Codex logs without exposing message text; Settings form generated from the
   config schema.
+- Hooks: single `crew-hook.js` entry for SessionStart, UserPromptSubmit, PreToolUse, PostToolUse,
+  SubagentStart/Stop, Stop, PreCompact and SessionEnd (dispatch tracking, orchestrator edit guard,
+  big-read reminder, git push/merge events, session digest). See `plugins/agent-crew/hooks/README.md`.
