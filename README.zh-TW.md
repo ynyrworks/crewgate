@@ -11,7 +11,7 @@
 請 [Claude Code](https://code.claude.com) 處理大一點的工作時，它可以把其中一部分交給輔助的代理（「子代理」）去做。
 放著不管，場面很容易亂：主對話自己跳下去寫程式、沒人認真檢查成果，事後也說不清楚誰做了什麼。**crewgate** 是一個
 Claude Code 外掛（也能搭配 Codex CLI，目前屬實驗性），在這件事外面加上一套流程：由一個**統籌**（orchestrator）工作階段
-規劃並寫下**任務書**（brief），**工人**（worker）子代理各自在獨立的 git worktree 與分支裡實作，唯讀的**審查員**
+規劃並寫下**任務書**（brief），**實作者**（worker）子代理各自在獨立的 git worktree 與分支裡實作，唯讀的**審查員**
 （reviewer）與**反駁員**（refuter）子代理負責檢查成果，只有通過決定性過濾的發現才會送到你面前；要不要推送、開 PR、
 合併，由你決定。所有紀錄都由 **hook 與流程指令自動寫下，不靠模型自己記得去記**，並顯示在只監聽 `127.0.0.1` 的本機看板上。
 
@@ -26,7 +26,7 @@ crewgate 除了一個設定檔和幾個 markdown 檔之外，不會在你的專�
 **分工**
 - 每件任務都有五段式任務書（目標、範圍、不可退化、驗收、脈絡），缺段落 CLI 直接拒收。
 - 每件任務一個 git worktree 與分支，以及任務狀態機：`created -> dispatched -> returned -> (reviewing) -> accepted -> merged`；退回達到上限後，統籌改為自己接手。
-- 工人可以是 Claude 子代理，也可以是 Codex CLI（`crew task run --engine codex`，實驗性）。
+- 實作者可以是 Claude 子代理，也可以是 Codex CLI（`crew task run --engine codex`，實驗性）。
 
 **審查**
 - 三段式流程：找出（審查員）、過濾（決定性、不用模型）、反駁（反駁員試著推翻剩下的發現）。
@@ -35,7 +35,7 @@ crewgate 除了一個設定檔和幾個 markdown 檔之外，不會在你的專�
 **安全**
 - 推送、PR、合併、遠端主機、大型任務、安裝下載都有關卡，可設為 `auto`、`ask` 或 `never`；沒有核准時怎麼處理由 `gates.enforce` 決定：`remind`（提醒）、`confirm`（讓 Claude Code 問你）或 `block`（擋下），見下方「關卡」。
 - 統籌自己動手改程式時，編輯守門會提醒或擋下；不帶範圍就讀超大檔案時也會提醒。
-- 金鑰、憑證與 IP 位址會先遮蔽再儲存；工人的界線寫進 agent 檔。
+- 金鑰、憑證與 IP 位址會先遮蔽再儲存；實作者的界線寫進 agent 檔。
 - 只在本機：看板只綁定 `127.0.0.1`，沒有遙測，hook 與看板不會呼叫模型，只有一個可關閉的更新檢查。
 
 **可見度**
@@ -72,7 +72,7 @@ crewgate 把這些都變成強制或自動記錄的機制：缺段落就拒收�
                | "crew-task: <id>"                            |
                v                                              |
   +--------------------------+   crew task report   +---------+----------+
-  | 工人子代理 worker        | -------------------> | hook（每個事件）   |
+  | 實作子代理 worker        | -------------------> | hook（每個事件）   |
   | 自己的 git worktree      |                      | 記錄、提醒、守門   |
   +------------+-------------+                      |                    |
                | 回報                               +---------+----------+
@@ -84,7 +84,7 @@ crewgate 把這些都變成強制或自動記錄的機制：缺段落就拒收�
                                                       +--------------+
 ```
 
-**角色。** 統籌負責規劃、寫任務書、派工、審查與合併，自己不實作。工人在 worktree 裡完成一件任務，跑專案的檢查、
+**角色。** 統籌負責規劃、寫任務書、派工、審查與合併，自己不實作。實作者在 worktree 裡完成一件任務，跑專案的檢查、
 commit，絕不 push。審查員讀 diff、任務書與 `.crew/REVIEW.md`，回傳附證據的結構化發現。反駁員試著推翻每一筆倖存的發現。
 每個角色在設定檔裡都有自己的 `engine` 與 `model`。
 
@@ -137,9 +137,9 @@ claude --plugin-dir crewgate/plugins/crewgate
 3. 編輯 `.claude/crew.json`：設定 `checks`（例如 `["npm test"]`）以及要禁止的 `forbidden` 路徑或動作，
    然後 commit，讓團隊共用。
 4. 交代工作：`/crewgate:crew 幫 add 指令加上 --due 選項，分工去做`。統籌會寫任務書、建立任務與 worktree，
-   並派出工人。派工由 hook 自動記錄，你不需要手動記任何東西。
+   並派出實作者。派工由 hook 自動記錄，你不需要手動記任何東西。
 5. 選用：請 Claude 啟動看板（`crew board start`），再開啟 `http://127.0.0.1:8781/`。
-6. 工人回報後，統籌會跑審查流程、把倖存的發現給你看，決定退回或驗收，並在合併前先問你（`merge` 關卡預設是 `ask`）。
+6. 實作者回報後，統籌會跑審查流程、把倖存的發現給你看，決定退回或驗收，並在合併前先問你（`merge` 關卡預設是 `ask`）。
 
 ## 設定
 
@@ -150,12 +150,12 @@ claude --plugin-dir crewgate/plugins/crewgate
 | 欄位 | 用途 |
 |---|---|
 | `roles.<角色>.model` / `.engine` | 各角色使用的模型或外部引擎。 |
-| `checks` | 工人回報前必須執行的指令。 |
-| `forbidden.paths`、`forbidden.actions` | 寫進工人 agent 檔的禁止事項。 |
+| `checks` | 實作者回報前必須執行的指令。 |
+| `forbidden.paths`、`forbidden.actions` | 寫進實作者 agent 檔的禁止事項。 |
 | `gates.*` | 推送、開 PR、合併、遠端主機、大型任務、安裝下載各自用 `auto`、`ask` 或 `never`。 |
 | `gates.enforce`、`gates.require_user_turn` | 沒有核准的推送、PR、合併何時檢查（`remind`、`confirm`、`block`），以及核准是否需要使用者在 ask 之後送出訊息。見下方「關卡」。 |
 | `limits.orchestrator_edit` | 統籌自己改程式時：`off`、`warn` 或 `block`。 |
-| `limits.max_parallel_workers`、`limits.max_returns_before_takeover` | 同時工人數與退回次數上限。 |
+| `limits.max_parallel_workers`、`limits.max_returns_before_takeover` | 同時實作者數與退回次數上限。 |
 | `review.min_confidence`、`review.report_inference`、`review.nit_cap` | 過濾的嚴格程度。 |
 | `lessons.promote_after_days`、`lessons.rules_cap` | 經驗何時成為候選、規則最多幾條。 |
 
@@ -245,7 +245,7 @@ claude --plugin-dir crewgate/plugins/crewgate
   它們不會自動登錄專案，也不會擋住 Stop。刻意的拒絕只有兩種：你把 `orchestrator_edit` 設成 `block` 時的編輯守門，以及把 `gates.enforce` 設成 `block`（或用 `confirm` 讓 Claude Code 問你）時的推送／PR／合併關卡。
 - **文字一律當資料。** 檔案內容、報告、交接內容與審查發現，交給模型時都會加上圍欄並標示為不可信，
   裡面出現的指令不應被執行。
-- **工人的界線**寫在產生出來的 agent 檔：只在指定的 worktree 與分支工作、可以 commit 但絕不 push、
+- **實作者的界線**寫在產生出來的 agent 檔：只在指定的 worktree 與分支工作、可以 commit 但絕不 push、
   不連網不下載、不碰機敏資料、不略過測試或 hook。這些是對模型的指示，不是沙盒；關卡與審查的存在，
   正是因為指示有可能被忽略。
 
@@ -279,7 +279,7 @@ crewgate 會組出提示詞（任務書、審查規則、diff），從標準輸�
 指令依 `PATH` 尋找（Windows 也支援 `.cmd`/`.bat`，不經 shell 啟動）。專案的 `.claude/crew.json` 只能用名稱引用引擎
 （`roles.*.engine`）；專案檔裡的 `engines` 會被忽略並顯示警告，因為複製來的儲存庫不該決定 `crew review run` 要執行哪個程式。
 `crew doctor` 會顯示每個引擎是否找得到。
-Codex 當工人與當統籌的做法見下一節。
+Codex 當實作者與當統籌的做法見下一節。
 
 ## 搭配 Codex 使用（實驗性）
 
@@ -295,15 +295,15 @@ codex plugin add crewgate@crewgate
 - **升級：** 只需執行 `codex plugin marketplace upgrade crewgate`，它會更新已安裝的外掛，不必再執行 `codex plugin add`。
 - **hook 要信任一次。** 在 Codex 輸入 `/hooks` 信任 crewgate 的 hook；外掛更新而指令字串改變時要再信任一次。
 - **設定專案：** `crew init --engine codex` 會新增 `.codex/agents/crew-reviewer.toml`、`crew-refuter.toml`，以及 `AGENTS.md` 裡有標記的區塊（既有內容不動）。
-- **Codex 當工人**（統籌可以是 Claude 或 Codex）：`crew task run <id> --engine codex`。Codex 在任務的 worktree 內改檔；commit 由 crewgate 做（Codex 沙盒做不到），並寫報告、把任務交回。失敗時不 commit，worktree 原樣保留供檢查。
-- **權限。** `crew` 會寫入 `~/.crewgate`，Codex 預設的 workspace-write 沙盒會擋：請核准 `crew` 指令，或改用較寬的沙盒。Codex 子代理與父層共用沙盒、無法 commit，所以工人不會以 Codex 子代理執行。
+- **Codex 當實作者**（統籌可以是 Claude 或 Codex）：`crew task run <id> --engine codex`。Codex 在任務的 worktree 內改檔；commit 由 crewgate 做（Codex 沙盒做不到），並寫報告、把任務交回。失敗時不 commit，worktree 原樣保留供檢查。
+- **權限。** `crew` 會寫入 `~/.crewgate`，Codex 預設的 workspace-write 沙盒會擋：請核准 `crew` 指令，或改用較寬的沙盒。Codex 子代理與父層共用沙盒、無法 commit，所以實作者不會以 Codex 子代理執行。
 
 ## 限制
 
 - 需要支援外掛的 Claude Code；hook 酬載中官方文件沒有載明的欄位，程式都以防禦式方式讀取，不同版本可能有差異。
 - Hook 看不到模型的思考過程，只能記錄發生了什麼（派工、停止、git 指令），不知道為什麼。
 - `crew task merge` 只記錄合併，不會執行 git。合併由統籌執行，hook 負責記錄那個指令。
-- 工人的隔離方式是 worktree 加上指示，不是容器。
+- 實作者的隔離方式是 worktree 加上指示，不是容器。
 - 看板的工作階段清單是讀取本機 Claude Code 與 Codex 的紀錄；除非在全域設定打開 `board.show_text`，否則不顯示訊息文字。工作階段統計（時長、提示、工具呼叫、token、費用）只有數字，依對話紀錄快取在 `~/.crewgate/cache/sessions`。
 - Git 與關卡偵測只讀 Bash 工具的指令文字。會推送的腳本、alias、變數（`$GIT push`）、`eval`，或其他工具（IDE、Git 圖形介面、MCP 伺服器）的推送都看不到；關卡防的是模型的一般習慣，不是蓄意繞過。
 - `gates.enforce: confirm` 依賴 Claude Code 遵守 PreToolUse 的 `ask`；在 bypass-permissions（以及 `dontAsk`）模式下的行為尚未驗證。`gate.confirmed` 的意思是「指令在回傳 ask 之後執行了」，不代表真有人點過。
