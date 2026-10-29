@@ -44,22 +44,27 @@ Conventions
 ## project.js
 - `normalizePath(p, platform?)` — Windows: lower-case, `/` separators; realpath for the running platform.
 - `projectId(rootPath, platform?)`.
-- `inspect(cwd)` -> `{ root, linked, git }` — ONE `git` spawn (~100 ms on Windows). `root` is the main
+- `inspect(cwd)` -> `{ root, workTree, linked, git }` — ONE `git` spawn (~100 ms on Windows). `root` is the main
   worktree (`dirname(git-common-dir)`), else the nearest ancestor with `.claude/crew.json`, else `null`.
-  `linked` is true inside a linked worktree.
-- `detectRoot(cwd)`, `isLinkedWorktree(cwd)`, `nearestCrewJsonRoot(dir)`.
+  `workTree` is the root of the work tree holding `cwd` (`--show-toplevel`, canonical); it equals `root`
+  except in a linked worktree. `linked` is true inside a linked worktree.
+  Project root = identity, id, registry, runtime data. Work tree root = files tracked in the repo
+  (`.claude/crew.json`, `.claude/agents/*`, `.crew/*`, rules file).
+- `detectRoot(cwd)`, `detectWorkTree(cwd)`, `isLinkedWorktree(cwd)`, `nearestCrewJsonRoot(dir)`.
+- `workTreeWithin(cwd, root)` — no git: walks up from `cwd` to `root` looking for a `.git` entry (hook fast path).
 - Registry (`projects.json`): `list()` -> `[{ id, path, name, added }]`; `find(spec)` (id | path | name,
   `null` if none, throws `project.ambiguous`); `resolve(spec)` (throws `project.notFound`);
   `findByCwd(cwd)`; `add(dir, { name })` -> `{ project, created }` (registers the detected root,
   creates the data folder); `remove(spec)` -> `{ project, dir }` (data stays).
 
 ## context.js
-- `resolve(payload?, cwd?)` -> `{ cwd, isSubagent, isMainWorktree, projectRoot, projectId, registered, project }`.
+- `resolve(payload?, cwd?)` -> `{ cwd, isSubagent, isMainWorktree, projectRoot, workTreeRoot, projectId, registered, project }`.
   `payload.cwd` wins; `isSubagent` means `payload.agent_id` is set. Never throws. One git spawn.
   Hooks: `if (!ctx.registered) -> print {} and exit 0`.
 
 ## config.js
 - `DEFAULTS`, `GLOBAL_DEFAULTS` (frozen reference objects; `load` returns copies).
+- `loadFor(workTree, root)` — `load()` of the work tree's `.claude/crew.json` when it exists, else of the project root's.
 - `load(root)` -> `{ config, errors, file, exists }` — never throws. Unknown keys are kept; invalid fields
   fall back to their default and are listed in `errors` (`{ file, path, message, key, vars }`).
 - `validate(obj)` -> `[{ path, message, key, vars }]`.

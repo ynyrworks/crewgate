@@ -28,7 +28,7 @@ const DISMISSED = wf.finding('F-3', { category: 'maintainability', severity: 'mi
 
 const sha = (repo) => h.git(repo, 'rev-parse', '--short', 'HEAD');
 
-test('init inside a linked worktree maps to the same project id as the main checkout', () => {
+test('init inside a linked worktree maps to the same project id as the main checkout, files stay per work tree', () => {
   h.setupHome();
   const repo = h.makeRepo();
   const wt = path.join(h.tmpDir('crew-wt-'), 'linked');
@@ -40,8 +40,8 @@ test('init inside a linked worktree maps to the same project id as the main chec
   assert.equal(fromWt.data.project.id, fromMain.data.project.id);
   assert.equal(fromWt.data.project.id, projects.projectId(repo));
   assert.equal(projects.list().length, 1);
-  assert.ok(fs.existsSync(path.join(repo, '.claude', 'crew.json')), 'files go to the main checkout');
-  assert.ok(!fs.existsSync(path.join(wt, '.claude', 'crew.json')), 'the linked worktree is left alone');
+  assert.ok(fs.existsSync(path.join(repo, '.claude', 'crew.json')), 'init in the main checkout writes its own files');
+  assert.ok(fs.existsSync(path.join(wt, '.claude', 'crew.json')), 'init in the linked worktree writes into the worktree');
   assert.equal(wf.crewJson(['task', 'list'], wt).code, 0, 'commands in the worktree resolve the project');
 });
 

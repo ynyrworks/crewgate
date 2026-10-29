@@ -105,6 +105,17 @@ git repo, the nearest ancestor containing `.claude/crew.json` is the root. Proje
 registered by `crew init` or `crew project add`; hooks never auto-register — in an
 unregistered project every hook is a silent no-op.
 
+**Project root vs work tree root.** Two different roots exist. The *project root* (main
+checkout) carries identity: the id, the registry entry and the runtime data under
+`~/.crewgate/projects/<id>/`. The *work tree root* is `git rev-parse --show-toplevel` of the
+current directory (canonicalised); it equals the project root everywhere except inside a
+linked worktree. Everything tracked in the repo — `.claude/crew.json`, `.claude/agents/*`,
+`.crew/REVIEW.md`, `.crew/LESSONS.md`, `.crew/dismissed.jsonl`, the rules file and the
+CLAUDE.md block — is read and written at the **work tree root**, so `crew init` or
+`crew lesson …` inside a linked worktree changes that worktree's branch, not the main
+checkout. The project config is loaded from the work tree's `.claude/crew.json` when it has
+one, else from the project root's. `crew doctor` prints both roots when they differ.
+
 ## 5. Configuration (`.claude/crew.json`)
 
 All fields are optional; defaults below. The board's Settings page edits this file

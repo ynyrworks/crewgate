@@ -37,13 +37,16 @@ async function run(argv, ctx) {
 
   const root = project.detectRoot(ctx.cwd);
   const proj = ctx.project();
+  const wtRoot = proj ? ctx.workTree() : (project.detectWorkTree(ctx.cwd) || root);
   let cfg = config.loadGlobal().config;
   if (!root && !proj) {
     add('config', 'warn', ctx.t('wf.doctor.noProject'));
     add('registration', 'warn', ctx.t('wf.doctor.noProject'));
   } else {
-    const dir = proj ? proj.path : root;
-    const loaded = config.load(dir);
+    const dir = wtRoot || (proj ? proj.path : root);
+    const projDir = proj ? proj.path : root;
+    if (projDir && path.resolve(projDir) !== path.resolve(dir)) add('worktree', 'ok', ctx.t('wf.doctor.worktree', { workTree: dir, root: projDir }));
+    const loaded = config.loadFor(dir, projDir);
     if (!loaded.exists) add('config', 'warn', ctx.t('wf.doctor.noConfig', { file: loaded.file }));
     else if (loaded.errors.length) {
       add('config', 'fail', loaded.errors.map((e) => `${path.relative(dir, e.file) || e.file}: ${e.path || '(file)'} - ${e.message}`).join('; '));
