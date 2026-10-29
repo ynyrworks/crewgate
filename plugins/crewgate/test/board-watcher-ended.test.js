@@ -92,7 +92,9 @@ test('rule c: idle and done thresholds are configurable', () => {
 
 test('a subagent takes its parent state when the parent is done, and keeps its own otherwise', () => {
   const { claudeRoot, w } = setup();
-  const t = Date.now() - 3 * MIN;
+  // well past closedMs (3 min): a file exactly at the boundary is 'not yet closed' or 'closed' depending on
+  // how many ms the run took, which made this test flaky across Node versions
+  const t = Date.now() - 10 * MIN;
   const parent = writeSession(claudeRoot, 'sess-1', [user(t - 9000), asst(t - 6000), { type: 'last-prompt' }]);
   const sub = writeSub(claudeRoot, 'sess-1', 'agent-a', [user(t - 8000), asst(t - 7000)]);
   const other = writeSub(claudeRoot, 'sess-2', 'agent-b', [user(t - 8000), asst(t - 7000)]);

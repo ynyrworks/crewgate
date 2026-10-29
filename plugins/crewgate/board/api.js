@@ -172,7 +172,7 @@ function createApi(opts = {}) {
   const showText = () => { const c = globalCfg(); return !!(c.board && c.board.show_text === true); };
 
   function norm(p) {
-    let r = path.resolve(String(p));
+    let r = paths.canonical(p);
     if (process.platform === 'win32') r = r.toLowerCase();
     return r.replace(/\\/g, '/').replace(/\/+$/, '');
   }

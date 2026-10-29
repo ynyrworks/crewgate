@@ -71,8 +71,25 @@ function projectConfigFile(root) { return path.join(root, '.claude', 'crew.json'
 // Is a path.relative() result outside its base directory? A file named "..x" inside it is not.
 function isOutside(rel) { return rel === '..' || rel.startsWith('..' + path.sep) || path.isAbsolute(rel); }
 
+// Canonical absolute form of a path: symlinks, junctions and Windows 8.3 short names (RUNNER~1) are
+// resolved with realpath.native. A path that does not exist yet (a file about to be written) keeps its
+// non-existing tail appended to the canonical form of its nearest existing ancestor. Case is preserved;
+// comparisons that must ignore case on win32 go through project.normalizePath.
+function canonical(p) {
+  const abs = path.resolve(String(p));
+  let head = abs;
+  const tail = [];
+  for (;;) {
+    try { return path.join(fs.realpathSync.native(head), ...tail.reverse()); } catch { /* not there (yet) */ }
+    const up = path.dirname(head);
+    if (up === head) return abs;
+    tail.push(path.basename(head));
+    head = up;
+  }
+}
+
 module.exports = {
-  isOutside,
+  isOutside, canonical,
   ID_RE, TASK_ID_RE, SAFE_ID_RE, STORE_NAMES, HANDOFF_STATES,
   home, legacyHome, configFile, projectsFile, projectDir, dataFile, eventsFile, tasksDir, taskDir,
   handoffDir, handoffFile, projectConfigFile, runtimeDir, sessionsDir,
