@@ -166,13 +166,13 @@ test('message text is withheld unless showText is set, and then redacted and sho
   claudeFile(roots.claudeRoot, 's.jsonl', [user('/tmp/x', 'SECRET PROMPT'), asst('/tmp/x', [text(reply)], 'end_turn')]);
   const w = createWatcher({ ...roots, ttlMs: 0 });
   const plain = w.sessions();
-  assert.equal(plain[0].text, undefined);
+  assert.equal(plain[0].last_reply, undefined);
   assert.ok(!JSON.stringify(plain).includes('SECRET PROMPT'));
   const shown = w.sessions({ showText: true });
-  assert.match(shown[0].text, /^All done\./);
-  assert.ok(shown[0].text.length <= 200);
-  assert.doesNotMatch(shown[0].text, /abcdef0123456789/);
-  assert.ok(!JSON.stringify(shown).includes('SECRET PROMPT'));
+  assert.match(shown[0].last_reply, /^All done\./);
+  assert.ok(shown[0].last_reply.length <= 160);
+  assert.doesNotMatch(shown[0].last_reply, /abcdef0123456789/);
+  assert.equal(shown[0].last_prompt, 'SECRET PROMPT');
 });
 
 test('sessions link to projects through the resolver and survive resolver errors', () => {

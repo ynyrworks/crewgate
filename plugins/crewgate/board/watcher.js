@@ -8,6 +8,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { clean } = require('../lib/core/redact');
+const { createGitInfo } = require('./gitinfo');
 
 const MIN = 60 * 1000;
 const DEFAULTS = {
@@ -89,7 +90,65 @@ function firstObject(file, maxBytes) {
 const isStr = (v) => typeof v === 'string' && v.length > 0;
 const tsOf = (o) => { const t = Date.parse(o && o.timestamp); return Number.isFinite(t) ? t : null; };
 const blocks = (msg) => (msg && Array.isArray(msg.content) ? msg.content.filter((b) => b && typeof b === 'object') : []);
-const snippet = (text) => clean(String(text).replace(/\s+/g, ' ').trim(), 200);
+const SNIPPET_MAX = 160;
+const TARGET_MAX = 60;
+const snippet = (text) => clean(String(text).replace(/\s+/g, ' ').trim(), SNIPPET_MAX);
+const hashId = (file) => crypto.createHash('sha256').update(file).digest('hex').slice(0, 12);
+
+// ---- what a tool call is working on. toolArg keeps the raw argument (short); targetOf turns it
+// into the redacted label shown on the board.
+const WAIT_TOOLS = new Set(['AskUserQuestion', 'ExitPlanMode']);   // the model is asking the user
+const PATH_ARG = { Read: 'file_path', Edit: 'file_path', Write: 'file_path', MultiEdit: 'file_path', NotebookEdit: 'notebook_path' };
+function toolArg(name, input) {
+  const i = input && typeof input === 'object' ? input : {};
+  const pick = (k, key) => (isStr(i[key]) ? { k, v: i[key].slice(0, 300) } : null);
+  if (PATH_ARG[name]) return pick('path', PATH_ARG[name]);
+  if (name === 'Bash' || name === 'PowerShell') return pick('cmd', 'command');
+  if (name === 'Agent' || name === 'Task') return pick('type', 'subagent_type');
+  if (name === 'Grep' || name === 'Glob') return pick('pat', 'pattern');
+  return null;
+}
+function targetOf(arg, cwd) {
+  if (!arg) return null;
+  let out;
+  if (arg.k === 'path') {
+    let p = arg.v.replace(/\\/g, '/');
+    const c = isStr(cwd) ? cwd.replace(/\\/g, '/').replace(/\/+$/, '') : '';
+    if (c && p.toLowerCase().startsWith(`${c.toLowerCase()}/`)) p = p.slice(c.length + 1);
+    out = clean(p, 400);
+    if (out.length > TARGET_MAX) out = `…${out.slice(-(TARGET_MAX - 1))}`;
+  } else if (arg.k === 'cmd') {
+    const words = arg.v.split('\n')[0].trim().split(/\s+/).filter(Boolean);
+    while (words.length > 1 && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) words.shift();   // leading VAR=value
+    out = clean(words.slice(0, 2).join(' '), TARGET_MAX);
+  } else {
+    out = clean(arg.v.replace(/\s+/g, ' ').trim(), TARGET_MAX);
+  }
+  return out || null;
+}
+
+// Text of a user message that is a real prompt (not a tool result, not a system wrapper).
+function promptText(o) {
+  const m = o.message || {};
+  if (o.isMeta === true) return null;
+  let t = null;
+  if (typeof m.content === 'string') t = m.content;
+  else {
+    const bs = blocks(m);
+    if (bs.some((b) => b.type === 'tool_result')) return null;
+    const tb = bs.find((b) => b.type === 'text' && isStr(b.text));
+    t = tb ? tb.text : null;
+  }
+  if (!isStr(t) || t.trimStart().startsWith('<')) return null;
+  return t;
+}
+
+const ROLE_BY_TYPE = { 'crew-worker': 'worker', worker: 'worker', 'crew-reviewer': 'reviewer', reviewer: 'reviewer', 'crew-refuter': 'refuter', refuter: 'refuter' };
+// agent type (with or without the plugin prefix) -> worker | reviewer | refuter | other
+function roleOf(type) {
+  const t = String(type || '').split(':').pop().toLowerCase();
+  return ROLE_BY_TYPE[t] || 'other';
+}
 
 // Records Claude Code appends around a session's close. `last-prompt` is the marker; the rest are
 // bookkeeping lines that may follow it. Anything else after it (a message) means the session went on.
@@ -107,11 +166,18 @@ function closedTail(objs) {
 // Claude Code transcript lines -> { state, cwd, model, subagent, lastTs, text }.
 // state: 'tool' | 'working' | 'waiting' (before the age rules are applied)
 function readClaude(objs) {
-  const r = { state: null, cwd: null, model: null, subagent: false, lastTs: null, text: null, closed: closedTail(objs), sessionId: null };
+  const r = { state: null, cwd: null, model: null, subagent: false, lastTs: null, text: null, closed: closedTail(objs), sessionId: null, act: null, prompt: null, agentId: null, gitBranch: null };
+  const titles = {};
   for (const o of objs) {
     if (isStr(o.cwd)) r.cwd = o.cwd;
     if (isStr(o.sessionId)) r.sessionId = o.sessionId;
+    if (isStr(o.agentId)) r.agentId = o.agentId;
+    if (isStr(o.gitBranch)) r.gitBranch = o.gitBranch;
     if (o.isSidechain === true) r.subagent = true;
+    if (o.type === 'last-prompt' && isStr(o.lastPrompt)) r.prompt = o.lastPrompt;
+    else if (o.type === 'custom-title' && isStr(o.customTitle)) titles.custom = o.customTitle;
+    else if (o.type === 'ai-title' && isStr(o.aiTitle)) titles.ai = o.aiTitle;
+    else if (o.type === 'summary' && isStr(o.summary)) titles.summary = o.summary;
     if (o.type !== 'user' && o.type !== 'assistant') continue;
     const t = tsOf(o);
     if (t !== null) r.lastTs = t;
@@ -119,23 +185,41 @@ function readClaude(objs) {
     if (o.type === 'assistant') {
       if (isStr(m.model) && !m.model.startsWith('<')) r.model = m.model;
       const bs = blocks(m);
-      if (bs.some((b) => b.type === 'tool_use')) r.state = 'tool';
+      const tu = bs.filter((b) => b.type === 'tool_use').pop();
+      if (tu) r.state = 'tool';
       else if (['end_turn', 'stop_sequence', 'max_tokens', 'refusal'].includes(m.stop_reason)) r.state = 'waiting';
       else r.state = 'working';
+      if (tu) r.act = WAIT_TOOLS.has(tu.name) ? { kind: 'waiting', tool: tu.name } : { kind: 'tool', tool: tu.name || 'tool', arg: toolArg(tu.name, tu.input) };
+      else if (r.state === 'waiting') r.act = { kind: 'waiting' };
+      else r.act = { kind: bs.length && bs[bs.length - 1].type === 'text' ? 'writing' : 'thinking' };
       const tb = bs.filter((b) => b.type === 'text' && isStr(b.text)).pop();
       if (tb) r.text = tb.text;
     } else {
       // a prompt or a tool result: the model is expected to continue, unless the user interrupted
       const raw = typeof m.content === 'string' ? m.content : JSON.stringify(m.content || '');
       r.state = /\[Request interrupted by user/.test(raw) ? 'waiting' : 'working';
+      r.act = { kind: r.state === 'waiting' ? 'waiting' : 'thinking' };
+      const pt = promptText(o);
+      if (pt) r.prompt = pt;
     }
   }
+  r.title = titles.custom || titles.ai || titles.summary || null;
   return r;
+}
+
+// The command of a Codex shell-like call (arguments is a JSON string with "command").
+function codexArg(p) {
+  if (!isStr(p.arguments)) return null;
+  let a;
+  try { a = JSON.parse(p.arguments); } catch { return null; }
+  let c = a && (a.command !== undefined ? a.command : a.cmd);
+  if (Array.isArray(c)) c = c.length >= 3 && /^(?:bash|sh|zsh|pwsh|powershell)(?:\.exe)?$/i.test(String(c[0])) ? c[c.length - 1] : c.join(' ');
+  return isStr(c) ? { k: 'cmd', v: c.slice(0, 300) } : null;
 }
 
 // Codex rollout lines. `head` is the first line (session_meta) when available.
 function readCodex(objs, head) {
-  const r = { state: null, cwd: null, model: null, subagent: false, lastTs: null, text: null };
+  const r = { state: null, cwd: null, model: null, subagent: false, lastTs: null, text: null, act: null, prompt: null };
   const meta = head && head.type === 'session_meta' ? head.payload || {} : {};
   if (isStr(meta.cwd)) r.cwd = meta.cwd;
   if (meta.source && typeof meta.source === 'object') r.subagent = true;
@@ -148,15 +232,19 @@ function readCodex(objs, head) {
     }
     let st = null;
     if (o.type === 'event_msg') {
-      if (p.type === 'task_started') st = 'working';
+      if (p.type === 'task_started') { st = 'working'; r.act = { kind: 'thinking' }; }
       else if (p.type === 'task_complete' || p.type === 'turn_aborted') {
         st = 'waiting';
+        r.act = { kind: 'waiting' };
         if (isStr(p.last_agent_message)) r.text = p.last_agent_message;
-      }
+      } else if (p.type === 'user_message' && isStr(p.message)) r.prompt = p.message;
     } else if (o.type === 'response_item') {
-      if (p.type === 'function_call' || p.type === 'custom_tool_call') st = 'tool';
-      else if (p.type === 'function_call_output' || p.type === 'custom_tool_call_output') st = 'working';
-      else if (p.type === 'message' && p.role === 'assistant') st = 'working';
+      if (p.type === 'function_call' || p.type === 'custom_tool_call') {
+        st = 'tool';
+        r.act = { kind: 'tool', tool: isStr(p.name) ? p.name : 'tool', arg: codexArg(p) };
+      } else if (p.type === 'function_call_output' || p.type === 'custom_tool_call_output') { st = 'working'; r.act = { kind: 'thinking' }; }
+      else if (p.type === 'message' && p.role === 'assistant') { st = 'working'; r.act = { kind: 'writing' }; }
+      else if (p.type === 'reasoning') r.act = { kind: 'thinking' };
     }
     if (st) {
       r.state = st;
@@ -180,6 +268,7 @@ function createWatcher(opts = {}) {
   const o = { ...DEFAULTS, ...defaultRoots(), ...opts };
   let cache = null;
   const perFile = new Map();   // file -> { key, info }
+  const git = o.gitInfo || createGitInfo();
 
   function inspectFile(file, engine, st) {
     const key = `${st.size}:${st.mtimeMs}`;
@@ -197,8 +286,16 @@ function createWatcher(opts = {}) {
       // <session id>.jsonl, or <session id>/subagents/<agent>.jsonl (the subagent belongs to that session)
       const sub = /([^\\/]+)[\\/]subagents[\\/][^\\/]+$/.exec(file);
       r.sessionId = sub ? sub[1] : path.basename(file, '.jsonl');
+      const fileAgent = /[\\/]subagents[\\/]agent-([^\\/]+)\.jsonl$/.exec(file);
+      if (fileAgent) r.agentId = fileAgent[1];
+      // <root>/<project>/<session>/subagents/<agent>.jsonl belongs to <root>/<project>/<session>.jsonl
+      if (sub) r.parentFile = path.join(path.dirname(path.dirname(path.dirname(file))), `${sub[1]}.jsonl`);
     }
-    const info = { engine, state: r.state, cwd: r.cwd, model: r.model, subagent: r.subagent, lastTs: r.lastTs, text: r.text, closed: !!r.closed, sessionId: r.sessionId || null };
+    const info = {
+      engine, state: r.state, cwd: r.cwd, model: r.model, subagent: r.subagent, lastTs: r.lastTs, text: r.text, closed: !!r.closed,
+      sessionId: r.sessionId || null, act: r.act || null, prompt: r.prompt || null, title: r.title || null,
+      agentId: r.agentId || null, gitBranch: r.gitBranch || null, parentFile: r.parentFile || null,
+    };
     perFile.set(file, { key, info });
     return info;
   }
@@ -227,6 +324,34 @@ function createWatcher(opts = {}) {
   // board.session_done_hours. A session is done when crewgate recorded its end (newer than its last
   // message), when (detectClosed, off by default) its transcript ends in a closing record, or after doneMs of silence; a subagent
   // follows its parent session.
+  // What the session is doing now, from its status and the last record. The tool name is always
+  // given; the target (file, command, pattern) only when text is enabled.
+  function activityOf(status, info, showText) {
+    if (status === 'done' || status === 'idle' || status === 'waiting') return { kind: status };
+    const a = info.act;
+    if (!a) return { kind: 'thinking' };
+    if (a.kind === 'tool') {
+      const out = { kind: 'tool', tool: String(a.tool).slice(0, 60) };
+      if (showText === true) { const t = targetOf(a.arg, info.cwd); if (t) out.target = t; }
+      return out;
+    }
+    return { kind: a.kind === 'writing' ? 'writing' : 'thinking' };
+  }
+
+  // Role and task from the crewgate event index (registered projects only).
+  function linkCrew(row, info) {
+    const idx = o.sessionEnds;
+    if (row.engine !== 'claude' || !idx || typeof idx.agent !== 'function') return;
+    if (row.subagent) {
+      const rec = info.agentId ? idx.agent(info.agentId) : null;
+      row.role = roleOf(rec && rec.type);
+      if (rec && rec.type) row.agent_type = String(rec.type).split(':').pop().slice(0, 60);
+      if (rec && rec.task) row.task = { id: rec.task, title: null };
+    } else if (info.sessionId && idx.dispatched(info.sessionId)) {
+      row.role = 'orchestrator';
+    }
+  }
+
   function sessions({ showText = false, resolveProject = null, now = Date.now(), idleMs, doneMs, detectClosed = false } = {}) {
     const lim = { ...o };
     if (Number.isFinite(idleMs) && idleMs > 0) lim.waitMs = idleMs;
@@ -245,21 +370,39 @@ function createWatcher(opts = {}) {
         if (ended || closed) status = 'done';
         if (status === 'done' && !info.subagent) doneIds.add(info.sessionId);
       }
+      // the model asked the user a question / for plan approval: it is waiting even though the last line is a tool call
+      if (info.act && info.act.kind === 'waiting' && (status === 'tool' || status === 'working')) status = 'waiting';
       const row = {
-        id: crypto.createHash('sha256').update(file).digest('hex').slice(0, 12),
+        id: hashId(file),
         engine,
         status,
+        activity: activityOf(status, info, showText),
         lastActivity: new Date(lastMs).toISOString(),
         model: info.model,
         subagent: info.subagent,
+        session: info.sessionId,
+        parent: info.parentFile ? hashId(info.parentFile) : null,
+        role: null,
+        task: null,
         cwd: info.cwd,
         folder: info.cwd ? path.basename(info.cwd.replace(/[\/]+$/, '')) : null,
         project: null,
+        branch: null,
+        detached: false,
+        worktree: null,
       };
+      linkCrew(row, info);
+      const g = info.cwd ? git.get(info.cwd, now) : null;
+      if (g) { row.branch = g.branch; row.detached = g.detached; row.worktree = g.worktree; }
+      else if (info.gitBranch) row.branch = info.gitBranch;
       if (resolveProject && info.cwd) {
         try { const p = resolveProject(info.cwd); if (p) row.project = p.id; } catch { /* unresolved */ }
       }
-      if (showText === true && info.text) row.text = snippet(info.text);
+      if (showText === true) {
+        if (info.text) row.last_reply = snippet(info.text);
+        if (info.prompt) row.last_prompt = snippet(info.prompt);
+        if (info.title) row.title = snippet(info.title);
+      }
       out.push({ row, info });
     }
     // a subagent takes its parent's state: the parent may have ended after the subagent's last line
@@ -275,4 +418,4 @@ function createWatcher(opts = {}) {
   return { sessions, options: o, claudeRoot: o.claudeRoot, codexRoot: o.codexRoot };
 }
 
-module.exports = { createWatcher, readClaude, readCodex, statusOf, tailObjects, DEFAULTS, walk, defaultRoots };
+module.exports = { createWatcher, readClaude, readCodex, statusOf, targetOf, toolArg, roleOf, tailObjects, DEFAULTS, walk, defaultRoots };

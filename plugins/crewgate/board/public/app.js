@@ -4,7 +4,7 @@
   // ------------------------------------------------------------------ state and helpers
   var $ = function (id) { return document.getElementById(id); };
   var TOKEN = (document.querySelector('meta[name="crew-token"]') || {}).content || '';
-  var S = { lang: 'en', mask: false, tables: {}, meta: null, timer: null, last: '', route: null, busy: false, offline: false };
+  var S = { lang: 'en', mask: false, sf: null, sopen: {}, tables: {}, meta: null, timer: null, last: '', route: null, busy: false, offline: false };
 
   function store(key, val) {
     try { if (val === undefined) return window.localStorage.getItem(key); window.localStorage.setItem(key, val); } catch (e) { /* storage unavailable */ }
@@ -133,8 +133,8 @@
     var sel = h('select', { id: 'lang', 'aria-label': t('language'), onchange: function (e) { setLang(e.target.value); } },
       h('option', { value: 'en', selected: S.lang === 'en', text: 'English' }),
       h('option', { value: 'zh-TW', selected: S.lang === 'zh-TW', text: '繁體中文' }));
-    var mask = h('input', { type: 'checkbox', id: 'mask', checked: S.mask, onchange: function (e) { S.mask = e.target.checked; store('crew.mask', S.mask ? '1' : '0'); refresh(true); } });
-    tools.appendChild(h('label', null, mask, t('mask')));
+    var mask = h('input', { type: 'checkbox', id: 'mask', role: 'switch', checked: S.mask, onchange: function (e) { S.mask = e.target.checked; store('crew.mask', S.mask ? '1' : '0'); refresh(true); } });
+    tools.appendChild(h('label', { title: t('maskHint'), class: 'switch' }, mask, t('mask')));
     tools.appendChild(sel);
   }
 
@@ -226,7 +226,7 @@
 
     var grid = h('div', { class: 'grid' });
     // live sessions
-    grid.appendChild(card(t('project.sessions'), d.sessions.length ? sessionsTable(d.sessions, false) : empty('sessions.none')));
+    grid.appendChild(card(t('project.sessions'), d.sessions.length ? sessionTree(d.sessions, false, null) : empty('sessions.none')));
     // work
     var workBody = h('div', null);
     if (!d.work.length) workBody.appendChild(empty('work.none'));
@@ -281,30 +281,116 @@
     return root;
   }
 
-  function sessionsTable(rows, withProject) {
-    var head = [t('sessions.status'), t('sessions.engine'), t('sessions.model'), t('sessions.kind')];
-    if (withProject) head.push(t('sessions.project'));
-    head.push(t('sessions.folder'), t('sessions.last'));
-    var showText = rows.some(function (r) { return r.text; });
-    if (showText) head.push(t('sessions.text'));
-    return table(head, rows.map(function (r) {
-      var cells = [td(badge(r.status)), td(r.engine), td(r.model || '–'), td(r.subagent ? t('sessions.subagent') : t('sessions.main'))];
-      if (withProject) cells.push(td(r.project ? pname({ id: r.project, name: r.project_name || r.project }) : '–'));
-      cells.push(td(S.mask ? '…' : r.folder || '–'), td(ago(r.lastActivity)));
-      if (showText) cells.push(td(r.text || ''));
-      return h('tr', null, cells);
-    }));
+  // ------------------------------------------------------------------ sessions
+  var SM = window.SessionsModel;
+
+  function sessionFilter() { return SM.cleanFilter(S.sf); }
+  function saveFilter(f) {
+    S.sf = SM.cleanFilter(f);
+    store('crew.sessionFilter', JSON.stringify(S.sf));
+  }
+  function saveOpen() { store('crew.sessionOpen', JSON.stringify(S.sopen)); }
+
+  var GLYPH = { working: '▶', tool: '⚙', waiting: '!', idle: '–', done: '✓' };
+  function chip(status) {
+    return h('span', { class: 'badge chip s-' + status }, h('span', { class: 'glyph', 'aria-hidden': 'true', text: GLYPH[status] || '' }), t('state.' + status));
+  }
+
+  function activityText(r, v, shown) {
+    var a = r.activity || { kind: r.status };
+    var kind = ['thinking', 'tool', 'writing', 'waiting', 'idle', 'done'].indexOf(a.kind) >= 0 ? a.kind : 'thinking';
+    if (shown === 'done' && kind === 'waiting') kind = 'done';
+    if (kind === 'tool') return a.tool ? t('act.tool', { tool: a.tool }) + (v.target ? ' · ' + v.target : '') : t('act.toolPlain');
+    return t('act.' + kind);
+  }
+
+  var ROLES = ['orchestrator', 'worker', 'reviewer', 'refuter', 'other'];
+
+  function sessionItem(n, withProject) {
+    var r = n.row;
+    var v = SM.visible(r, S.mask);
+    var open = SM.isOpen(n, S.sopen);
+    var head = h('div', { class: 's-head' });
+    if (n.children.length) {
+      head.appendChild(h('button', {
+        class: 'toggle', type: 'button', 'aria-expanded': open ? 'true' : 'false',
+        'aria-label': t('sessions.children', { count: n.children.length }),
+        onclick: function () { S.sopen[r.id] = !open; saveOpen(); S.last = ''; refresh(true); }
+      }, open ? '▾' : '▸'));
+    }
+    var shown = SM.displayStatus(r);
+    head.appendChild(chip(shown));
+    var act = activityText(r, v, shown);
+    if (act !== t('state.' + shown) && act !== t('act.' + shown)) head.appendChild(h('span', { class: 's-act', text: act }));
+    if (r.role) head.appendChild(h('span', { class: 'role r-' + r.role, text: t('role.' + (ROLES.indexOf(r.role) >= 0 ? r.role : 'other')) }));
+    if (n.children.length) head.appendChild(h('span', { class: 'muted', text: t('sessions.running', { running: n.running, count: n.children.length }) }));
+    head.appendChild(h('span', { class: 's-time muted', text: ago(r.lastActivity) }));
+
+    var meta = [r.engine === 'codex' ? 'Codex' : 'Claude'];
+    if (r.model) meta.push(r.model);
+    if (r.subagent) meta.push(r.agent_type && !S.mask ? r.agent_type : t('sessions.subagent'));
+    if (withProject && r.project) meta.push(pname({ id: r.project, name: r.project_name || r.project }));
+    var where = [];
+    if (v.folder) where.push(v.folder);
+    if (v.branch) where.push((r.detached ? t('sessions.detached') + ' ' : '') + v.branch);
+    if (v.worktree) where.push(t('sessions.worktree', { name: v.worktree }));
+    var li = h('li', { class: 'sess' + (SM.isWaiting(r) ? ' is-waiting' : '') + (r.subagent ? ' is-sub' : '') },
+      head,
+      h('div', { class: 's-meta muted', text: meta.join(' · ') }));
+    if (where.length) li.appendChild(h('div', { class: 's-where', text: where.join(' · ') }));
+    if (r.task) li.appendChild(h('div', { class: 's-task' }, h('span', { class: 'task-id', text: r.task.id }), v.taskTitle ? ' ' + v.taskTitle : ''));
+    if (v.title) li.appendChild(h('div', { class: 's-title', text: v.title }));
+    if (v.prompt) li.appendChild(h('div', { class: 's-snip' }, h('span', { class: 'muted', text: t('sessions.prompt') + ' ' }), v.prompt));
+    if (v.reply) li.appendChild(h('div', { class: 's-snip' }, h('span', { class: 'muted', text: t('sessions.reply') + ' ' }), v.reply));
+    if (n.children.length && open) {
+      li.appendChild(h('ul', { class: 'stree sub' }, n.children.map(function (c) { return sessionItem(c, withProject); })));
+    }
+    return li;
+  }
+
+  function sessionTree(rows, withProject, filter) {
+    var tree = SM.buildTree(rows, filter);
+    if (!tree.length) return empty('sessions.noMatch');
+    return h('ul', { class: 'stree' }, tree.map(function (n) { return sessionItem(n, withProject); }));
+  }
+
+  function filterBar(rows) {
+    var f = sessionFilter();
+    var projects = {};
+    rows.forEach(function (r) { if (r.project) projects[r.project] = r.project_name || r.project; });
+    var apply = function (key) {
+      return function (e) {
+        var nf = sessionFilter();
+        nf[key] = e.target.value;
+        saveFilter(nf);
+        e.target.blur();   // a focused select would keep the page from re-rendering
+        S.last = '';
+        refresh(true);
+      };
+    };
+    var sel = function (label, key, opts) {
+      return h('label', { class: 'fl' }, h('span', { class: 'muted', text: label }),
+        h('select', { 'aria-label': label, onchange: apply(key) }, opts.map(function (o) { return h('option', { value: o[0], selected: f[key] === o[0], text: o[1] }); })));
+    };
+    var popts = [['', t('sessions.allProjects')]];
+    Object.keys(projects).forEach(function (id) { popts.push([id, pname({ id: id, name: projects[id] })]); });
+    popts.push(['-', t('sessions.noProject')]);
+    return h('div', { class: 'filters', role: 'group', 'aria-label': t('sessions.filters') },
+      sel(t('sessions.project'), 'project', popts),
+      sel(t('sessions.state'), 'state', [['all', t('sessions.fAll')], ['running', t('sessions.fRunning')], ['waiting', t('state.waiting')]]),
+      sel(t('sessions.engine'), 'engine', [['all', t('sessions.fAll')], ['claude', 'Claude'], ['codex', 'Codex']]));
   }
 
   function sessionsPage(d) {
     var counts = {};
-    d.sessions.forEach(function (s) { counts[s.status] = (counts[s.status] || 0) + 1; });
+    d.sessions.forEach(function (s) { var k = SM.displayStatus(s); counts[k] = (counts[k] || 0) + 1; });
     var kp = h('div', { class: 'kpis' }, ['working', 'tool', 'waiting', 'idle', 'done'].map(function (s) {
       return h('div', { class: 'kpi' }, h('div', { class: 'big', text: String(counts[s] || 0) }), h('div', { class: 'label', text: t('state.' + s) }));
     }));
-    return h('div', null, h('h1', { text: t('nav.sessions') }), kp,
-      h('div', { class: 'card' }, d.sessions.length ? sessionsTable(d.sessions, true) : empty('sessions.none')),
-      h('p', { class: 'muted', text: d.show_text ? t('sessions.textOn') : t('sessions.textOff') }));
+    var note = S.mask ? t('sessions.textPrivate') : d.show_text ? t('sessions.textOn') : t('sessions.textOff');
+    return h('div', null, h('h1', { text: t('nav.sessions') }), kp, d.sessions.length ? filterBar(d.sessions) : null,
+      h('div', { class: 'card' }, d.sessions.length ? sessionTree(d.sessions, true, S.sf) : empty('sessions.none')),
+      h('p', { class: 'muted', text: note }));
   }
 
   var FAMS = ['opus', 'sonnet', 'haiku', 'openai', 'other'];
@@ -503,6 +589,8 @@
     var saved = store('crew.lang');
     S.lang = saved === 'zh-TW' || saved === 'en' ? saved : ((navigator.language || '').toLowerCase().indexOf('zh') === 0 ? 'zh-TW' : 'en');
     S.mask = store('crew.mask') === '1';
+    try { S.sf = SM.cleanFilter(JSON.parse(store('crew.sessionFilter') || '{}')); } catch (e) { S.sf = SM.cleanFilter({}); }
+    try { var so = JSON.parse(store('crew.sessionOpen') || '{}'); S.sopen = so && typeof so === 'object' && !Array.isArray(so) ? so : {}; } catch (e) { S.sopen = {}; }
     loadTables().then(function () {
       S.route = parseRoute();
       renderChrome();

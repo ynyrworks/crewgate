@@ -122,7 +122,7 @@ const GLOBAL_SCHEMA = [
   f('engines.*.command', 'string', d('Executable to run (resolved through PATH; on Windows .cmd and .bat files work too).', '要執行的程式（依 PATH 尋找；Windows 也支援 .cmd 與 .bat）。')),
   f('engines.*.args', 'array', d('Arguments; the prompt is passed on stdin.', '參數；提示內容由標準輸入傳入。'), { itemType: 'string' }),
   f('board', 'object', d('Board display options.', '看板顯示選項。')),
-  f('board.show_text', 'boolean', d('Show a short redacted snippet of the last assistant message in the Sessions list.', '在工作階段清單顯示最後一則助理訊息的簡短（已遮罩）片段。')),
+  f('board.show_text', 'boolean', d('Show short redacted snippets (last prompt, last reply, session title) and the target of the current tool call (file, command, pattern) in the Sessions list.', '在工作階段清單顯示簡短的已遮罩片段（最後提示、最後回覆、工作階段標題）與目前工具呼叫的目標（檔案、指令、模式）。')),
   f('board.session_idle_minutes', 'integer', d('Minutes without activity after which a Sessions entry shows as idle.', '工作階段超過這段分鐘數沒有動靜就顯示為閒置。'), { min: 1, max: 1440 }),
   f('board.session_done_hours', 'integer', d('Hours without activity after which a Sessions entry shows as done.', '工作階段超過這段小時數沒有動靜就顯示為已結束。'), { min: 1, max: 720 }),
   f('board.detect_closed_transcripts', 'boolean', d('Treat a transcript that ends in a closing record (last-prompt) as a finished session. Off by default: the record is not verified to mean the session ended, so a live session waiting for you could be shown as done.', '把結尾為關閉記錄（last-prompt）的逐字稿視為已結束的工作階段。預設關閉：該記錄是否代表工作階段結束尚未驗證，開啟後等待您回應的使用中工作階段可能被顯示為已結束。')),
