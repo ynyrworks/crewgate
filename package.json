@@ -1,6 +1,6 @@
 {
   "name": "crewgate",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "private": true,
   "description": "Repository root of the crewgate Claude Code plugin (dev scripts only).",
   "license": "MIT",
