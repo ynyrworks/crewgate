@@ -202,7 +202,7 @@ async function runCodex(ctx, proj, cfg, task, a) {
   const promptFile = path.join(dir, 'worker-prompt.md');
   const schemaFile = path.join(dir, 'codex-schema.json');
   const lastFile = path.join(dir, 'codex-last-message.json');
-  json.saveRaw(promptFile, buildPrompt(task, cfg, brief, workerRules(root, cfg), lang, wt));
+  json.saveRaw(promptFile, buildPrompt(task, cfg, brief, workerRules(a.workTree || root, cfg), lang, wt));
   json.saveRaw(schemaFile, `${JSON.stringify(OUTPUT_SCHEMA, null, 2)}\n`);
   try { fs.rmSync(lastFile, { force: true }); } catch { /* ignore */ }
 

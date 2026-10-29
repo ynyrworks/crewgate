@@ -167,7 +167,7 @@ function run(argv, ctx) {
     const timeoutS = a.timeout === undefined ? codexrun.DEFAULT_TIMEOUT_S : a.timeout;
     if (!(timeoutS >= 1)) throw new UsageError('args.badChoice', { name: '--timeout', choices: '>= 1' });
     if (a.engine === 'claude') throw new UsageError('wf.task.run.claude');
-    return codexrun.runCodex(ctx, proj, cfg, tasks.load(proj.id, a.id), { engine: a.engine, model: a.model || '', timeoutS });
+    return codexrun.runCodex(ctx, proj, cfg, tasks.load(proj.id, a.id), { engine: a.engine, model: a.model || '', timeoutS, workTree: ctx.workTree() });
   } else if (sub === 'list') {
     const rows = tasks.list(proj.id, a.state ? { state: a.state } : {});
     ctx.emit(rows, rows.length
@@ -204,7 +204,7 @@ function run(argv, ctx) {
       task = tasks.sendBack(proj.id, a.id, { ...opts, note });
     } catch (e) {
       if (e && e.key === 'task.takeover') {
-        lessons.add(proj.path, proj.id, {
+        lessons.add(ctx.workTree() || proj.path, proj.id, {
           key: 'takeover-limit', kind: 'takeover',
           text: `Task ${a.id} hit the send-back limit (${max}); the orchestrator had to take it over. Last note: ${note}`,
         });

@@ -45,7 +45,7 @@ function ctxOf(ctx, taskId) {
   const task = tasks.load(proj.id, taskId);
   const dir = paths.taskDir(proj.id, task.id);
   fs.mkdirSync(rv.findingsDir(dir), { recursive: true });
-  return { proj, cfg, task, dir, warnings: loaded.warnings || [] };
+  return { proj, wt: ctx.workTree() || proj.path, cfg, task, dir, warnings: loaded.warnings || [] };
 }
 
 function baseDirs(c) {
@@ -81,7 +81,7 @@ function externalPrompt(c, round) {
   }
   const brief = tasks.readBrief(c.proj.id, c.task.id) || '';
   let rules = '';
-  try { rules = fs.readFileSync(path.join(c.proj.path, '.crew', 'REVIEW.md'), 'utf8'); } catch { /* optional */ }
+  try { rules = fs.readFileSync(path.join(c.wt, '.crew', 'REVIEW.md'), 'utf8'); } catch { /* optional */ }
   const f = common.fence(diff + brief + rules);
   return [
     `You are a code reviewer (round ${round}). You cannot edit files. Review the diff against the brief and the review rules.`,
@@ -129,7 +129,7 @@ function doRun(ctx, a) {
   if (engine === 'claude') {
     const role = c.cfg.roles.reviewer || {};
     const prompt = rv.reviewerInstructions({
-      task: c.task, briefPath: path.join(c.dir, 'brief.md'), reviewPath: path.join(c.proj.path, '.crew', 'REVIEW.md'),
+      task: c.task, briefPath: path.join(c.dir, 'brief.md'), reviewPath: path.join(c.wt, '.crew', 'REVIEW.md'),
       diffCmd: diffCommand(c), categories: c.cfg.review.categories, round, rawPath, cli: common.cliCommand(),
     });
     const data = { engine, round, raw_path: rawPath, subagent_type: role.agent || 'crew-reviewer', model: role.model || 'sonnet', prompt };
@@ -170,7 +170,7 @@ function doFilter(ctx, a) {
   const c = ctxOf(ctx, a.task);
   const round = currentRound(c, a, 'raw.json');
   const list = rv.sanitizeFindings(rv.readArray(rv.roundFile(c.dir, round, 'raw.json'), 'raw findings'), false);
-  const { kept, dropped } = rv.filterFindings(list, { cfg: c.cfg, ledger: rv.readLedger(c.proj.path), baseDirs: baseDirs(c) });
+  const { kept, dropped } = rv.filterFindings(list, { cfg: c.cfg, ledger: rv.readLedger(c.wt), baseDirs: baseDirs(c) });
   json.save(rv.roundFile(c.dir, round, 'filtered.json'), dropped);
   json.save(rv.roundFile(c.dir, round, 'kept.json'), kept);
   const reasons = {};
@@ -183,7 +183,7 @@ function doFilter(ctx, a) {
     const role = c.cfg.roles.refuter || {};
     const keptPath = rv.roundFile(c.dir, round, 'kept.json');
     const prompt = rv.refuterInstructions({
-      task: c.task, briefPath: path.join(c.dir, 'brief.md'), reviewPath: path.join(c.proj.path, '.crew', 'REVIEW.md'),
+      task: c.task, briefPath: path.join(c.dir, 'brief.md'), reviewPath: path.join(c.wt, '.crew', 'REVIEW.md'),
       diffCmd: diffCommand(c), keptPath, round, cli: common.cliCommand(),
     });
     L.push(ctx.t('wf.review.refuteNext', { agent: role.agent || 'crew-refuter', model: role.model || 'sonnet' }), '--- prompt ---', prompt, '--- end ---');
@@ -272,20 +272,20 @@ function doDismiss(ctx, a) {
   const problems = rv.validateFinding(f, c.cfg.review.categories);
   if (problems.length) throw new CrewError('wf.review.cannotDismiss', { id: a.finding, detail: problems.join('; ') });
   const fp = f0.downgraded_from || typeof f0.fingerprint !== 'string' ? rv.fingerprint(f) : f0.fingerprint;
-  const dup = rv.readLedger(c.proj.path).find((e) => e.fingerprint === fp && e.scope === a.scope);
+  const dup = rv.readLedger(c.wt).find((e) => e.fingerprint === fp && e.scope === a.scope);
   const entry = {
     fingerprint: fp, category: f.category, file: String(f.file).replace(/\\/g, '/'), symbol: f.symbol || '',
     ...digestOf(f0), reason: clean(a.reason, 500), scope: a.scope,
     decided_by: clean(a.by, 60), date: common.today(),
   };
-  if (!dup) rv.appendLedger(c.proj.path, entry);
+  if (!dup) rv.appendLedger(c.wt, entry);
   events.append(c.proj.id, {
     type: 'review.finding_dismissed', src: 'cli', task: c.task.id,
     data: { finding: a.finding, scope: a.scope, category: f.category, file: entry.file, reason: entry.reason }, key: `${a.finding}:${fp}:${a.scope}`,
   });
   let lesson = null;
   if (a.scope === 'always') {
-    lesson = lessons.add(c.proj.path, c.proj.id, {
+    lesson = lessons.add(c.wt, c.proj.id, {
       key: `review-dismissed-${common.slug(f.category, 40)}`, kind: 'dismissal',
       text: `Dismissed a ${f.category} finding for good (${entry.reason}). Consider a rule in .crew/REVIEW.md.`,
     });
