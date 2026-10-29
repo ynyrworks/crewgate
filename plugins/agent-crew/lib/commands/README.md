@@ -52,3 +52,30 @@ Rules
 | `mr` | `set N "title" [--ci passed\|failed\|running] [--merged yes\|no]`, `list` |
 | `validate` | `set ID YYYY-MM-DD "host" "result"`, `list` |
 | `import` | `agent-board <data dir> --from-project <id> [--force]` |
+
+## board
+
+`crew board start [--port N] [--no-open]` launches `crew board serve` detached and waits until
+`/api/health` answers; `stop`, `status` (exit 1 when not running) and `serve` (foreground) complete the
+group. State lives in `<home>/board.json` (`{ pid, port, started }`), the server log in `<home>/board.log`.
+Default port: global config `port` (or `board.port`), else 8781; when it is busy the next 20 ports are
+tried. An explicit `--port` never searches. `stop` only signals a process whose `/api/health` answers as
+agent-crew, so a recycled pid is never killed. Test hooks: `AGENT_CREW_CLAUDE_ROOT` and
+`AGENT_CREW_CODEX_ROOT` move the session-log roots the board reads.
+
+The server (`board/server.js`) listens on 127.0.0.1 only and enforces the rules of DESIGN section 10.
+Endpoints (all JSON; reads are GET, every write is POST with `Content-Type: application/json` and the
+`X-Crew-Token` header taken from the page's `<meta name="crew-token">`):
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/health` | `{ ok: true, name: "agent-crew", version }` (used by `crew doctor`) |
+| `GET /api/meta`, `/api/schema` | defaults, and `config.SCHEMA` / `GLOBAL_SCHEMA` for the Settings form |
+| `GET /api/overview` | every registered project: tasks by state, open needs, live subagents, last activity |
+| `GET /api/project/<id>` | tasks (history, returns, review stats), sessions, store data, handoffs, lessons, events |
+| `GET /api/sessions`, `/api/usage[?days=N]` | live session list (no message text unless `show_text` is true); token/cost report |
+| `GET\|POST /api/config`, `/api/project/<id>/config` | read / save settings; body `{ config: { ...changed fields } }`; invalid input is a 400 with `errors: [{ path, message }]` |
+| `POST /api/project/<id>/need`, `need/done`, `work`, `work/rm`, `log` | board store writes (events carry `src: "board"`) |
+
+Optional global config keys read defensively: `show_text` (boolean, default false; shows a short redacted
+snippet of the last assistant message in the Sessions list).
