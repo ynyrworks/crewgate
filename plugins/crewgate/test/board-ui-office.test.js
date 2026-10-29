@@ -29,22 +29,34 @@ test('sprites: every row has the same width and uses only known palette letters'
   }
 });
 
-test('sprites: characters are 16x16, hats 16x4, and every theme defines every palette letter', () => {
-  for (const [k, rows] of Object.entries(SP.CHAR)) assert.deepEqual(SP.size(rows), { w: 16, h: 16 }, k);
-  for (const [k, rows] of Object.entries(SP.HAT)) assert.deepEqual(SP.size(rows), { w: 16, h: 4 }, k);
-  assert.deepEqual(Object.keys(SP.HAT).sort(), ['orchestrator', 'refuter', 'reviewer', 'worker']);
+test('sprites: characters are 24x32 in every frame, style and role; every theme defines every palette letter', () => {
+  assert.deepEqual([SP.CHAR_W, SP.CHAR_H], [24, 32]);
+  for (const f of SP.FRAME_NAMES) for (let s = 0; s < SP.STYLES; s++) for (const r of SP.ROLE_NAMES) assert.deepEqual(SP.size(SP.character(f, s, r)), { w: 24, h: 32 }, `${f}.${s}.${r}`);
+  assert.deepEqual(SP.ROLE_NAMES.slice(0, 4).sort(), ['orchestrator', 'refuter', 'reviewer', 'worker']);
+  // a role hat changes the picture, and so does every hair style
+  const px = (rows) => rows.join('|');
+  assert.notEqual(px(SP.character('stand', 0, 'worker')), px(SP.character('stand', 0, 'other')));
+  const styles = new Set([0, 1, 2, 3].map((s) => px(SP.character('stand', s, 'other'))));
+  assert.equal(styles.size, SP.STYLES);
+  assert.notEqual(px(SP.character('stand', 0, 'other')), px(SP.character('blink', 0, 'other')));
   for (const theme of ['light', 'dark']) {
-    for (const ch of Object.keys(SP.LEGEND)) assert.match(SP.PALETTES[theme][ch] || '', /^#[0-9a-f]{6}$/i, `${theme}.${ch}`);
+    for (const ch of Object.keys(SP.LEGEND)) assert.match(SP.PALETTES[theme][ch] || '', /^(#[0-9a-f]{6}|rgba\(.+\))$/i, `${theme}.${ch}`);
     assert.deepEqual(Object.keys(SP.ENGINES[theme]).sort(), ['claude', 'codex']);
-    assert.deepEqual(Object.keys(SP.ROLE_COLORS[theme]).sort(), Object.keys(SP.HAT).sort());
-    // the two engines must not look alike
+    assert.deepEqual(Object.keys(SP.ROLE_COLORS[theme]).sort(), SP.ROLE_NAMES.slice(0, 4).sort());
     assert.notEqual(SP.ENGINES[theme].claude.b, SP.ENGINES[theme].codex.b);
+    assert.ok(SP.HAIR[theme].length >= OM.HAIRS && SP.SKIN[theme].length >= OM.SKINS);
+    SP.HAIR[theme].forEach((h) => assert.deepEqual(Object.keys(h).sort(), ['H', 'J', 'h']));
+    SP.SKIN[theme].forEach((k) => assert.deepEqual(Object.keys(k).sort(), ['S', 'q', 's']));
   }
-  assert.equal(SP.HAIR.length, SP.HAIR_DARK.length);
-  assert.equal(SP.SKIN.length, SP.SKIN_DARK.length);
-  // furniture fits a desk cell
+  assert.equal(SP.STYLES, OM.STYLES);
+  assert.equal(SP.HAIR.light.length, OM.HAIRS);
+  assert.equal(SP.SKIN.light.length, OM.SKINS);
+  // furniture fits a desk cell and the model agrees with the sprite file about the cell
+  assert.equal(SP.CELL.w, OM.CELL_W);
+  assert.equal(SP.CELL.h, OM.CELL_H);
   assert.ok(SP.SPRITES.desk[0].length <= SP.CELL.w);
   assert.ok(SP.SPRITES.bubbleSpeech[0].length <= SP.CELL.w);
+  assert.ok(SP.CELL.charX + SP.CHAR_W <= SP.CELL.w && SP.CELL.charY + SP.CHAR_H <= SP.CELL.h);
 });
 
 test('state -> animation mapping', () => {
@@ -84,17 +96,28 @@ test('tool kinds pick the icon', () => {
   assert.equal(k(undefined), 'other');
 });
 
-test('looks: engine colour, role hat and appearance are stable per session', () => {
+test('looks: engine colour, role hat and appearance map deterministically from the session id', () => {
   const r = row({ id: 'abc', engine: 'codex', role: 'reviewer' });
   assert.deepEqual(OM.looks(r), OM.looks({ ...r }));
+  assert.deepEqual(OM.looks(r), OM.looks({ ...r, status: 'working', task: { id: 'x' } }), 'only the id, engine and role matter');
   assert.equal(OM.looks(r).engine, 'codex');
   assert.equal(OM.looks(r).role, 'reviewer');
   assert.equal(OM.looks(row({ role: 'weird' })).role, 'other');
   assert.equal(OM.looks(row({ engine: 'whatever' })).engine, 'claude');
-  for (let i = 0; i < 50; i++) {
+  const seen = { style: new Set(), hair: new Set(), skin: new Set() };
+  for (let i = 0; i < 300; i++) {
     const l = OM.looks(row({ id: `id-${i}` }));
-    assert.ok(l.hair >= 0 && l.hair < SP.HAIR.length && l.skin >= 0 && l.skin < SP.SKIN.length);
+    assert.deepEqual(l, OM.looks(row({ id: `id-${i}` })));
+    assert.ok(l.style >= 0 && l.style < SP.STYLES && Number.isInteger(l.style));
+    assert.ok(l.hair >= 0 && l.hair < SP.HAIR.light.length && Number.isInteger(l.hair));
+    assert.ok(l.skin >= 0 && l.skin < SP.SKIN.light.length && Number.isInteger(l.skin));
+    assert.ok(l.phase >= 0 && l.phase < 2400);
+    seen.style.add(l.style); seen.hair.add(l.hair); seen.skin.add(l.skin);
   }
+  // people look distinct: every option gets used
+  assert.equal(seen.style.size, SP.STYLES);
+  assert.equal(seen.hair.size, SP.HAIR.light.length);
+  assert.equal(seen.skin.size, SP.SKIN.light.length);
 });
 
 const ids = (arr) => arr.filter(Boolean);
@@ -197,19 +220,20 @@ test('layout: pods per row follow maxCols but never reassign seats', () => {
   assert.equal(three.rooms[0].cols, 3);
   assert.ok(three.rooms[0].w > one.rooms[0].w);
   assert.ok(three.rooms[0].h < one.rooms[0].h);
-  assert.equal(OM.layout(st, { maxCols: 99 }).rooms[0].cols, 5 > 99 ? 99 : 5);
+  assert.equal(OM.layout(st, { maxCols: 99 }).rooms[0].cols, 5);
 });
 
 test('planFor: integer scale, fits a 375 px phone', () => {
   for (const w of [0, 200, 343, 600, 900, 1400]) {
     const p = OM.planFor(w);
     assert.ok(Number.isInteger(p.scale) && p.scale >= 1, `scale at ${w}`);
-    assert.ok(p.maxCols >= 1 && p.maxCols <= 3);
+    assert.ok(p.maxCols >= 1 && p.maxCols <= 4);
   }
   const phone = OM.planFor(375 - 32);
   const pod = OM.layout(OM.assign(null, [row({ id: 'only' })]), { maxCols: phone.maxCols });
   assert.ok(pod.rooms[0].w * phone.scale <= 375 - 32, 'one pod fits the phone width');
   assert.ok(OM.planFor(1400).maxCols >= OM.planFor(343).maxCols);
+  assert.equal(OM.planFor(1400).scale, 2, 'finer pixels: 2x on desktop');
 });
 
 test('privacy gating of tooltip facts matches the sessions list', () => {

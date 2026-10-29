@@ -9,7 +9,7 @@
   if (!M || !SP) return;
 
   var FRAME_MS = 100;        // ~10 fps
-  var WALK_MS = 3200;        // how long a finished session takes to leave
+  var WALK_MS = 3800;        // how long a finished session takes to leave
   var CELL = SP.CELL;
   var darkMq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
   var motionMq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
@@ -58,35 +58,37 @@
     }
     return cache[key];
   }
-  // a character frame with the shirt of its engine, the hat of its role and its own hair and skin
+  // a character frame: its hair style, hair colour and skin tone, the shirt of its engine, the hat of its role
   function character(frame, look) {
     var th = theme();
-    var key = th + ':c:' + frame + look.engine + look.role + look.hair + look.skin;
+    var key = th + ':c:' + frame + look.style + look.engine + look.role + look.hair + look.skin;
     if (!cache[key]) {
       var pal = SP.PALETTES[th];
       var eng = SP.ENGINES[th][look.engine];
-      var hat = SP.HAT[look.role];
-      var rows = SP.CHAR[frame].map(function (row, y) {
-        if (!hat || y >= hat.length) return row;
-        var out = '';
-        for (var x = 0; x < row.length; x++) out += hat[y].charAt(x) !== '.' ? hat[y].charAt(x) : row.charAt(x);
-        return out;
-      });
-      var color = function (ch) {
-        if (ch === 'b') return eng.b;
-        if (ch === 'd') return eng.d;
-        if (ch === 'h') return (th === 'dark' ? SP.HAIR_DARK : SP.HAIR)[look.hair];
-        if (ch === 's') return (th === 'dark' ? SP.SKIN_DARK : SP.SKIN)[look.skin];
-        if (ch === 'r') return SP.ROLE_COLORS[th][look.role];
-        return pal[ch];
-      };
-      cache[key] = bake(rows, color);
+      var hair = SP.HAIR[th][look.hair];
+      var skin = SP.SKIN[th][look.skin];
+      var role = SP.ROLE_COLORS[th][look.role] || {};
+      cache[key] = bake(SP.character(frame, look.style, look.role), function (ch) { return eng[ch] || hair[ch] || skin[ch] || role[ch] || pal[ch]; });
     }
     return cache[key];
   }
   var ICONS = { file: 'iconFile', terminal: 'iconTerminal', search: 'iconSearch', agent: 'iconAgent', other: 'iconGear' };
+  var DONE_JUMP = 0.18;      // first part of the leaving animation: a happy hop at the desk
 
-  // ------------------------------------------------------------------ room background (floor, wall, furniture)
+  // ------------------------------------------------------------------ room background (wall, window, wood floor, rugs, furniture)
+  function mix(a, b, k) {
+    var pa = parseInt(a.slice(1), 16);
+    var pb = parseInt(b.slice(1), 16);
+    var ch = function (s) { return Math.round(((pa >> s) & 255) * (1 - k) + ((pb >> s) & 255) * k); };
+    return 'rgb(' + ch(16) + ',' + ch(8) + ',' + ch(0) + ')';
+  }
+  function roundRect(g, x, y, w, h, color) {
+    g.fillStyle = color;
+    g.fillRect(x + 2, y, w - 4, h);
+    g.fillRect(x, y + 2, w, h - 4);
+    g.fillRect(x + 1, y + 1, w - 2, h - 2);
+  }
+
   function drawBackground(room) {
     var th = theme();
     var sc = SP.SCENE[th];
@@ -97,21 +99,43 @@
     if (!g) return c;
     var wallH = M.WALL_H;
     g.fillStyle = sc.wall; g.fillRect(0, 0, room.w, wallH);
-    g.fillStyle = sc.wallDark; g.fillRect(0, wallH - 6, room.w, 3);
-    g.fillStyle = sc.base; g.fillRect(0, wallH - 3, room.w, 3);
-    for (var y = wallH; y < room.h; y += 8) {
-      for (var x = 0; x < room.w; x += 8) {
-        g.fillStyle = ((x + y) / 8) % 2 ? sc.floorA : sc.floorB;
-        g.fillRect(x, y, Math.min(8, room.w - x), Math.min(8, room.h - y));
-      }
+    g.fillStyle = sc.wallLow; g.fillRect(0, wallH - 16, room.w, 12);
+    g.fillStyle = sc.base; g.fillRect(0, wallH - 4, room.w, 4);
+    // windows with a soft sky and a cloud
+    var n = Math.max(1, Math.floor((room.w - 90) / 60));
+    for (var i = 0; i < n; i++) {
+      var span = room.w - 34 - 56 - 30;
+      var wx = n === 1 ? Math.round((room.w - 30) / 2) : Math.round(34 + i * span / (n - 1));
+      g.fillStyle = sc.frame; g.fillRect(wx - 2, 6, 34, 28);
+      for (var r = 0; r < 12; r++) { g.fillStyle = mix(sc.skyTop, sc.skyLow, r / 11); g.fillRect(wx, 8 + r * 2, 30, 2); }
+      g.fillStyle = sc.cloud; g.fillRect(wx + 5, 14, 10, 3); g.fillRect(wx + 8, 12, 6, 2); g.fillRect(wx + 18, 20, 7, 2);
+      g.fillStyle = sc.frame; g.fillRect(wx + 14, 8, 2, 24); g.fillRect(wx, 19, 30, 2);
     }
-    room.pods.forEach(function (p) { g.fillStyle = sc.rug; g.fillRect(p.x + 1, p.y + 2, p.w - 2, p.h - 4); });
-    g.drawImage(sprite('plant'), 4, wallH - 12);
-    g.drawImage(sprite('coffee'), room.w - 22, wallH - 14);
-    g.drawImage(sprite('plant'), room.w - 38, wallH - 12);
+    // wooden floor: planks with offset joints and a little grain
+    for (var y = wallH, row = 0; y < room.h; y += 7, row++) {
+      g.fillStyle = row % 2 ? sc.floorA : sc.floorB;
+      g.fillRect(0, y, room.w, Math.min(7, room.h - y));
+      g.fillStyle = sc.grain;
+      g.fillRect(0, y, room.w, 1);
+      for (var x = (row * 23) % 46; x < room.w; x += 46) g.fillRect(x, y, 1, Math.min(7, room.h - y));
+      for (x = (row * 17) % 31 + 8; x < room.w; x += 53) g.fillRect(x, y + 3, 5, 1);
+    }
+    room.pods.forEach(function (p) {
+      roundRect(g, p.x, p.y + 2, p.w, p.h - 4, sc.rug);
+      g.strokeStyle = sc.rugEdge; g.lineWidth = 1;
+      g.strokeRect(p.x + 4.5, p.y + 6.5, p.w - 9, p.h - 12);
+    });
+    g.drawImage(sprite('plant'), 6, wallH - 18);
+    g.drawImage(sprite('coffee'), room.w - 28, wallH - 20);
+    g.drawImage(sprite('plant'), room.w - 50, wallH - 18);
     room.desks.forEach(function (d) {
+      g.drawImage(sprite('shadowDesk'), d.x + CELL.shadowX, d.y + CELL.shadowY);
       g.drawImage(sprite('chair'), d.x + CELL.chairX, d.y + CELL.chairY);
-      if (d.free) drawDesk(g, d, null);
+      if (d.free) {
+        drawDesk(g, d, null, 0);
+        g.drawImage(sprite('mug'), d.x + CELL.mugX, d.y + CELL.mugY);
+        g.drawImage(sprite('lampOff'), d.x + CELL.lampX, d.y + CELL.lampY);
+      }
     });
     return c;
   }
@@ -125,12 +149,12 @@
       var sx = desk.x + CELL.monX + 1;
       var sy = desk.y + CELL.monY + 1;
       if (screen === 'busy') {
-        g.fillStyle = pal.C; g.fillRect(sx, sy, 8, 5);
+        g.fillStyle = pal.C; g.fillRect(sx, sy, 14, 9);
         g.fillStyle = pal.c;
         var f = Math.floor(t / 180);
-        for (var i = 0; i < 3; i++) g.fillRect(sx + 1, sy + i * 2, 2 + ((f * (i + 2)) % 5), 1);
+        for (var i = 0; i < 4; i++) g.fillRect(sx + 1, sy + 1 + i * 2, 3 + ((f * (i + 2) + i * 3) % 9), 1);
       } else {
-        g.globalAlpha = 0.55; g.fillStyle = pal.C; g.fillRect(sx, sy, 8, 5); g.globalAlpha = 1;
+        g.globalAlpha = 0.55; g.fillStyle = pal.C; g.fillRect(sx, sy, 14, 9); g.globalAlpha = 1;
       }
     }
     g.drawImage(sprite('keyboard'), desk.x + CELL.kbX, desk.y + CELL.kbY);
@@ -148,71 +172,90 @@
     var A = it.anim;
     var calm = reduced();
     var p = A.pose === 'away' ? awayProgress(it.row.id, t) : 0;
-    var leaving = p > 0.08;
+    var leaving = p > DONE_JUMP;
+    var hopping = A.pose === 'away' && p > 0 && !leaving;
     var x = desk.x + CELL.charX;
     var y = desk.y + CELL.charY;
-    var sip = A.coffee && !calm && Math.floor(t / 900) % 3 === 2;
+    var ph = t + it.look.phase;
+    var sip = A.coffee && !calm && Math.floor(ph / 900) % 3 === 2;
     if (!leaving) {
-      if (A.bounce && !calm) y -= Math.round(Math.abs(Math.sin(t / 260)) * 2);
-      var frame = sip || (!calm && t % 4200 < 140) ? 'blink' : 'stand';
+      var frame = 'stand';
+      if (hopping) { frame = 'happy'; y -= Math.round(Math.abs(Math.sin(p / DONE_JUMP * Math.PI * 2)) * 7); }
+      else if (!calm) {
+        y += Math.floor(ph / 900) % 2;                                    // breathing
+        if (A.bounce) y -= Math.round(Math.abs(Math.sin(t / 260)) * 3);   // waiting for you: a little hop
+        if (sip || ph % 4200 < 150) frame = 'blink';                      // sipping, or a blink
+        else if (A.bubble === 'think' && Math.floor(ph / 1300) % 2) frame = 'tilt';
+      }
       g.drawImage(character(frame, it.look), x, y);
     }
-    drawDesk(g, desk, leaving ? { screen: 'off' } : A, t);
-    if (A.typing && !leaving) g.drawImage(sprite(!calm && Math.floor(t / 150) % 2 ? 'handsB' : 'handsA'), desk.x + CELL.handsX, desk.y + CELL.handsY);
-    if (sip) g.drawImage(sprite('mug'), desk.x + CELL.mugX - 2, desk.y + CELL.mugY - 9);
+    var seated = !leaving && !hopping;
+    drawDesk(g, desk, seated ? A : { screen: 'off' }, t);
+    if (A.typing && seated) g.drawImage(sprite(!calm && Math.floor(t / 150) % 2 ? 'handsB' : 'handsA'), desk.x + CELL.handsX, desk.y + CELL.handsY);
+    if (sip) g.drawImage(sprite('mug'), desk.x + CELL.mugX + 3, desk.y + CELL.mugY - 15);
     else g.drawImage(sprite('mug'), desk.x + CELL.mugX, desk.y + CELL.mugY);
-    g.drawImage(sprite(A.lamp && !leaving ? 'lampOn' : 'lampOff'), desk.x + CELL.lampX, desk.y + CELL.lampY);
+    if (A.coffee && !calm && seated) {   // a wisp of steam
+      g.globalAlpha = 0.6; g.fillStyle = SP.PALETTES[theme()].w;
+      var s = Math.floor(t / 400) % 3;
+      g.fillRect(desk.x + CELL.mugX + 1 + (s % 2), desk.y + CELL.mugY - 2 - s, 1, 2);
+      g.globalAlpha = 1;
+    }
+    g.drawImage(sprite(A.lamp && seated ? 'lampOn' : 'lampOff'), desk.x + CELL.lampX, desk.y + CELL.lampY);
     var sc = SP.SCENE[theme()];
     if (A.highlight) {
-      g.globalAlpha = calm ? 1 : 0.45 + 0.55 * Math.abs(Math.sin(t / 380));
+      g.globalAlpha = calm ? 1 : 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(t / 420));
       g.strokeStyle = sc.ring; g.lineWidth = 1;
-      g.strokeRect(desk.x + 0.5, desk.y + 9.5, CELL.w - 1, 27);
+      g.strokeRect(desk.x + 1.5, desk.y + 20.5, CELL.w - 3, 48);
+      g.strokeRect(desk.x + 2.5, desk.y + 21.5, CELL.w - 5, 46);
       g.globalAlpha = 1;
     }
     if (hot) {
       g.strokeStyle = sc.ring; g.lineWidth = 1;
-      g.strokeRect(desk.x + 0.5, desk.y + 9.5, CELL.w - 1, 27);
-      g.strokeRect(desk.x + 1.5, desk.y + 10.5, CELL.w - 3, 25);
+      g.strokeRect(desk.x + 1.5, desk.y + 20.5, CELL.w - 3, 48);
+      g.strokeRect(desk.x + 2.5, desk.y + 21.5, CELL.w - 5, 46);
     }
   }
 
   function drawWalker(g, room, desk, it, t) {
     var p = awayProgress(it.row.id, t);
-    if (p <= 0.08 || p >= 1) return;
-    var q = (p - 0.08) / 0.92;
+    if (p <= DONE_JUMP || p >= 1) return;
+    var q = (p - DONE_JUMP) / (1 - DONE_JUMP);
     var x0 = desk.x + CELL.charX;
     var y0 = desk.y + CELL.charY;
     var drop = Math.min(1, q * 6);
     var x = Math.round(x0 + q * (room.w - x0 + 4));
-    var y = Math.round(y0 + drop * (desk.y + CELL.h - 17 - y0) - (Math.floor(t / 160) % 2));
-    g.drawImage(character(Math.floor(t / 160) % 2 ? 'walkA' : 'walkB', it.look), x, y);
+    var bob = Math.floor(t / 160) % 2;
+    var y = Math.round(y0 + drop * (desk.y + CELL.h - 33 - y0) - bob);
+    g.drawImage(sprite('shadowChar'), x + 1, y + 29);
+    g.drawImage(character(bob ? 'walkA' : 'walkB', it.look), x, y);
   }
 
   function drawBubble(g, desk, it, t) {
     var A = it.anim;
-    if (!A.bubble || (A.pose === 'away' && awayProgress(it.row.id, t) > 0.08)) return;
+    if (!A.bubble || (A.pose === 'away' && awayProgress(it.row.id, t) > 0)) return;
     var calm = reduced();
     var x = desk.x + CELL.bubbleX;
     var y = desk.y + CELL.bubbleY;
     var pal = SP.PALETTES[theme()];
-    if (A.bounce && !calm) y -= Math.round(Math.abs(Math.sin(t / 260)) * 2);
     var f = Math.floor(t / 350);
+    if (A.bounce && !calm) { y -= Math.round(Math.abs(Math.sin(t / 260)) * 3); g.globalAlpha = 0.82 + 0.18 * Math.sin(t / 420); }
     if (A.bubble === 'think') {
       g.drawImage(sprite('bubbleThink'), x, y);
       var lit = calm ? -1 : f % 4;
-      for (var i = 0; i < 3; i++) { g.fillStyle = calm || lit === i ? pal.D : pal.g; g.fillRect(x + 4 + i * 3, y + 4, 2, 2); }
+      for (var i = 0; i < 3; i++) { g.fillStyle = calm || lit === i ? pal.D : pal.G; g.fillRect(x + 7 + i * 5, y + 7 - (lit === i ? 1 : 0), 3, 3); }
     } else if (A.bubble === 'speech') {
       g.drawImage(sprite('bubbleSpeech'), x, y);
       g.fillStyle = pal.G;
-      g.fillRect(x + 2, y + 2, calm ? 9 : 3 + (f % 8), 1);
-      g.fillRect(x + 2, y + 5, calm ? 6 : 3 + ((f * 3) % 8), 1);
+      g.fillRect(x + 5, y + 5, calm ? 16 : 5 + (f % 12), 2);
+      g.fillRect(x + 5, y + 10, calm ? 10 : 5 + ((f * 5) % 12), 2);
     } else if (A.bubble === 'icon') {
       g.drawImage(sprite('bubbleSpeech'), x, y);
-      g.drawImage(sprite(ICONS[A.icon] || 'iconGear'), x + 4, y + 1);
+      g.drawImage(sprite(ICONS[A.icon] || 'iconGear'), x + 8, y + 3);
     } else if (A.bubble === 'alert') {
       g.drawImage(sprite('bubbleSpeech'), x, y);
-      g.drawImage(sprite('excl'), x + 6, y + 1);
+      g.drawImage(sprite('excl'), x + 12, y + 3);
     }
+    g.globalAlpha = 1;
   }
 
   function drawRoom(rc, t) {
@@ -363,7 +406,7 @@
     var y = (ev.clientY - r.top) * rc.canvas.height / r.height;
     for (var i = 0; i < rc.occupied.length; i++) {
       var d = rc.occupied[i];
-      if (x >= d.x && x < d.x + CELL.w && y >= d.y + 8 && y < d.y + 38) return d;
+      if (x >= d.x + 2 && x < d.x + CELL.w - 2 && y >= d.y + 20 && y < d.y + 70) return d;
     }
     return null;
   };
@@ -412,8 +455,8 @@
     var tip = this.tip;
     tip.hidden = false;
     var left = cr.left - sr.left + (desk.x + CELL.w / 2) * k - tip.offsetWidth / 2;
-    var top = cr.top - sr.top + (desk.y - 2) * k - tip.offsetHeight - 6;
-    if (top < 0) top = cr.top - sr.top + (desk.y + 38) * k + 6;
+    var top = cr.top - sr.top + (desk.y + 4) * k - tip.offsetHeight - 6;
+    if (top < 0) top = cr.top - sr.top + (desk.y + CELL.h - 4) * k + 6;
     left = Math.max(0, Math.min(left, Math.max(0, sr.width - tip.offsetWidth)));
     tip.style.left = Math.round(left) + 'px';
     tip.style.top = Math.round(top) + 'px';

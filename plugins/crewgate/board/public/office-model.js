@@ -9,14 +9,17 @@
   // Pure logic of the Office page (no DOM, no canvas): which animation a session gets, where each
   // session sits, and what its tooltip may say. office.js draws what these return.
 
-  var CELL_W = 32;
-  var CELL_H = 44;
+  var CELL_W = 48;
+  var CELL_H = 72;
   var POD_COLS = 3;          // a pod is 3 desks wide and grows a row per 3 members: orchestrator in the middle of the top row
   var POD_MIN_ROWS = 1;
   var POD_W = POD_COLS * CELL_W;
-  var POD_GAP = 4;
-  var ROOM_PAD = 8;
-  var WALL_H = 26;
+  var POD_GAP = 6;
+  var ROOM_PAD = 10;
+  var WALL_H = 44;
+  var STYLES = 4;            // hair styles, hair colours and skin tones a look can pick from
+  var HAIRS = 6;
+  var SKINS = 4;
   var ROLES = ['orchestrator', 'worker', 'reviewer', 'refuter'];
   var KINDS = ['thinking', 'tool', 'writing', 'waiting', 'idle', 'done'];
 
@@ -75,7 +78,10 @@
   }
   function looks(row) {
     var n = hash(row.id);
-    return { engine: row.engine === 'codex' ? 'codex' : 'claude', role: ROLES.indexOf(row.role) >= 0 ? row.role : 'other', hair: n % 4, skin: (n >>> 8) % 3 };
+    return {
+      engine: row.engine === 'codex' ? 'codex' : 'claude', role: ROLES.indexOf(row.role) >= 0 ? row.role : 'other',
+      style: n % STYLES, hair: (n >>> 4) % HAIRS, skin: (n >>> 9) % SKINS, phase: (n >>> 13) % 2400
+    };
   }
 
   // ---------------------------------------------------------------- layout
@@ -210,11 +216,11 @@
     return { rooms: rooms, pos: pos };
   }
 
-  // Pods per row for a content width in CSS pixels at an integer scale.
+  // Pods per row for a content width in CSS pixels at an integer scale (2x; 1x only on very narrow screens).
   function planFor(widthPx) {
     var w = Math.max(200, Math.floor(widthPx || 0));
-    var scale = w >= 300 ? 3 : 2;
-    var maxCols = Math.max(1, Math.min(3, Math.floor((w / scale - ROOM_PAD * 2 + POD_GAP) / (POD_W + POD_GAP))));
+    var scale = w >= 2 * (POD_W + ROOM_PAD * 2) ? 2 : 1;
+    var maxCols = Math.max(1, Math.min(4, Math.floor((w / scale - ROOM_PAD * 2 + POD_GAP) / (POD_W + POD_GAP))));
     return { scale: scale, maxCols: maxCols };
   }
 
@@ -254,6 +260,6 @@
   return {
     CELL_W: CELL_W, CELL_H: CELL_H, POD_W: POD_W, POD_GAP: POD_GAP, ROOM_PAD: ROOM_PAD, WALL_H: WALL_H, ROLES: ROLES,
     shownStatus: shownStatus, activityKind: activityKind, toolKind: toolKind, animFor: animFor, hash: hash, looks: looks,
-    slotPos: slotPos, rootOf: rootOf, assign: assign, layout: layout, planFor: planFor, describe: describe, activityLine: activityLine
+    STYLES: STYLES, HAIRS: HAIRS, SKINS: SKINS, slotPos: slotPos, rootOf: rootOf, assign: assign, layout: layout, planFor: planFor, describe: describe, activityLine: activityLine
   };
 }));
