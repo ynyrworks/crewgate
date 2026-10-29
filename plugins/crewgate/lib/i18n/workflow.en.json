@@ -170,5 +170,8 @@
   "wf.doctor.checksEmpty": "\"checks\" is empty: workers will not be told which tests to run. Add them to .claude/crew.json (or run `crew init` in a project it can recognise).",
   "wf.doctor.neverSeen": "never",
   "wf.doctor.hookSeenMissing": "never fired in this project: {events}. A session that started before the plugin was installed only gets these hooks after a restart",
-  "wf.doctor.workDuplicates": "items that look like duplicates (same title apart from case or spaces): {items}. Remove the extra ones with `crew work rm`"
+  "wf.doctor.workDuplicates": "items that look like duplicates (same title apart from case or spaces): {items}. Remove the extra ones with `crew work rm`",
+  "wf.doctor.hookErrors": "hook failures: {h24} in the last 24 h, {d7} in the last 7 days ({by}); details in {file}",
+  "wf.doctor.hookErrorsNone": "no hook failures in the last 7 days",
+  "wf.doctor.name.hookerrors": "Hook errors"
 }

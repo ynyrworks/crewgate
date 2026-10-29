@@ -31,11 +31,17 @@ function main() {
     process.stdout.write(`${out}\n`, () => process.exit(0));
   };
   if (!event) return finish('{}');
+  // A failure that answers {} is written to <home>/hook-errors.jsonl (never throws), so it is not silent.
+  const fail = (kind, msg) => {
+    if (done) return;
+    try { require('../lib/core/hooklog').log(event, kind, msg); } catch { /* logging must not break the hook */ }
+    finish('{}');
+  };
 
   // Keep lock waits short: a hook must not hold up the session.
   if (!process.env.CREWGATE_LOCK_WAIT_MS) process.env.CREWGATE_LOCK_WAIT_MS = '500';
   const guard = Number(process.env.CREWGATE_HOOK_GUARD_MS) || guardMs(event);
-  setTimeout(() => finish('{}'), guard).unref();
+  setTimeout(() => fail('guard', `no answer within ${guard} ms`), guard).unref();
 
   const chunks = [];
   let size = 0;
@@ -44,13 +50,13 @@ function main() {
   const start = () => {
     if (started) return;
     started = true;
-    if (over) return finish('{}');
+    if (over) return fail('error', 'stdin larger than the limit');
     try {
       worker = new Worker(__filename, { workerData: { event, input: Buffer.concat(chunks).toString('utf8') } });
       worker.on('message', (m) => finish(m));
-      worker.on('error', () => finish('{}'));
-      worker.on('exit', () => finish('{}'));
-    } catch { finish('{}'); }
+      worker.on('error', (e) => fail('error', e && e.message));
+      worker.on('exit', (code) => fail('worker_exit', `worker exited (code ${code}) without an answer`));
+    } catch (e) { fail('error', e && e.message); }
   };
   if (process.stdin.isTTY) return start();
   process.stdin.on('data', (c) => { size += c.length; if (size <= MAX_STDIN) chunks.push(c); else over = true; });
@@ -66,6 +72,7 @@ function work() {
       if (process.env.CREWGATE_TEST === '1' && process.env.CREWGATE_HOOK_TEST_SLEEP_MS) { // test-only: simulates a stuck handler
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(process.env.CREWGATE_HOOK_TEST_SLEEP_MS) || 0);
       }
+      if (process.env.CREWGATE_TEST === '1' && process.env.CREWGATE_HOOK_TEST_THROW) throw new Error(process.env.CREWGATE_HOOK_TEST_THROW); // test-only
       let payload = {};
       try {
         const text = input.charCodeAt(0) === 0xfeff ? input.slice(1) : input;
@@ -77,7 +84,9 @@ function work() {
       const r = mod.run(payload);
       if (r && typeof r === 'object') out = JSON.stringify(r);
     }
-  } catch { /* any internal error: {} */ }
+  } catch (e) { /* any internal error: {} */
+    try { require('../lib/core/hooklog').log(workerData.event, 'error', e && e.message); } catch { /* ignore */ }
+  }
   parentPort.postMessage(out);
 }
 

@@ -84,6 +84,8 @@ test('task merge records task.merged with the branch and a git.merge with the re
   const [gm] = evs(repo, 'git.merge');
   assert.deepEqual(gm.data.branches, ['feat/gap']);
   assert.equal(gm.data.commit, tip.slice(0, 12));
+  assert.equal(gm.data.target, h.git(repo, 'rev-parse', '--abbrev-ref', 'HEAD'));
+  assert.ok(gm.data.root, 'the work tree it was merged in is recorded');
   assert.ok(!JSON.stringify(gm).includes('$'));
 });
 

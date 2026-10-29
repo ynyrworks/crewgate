@@ -170,5 +170,8 @@
   "wf.doctor.checksEmpty": "\"checks\" 是空的：worker 不會被告知要跑哪些測試。請加到 .claude/crew.json（或在能辨識的專案裡執行 `crew init`）。",
   "wf.doctor.neverSeen": "從未",
   "wf.doctor.hookSeenMissing": "此專案從未觸發：{events}。外掛安裝前就開始的工作階段，要重新啟動後才會收到這些 hooks",
-  "wf.doctor.workDuplicates": "疑似重複的項目（標題只差大小寫或空白）：{items}。多的請用 `crew work rm` 移除"
+  "wf.doctor.workDuplicates": "疑似重複的項目（標題只差大小寫或空白）：{items}。多的請用 `crew work rm` 移除",
+  "wf.doctor.hookErrors": "hook 失敗：近 24 小時 {h24} 次、近 7 天 {d7} 次（{by}）；詳見 {file}",
+  "wf.doctor.hookErrorsNone": "近 7 天沒有 hook 失敗",
+  "wf.doctor.name.hookerrors": "Hook 錯誤"
 }

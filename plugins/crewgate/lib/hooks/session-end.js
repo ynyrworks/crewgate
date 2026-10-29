@@ -46,7 +46,7 @@ function run(payload) {
     flags,
   };
   try {
-    events.append(h.pid, { type: 'session.end', src: 'hook', session: h.sid, data: digest, key: h.sid ? `${h.sid}:${s.started || ''}:${s.prompts || 0}:${s.tool_total || 0}` : `end:${Date.now()}` });
+    events.append(h.pid, { type: 'session.end', src: 'hook', session: h.sid, data: digest, key: h.sid ? `${h.sid}:${s.started || ''}` : `end:${Date.now()}` });
   } catch { /* ignore */ }
 
   if (flags.length && reason !== 'resume' && s.project) {

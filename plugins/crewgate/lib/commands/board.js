@@ -100,10 +100,28 @@ function writeState(port) {
   json.save(stateFile(), { pid: process.pid, port, started: new Date().toISOString() });
 }
 
+// Prefixes every line written through a stream with an ISO timestamp (board.log has none otherwise).
+// Chunks that end mid-line keep the prefix for the line that continues them.
+function stampLines(stream, now = () => new Date()) {
+  const write = stream.write.bind(stream);
+  let atStart = true;
+  stream.write = (chunk, enc, cb) => {
+    let text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
+    if (typeof enc === 'function') { cb = enc; enc = undefined; }
+    if (!text) return write(chunk, enc, cb);
+    const ts = `${now().toISOString()} `;
+    const endsNl = text.endsWith('\n');
+    text = text.split('\n').map((l, i, a) => ((i === 0 && !atStart) || (i === a.length - 1 && endsNl) ? l : ts + l)).join('\n');
+    atStart = endsNl;
+    return write(text, enc, cb);
+  };
+}
+
 // Launches `board serve` detached from the given crew.js; its output goes to the board log.
 function spawnServe(bin, port, { search = false } = {}) {
   fs.mkdirSync(paths.home(), { recursive: true });
   const fd = fs.openSync(logFile(), 'a');
+  try { fs.writeSync(fd, `${new Date().toISOString()} starting board serve (port ${port})\n`); } catch { /* the log is best effort */ }
   const child = spawn(process.execPath, [bin, 'board', 'serve', '--port', String(port), ...(search ? ['--search'] : [])], {
     detached: true, stdio: ['ignore', fd, fd], windowsHide: true, env: process.env,
   });
@@ -115,6 +133,8 @@ function spawnServe(bin, port, { search = false } = {}) {
 // Foreground server. Without `search` the exact port is required; with it the next free ports are tried.
 async function serve(ctx, port, search) {
   const { createBoard } = require('../../board/server');
+  stampLines(process.stdout);
+  stampLines(process.stderr);
   let bound = null;
   // After a one-click update: free the port, start the updated code on it, and leave only when it answers.
   // If it never does, take the port back so the old board keeps working.
@@ -225,6 +245,7 @@ module.exports = {
   run,
   openPlan,
   spawnServe,
+  stampLines,
   readState,
   health,
   running,

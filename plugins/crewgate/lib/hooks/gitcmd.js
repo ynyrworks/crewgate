@@ -8,21 +8,96 @@ const OPS = new Set(['&&', '||', ';', '|', '&', '\n', '(', ')']);
 const SKIP_WORDS = new Set(['sudo', 'env', 'command', 'time', 'nohup', 'nice', 'exec', 'builtin',
   'if', 'then', 'else', 'elif', 'do', 'while', 'until', '!', '{', 'xargs']);
 
+// Redirections (`2>&1`, `>&2`, `&>f`, `>f`, `2>/dev/null`, `<in`) are not words of the command: the operator and
+// its target word are dropped. Heredoc bodies (`<<EOF`, `<<-'EOF'`, ...) are literal text, not commands: they are
+// skipped up to the delimiter line.
+const DIGITS = /\d/;
+
+// Reads a redirect operator starting at s[i] (after an optional fd number).
+// -> { end, target, heredoc } | null. end: index after the operator (and after an attached `&1` / `&-`);
+// target: a target word follows (dropped); heredoc: { strip } for `<<` / `<<-` (the next word is the delimiter).
+function redirectAt(s, i) {
+  let j = i;
+  while (DIGITS.test(s[j] || '')) j++;
+  const c = s[j];
+  if (c !== '>' && c !== '<' && !(c === '&' && s[j + 1] === '>')) return null;
+  const fdDup = () => {
+    const m = /^&(\d+|-)/.exec(s.slice(j, j + 24));
+    if (m) { j += m[0].length; return true; }
+    return false;
+  };
+  if (c === '&') { j += 2; if (s[j] === '>') j++; return { end: j, target: true }; } // &> / &>>
+  if (c === '>') {
+    j++;
+    if (s[j] === '>' || s[j] === '|') j++;
+    else if (s[j] === '&') { if (fdDup()) return { end: j, target: false }; j++; }
+    return { end: j, target: true };
+  }
+  j++; // '<'
+  if (s[j] === '<') {
+    j++;
+    if (s[j] === '<') { j++; return { end: j, target: true }; } // here-string: the word is dropped
+    let strip = false;
+    if (s[j] === '-') { strip = true; j++; }
+    return { end: j, target: true, heredoc: { strip } };
+  }
+  if (s[j] === '>') j++;
+  else if (s[j] === '&') { if (fdDup()) return { end: j, target: false }; j++; }
+  return { end: j, target: true };
+}
+
+// Index of the last char of the heredoc bodies that start after the newline at s[nl].
+// Safety rule: when a terminator line cannot be found, nothing is skipped for that heredoc (and the ones after
+// it): scanning the rest may give a false event, swallowing it could hide a real push.
+function skipHeredocs(s, nl, pending) {
+  let pos = nl + 1;
+  for (const h of pending) {
+    let p = pos;
+    let found = false;
+    while (p < s.length) {
+      let e = s.indexOf('\n', p);
+      if (e < 0) e = s.length;
+      let line = s.slice(p, e).replace(/\r$/, '');
+      if (h.strip) line = line.replace(/^\t+/, '');
+      p = e + 1;
+      if (line === h.delim) { found = true; break; }
+    }
+    if (!found) return pos - 1;
+    pos = p;
+  }
+  return Math.min(pos, s.length) - 1;
+}
+
 function tokenize(cmd) {
   const toks = [];
   let cur = '';
   let has = false;
-  const flush = () => { if (has) toks.push(cur); cur = ''; has = false; };
+  let skipNext = false;   // the next word is a redirect target
+  let hereNext = null;    // the next word is a heredoc delimiter: { strip }
+  let quoted = false;     // the current word has a quoted part
+  const heredocs = [];    // delimiters whose bodies follow the next newline
+  const flush = () => {
+    if (has) {
+      // bash: a quoted delimiter is literal; backslash-quoting is removed only from an unquoted one
+      if (hereNext) { heredocs.push({ delim: quoted ? cur : cur.split('\\').join(''), strip: hereNext.strip }); hereNext = null; skipNext = false; }
+      else if (skipNext) skipNext = false;
+      else toks.push(cur);
+    }
+    cur = ''; has = false; quoted = false;
+  };
+  const op = (o) => { skipNext = false; hereNext = null; toks.push({ op: o }); };
   const s = String(cmd).slice(0, MAX_CMD);
   for (let i = 0; i < s.length && toks.length < MAX_TOKENS; i++) {
     const c = s[i];
+    let r = null;
+    if (c === '>' || c === '<' || (c === '&' && s[i + 1] === '>') || (DIGITS.test(c) && !has)) r = redirectAt(s, i);
     if (c === "'") {
-      has = true;
+      has = true; quoted = true;
       const j = s.indexOf("'", i + 1);
       cur += s.slice(i + 1, j < 0 ? s.length : j);
       i = j < 0 ? s.length : j;
     } else if (c === '"') {
-      has = true;
+      has = true; quoted = true;
       let j = i + 1;
       for (; j < s.length && s[j] !== '"'; j++) {
         if (s[j] === '\\' && j + 1 < s.length && '"\\$`'.includes(s[j + 1])) j++;
@@ -33,11 +108,23 @@ function tokenize(cmd) {
       i++;
     } else if (c === ' ' || c === '\t' || c === '\r') {
       flush();
-    } else if (c === '\n' || c === ';' || c === '(' || c === ')') {
-      flush(); toks.push({ op: c });
+    } else if (c === '#' && !has) {
+      // a comment runs to the end of the line (the newline itself stays an operator)
+      const e = s.indexOf('\n', i);
+      i = (e < 0 ? s.length : e) - 1;
+    } else if (r) {
+      flush();
+      i = r.end - 1;
+      if (r.heredoc) hereNext = r.heredoc;
+      else if (r.target) skipNext = true;
+    } else if (c === '\n') {
+      flush(); op(c);
+      if (heredocs.length) i = skipHeredocs(s, i, heredocs.splice(0));
+    } else if (c === ';' || c === '(' || c === ')') {
+      flush(); op(c);
     } else if (c === '&' || c === '|') {
       flush();
-      if (s[i + 1] === c) { toks.push({ op: c + c }); i++; } else toks.push({ op: c });
+      if (s[i + 1] === c) { op(c + c); i++; } else op(c);
     } else {
       cur += c; has = true;
     }

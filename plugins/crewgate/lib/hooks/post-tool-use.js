@@ -2,6 +2,8 @@
 
 // PostToolUse: foreground subagent completion (Agent/Task) and git/PR commands (Bash).
 const path = require('path');
+const { spawnSync } = require('child_process');
+const project = require('../core/project');
 const events = require('../core/events');
 const tasks = require('../core/tasks');
 const C = require('./common');
@@ -58,6 +60,30 @@ function mergeEvents(f, merges, mergeCommands) {
   if (!merges.length) return [d];
   if (d.dynamic && mergeCommands === 1 && merges.length > 1) return merges.map((m, i) => ({ ...d, ...m, seq: i + 1, of: merges.length }));
   return [{ ...d, merged: merges.length, outcome: merges[0].outcome, ...(merges[0].range ? { range: merges[0].range } : {}) }];
+}
+
+// True when `crew task merge` (src cli) recorded this very merge in the last minute: the same set of branches
+// into the same branch of the same work tree. The hook then keeps quiet so the merge is not counted twice.
+// Anything else (another target, another work tree, a longer branch list, a CLI record without a target) is kept.
+// Reading the log and asking git only happens for named merges.
+const CLI_MERGE_WINDOW_MS = 60 * 1000;
+const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+function gitOut(args, cwd) {
+  const r = spawnSync('git', args, { cwd, encoding: 'utf8', timeout: 3000, windowsHide: true });
+  return r.status === 0 ? String(r.stdout).trim() : '';
+}
+function cliMergeRecorded(pid, data, dir) {
+  if (!Array.isArray(data.branches) || !data.branches.length) return false;
+  try {
+    const cand = events.read(pid, { types: 'git.merge', since: Date.now() - CLI_MERGE_WINDOW_MS }).filter((e) => e.src === 'cli'
+      && e.data && e.data.target && e.data.root && Array.isArray(e.data.branches) && sameSet(e.data.branches, data.branches));
+    if (!cand.length) return false;
+    const target = gitOut(['rev-parse', '--abbrev-ref', 'HEAD'], dir);
+    const top = gitOut(['rev-parse', '--show-toplevel'], dir);
+    if (!target || !top) return false;
+    const root = project.normalizePath(top);
+    return cand.some((e) => e.data.target === target && e.data.root === root);
+  } catch { return false; }
 }
 
 // Git-Bash style /c/work/x (and /cygdrive/c/...) -> C:/work/x; only on Windows, other words pass through.
@@ -134,6 +160,7 @@ function onBash(payload) {
     if (!fh) return;
     if (!byProject.has(fh.pid)) byProject.set(fh.pid, { h: fh, found: [] });
     byProject.get(fh.pid).found.push(f);
+    if (f.type === 'git.merge' && cliMergeRecorded(fh.pid, f.data, targetDir(sessionCwd, f.cd) || sessionCwd)) return; // `crew task merge` already recorded it
     const list = f.type === 'git.merge' ? mergeEvents(f, merges, found.filter((x) => x.type === 'git.merge').length) : [f.data];
     list.forEach((data, k) => {
       try {
