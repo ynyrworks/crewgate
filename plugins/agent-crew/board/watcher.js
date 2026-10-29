@@ -16,8 +16,9 @@ const DEFAULTS = {
   windowMs: 24 * 60 * MIN,   // files older than this are not listed
   workMs: 3 * MIN,           // "working" needs activity this recent
   toolMs: 15 * MIN,          // a tool call may run longer than a model turn
-  waitMs: 60 * MIN,          // "waiting for user" turns into "idle" after this
-  doneMs: 6 * 60 * MIN,      // untouched this long: done
+  waitMs: 30 * MIN,          // "waiting for user" turns into "idle" after this (board.session_idle_minutes)
+  doneMs: 6 * 60 * MIN,      // untouched this long: done (board.session_done_hours)
+  closedMs: 3 * MIN,         // a closing record counts only after this much quiet (a prompt may follow it)
   maxFiles: 300,
   ttlMs: 1500,
 };
@@ -90,12 +91,26 @@ const tsOf = (o) => { const t = Date.parse(o && o.timestamp); return Number.isFi
 const blocks = (msg) => (msg && Array.isArray(msg.content) ? msg.content.filter((b) => b && typeof b === 'object') : []);
 const snippet = (text) => clean(String(text).replace(/\s+/g, ' ').trim(), 200);
 
+// Records Claude Code appends around a session's close. `last-prompt` is the marker; the rest are
+// bookkeeping lines that may follow it. Anything else after it (a message) means the session went on.
+const META_TYPES = new Set(['last-prompt', 'cost-state', 'ai-title', 'custom-title', 'agent-name', 'mode', 'atis', 'atis-latch', 'permission-mode', 'file-history-snapshot']);
+function closedTail(objs) {
+  let seen = false;
+  for (let i = objs.length - 1; i >= 0; i--) {
+    const t = objs[i].type;
+    if (t === 'last-prompt') seen = true;
+    else if (!META_TYPES.has(t)) return seen;
+  }
+  return seen;
+}
+
 // Claude Code transcript lines -> { state, cwd, model, subagent, lastTs, text }.
 // state: 'tool' | 'working' | 'waiting' (before the age rules are applied)
 function readClaude(objs) {
-  const r = { state: null, cwd: null, model: null, subagent: false, lastTs: null, text: null };
+  const r = { state: null, cwd: null, model: null, subagent: false, lastTs: null, text: null, closed: closedTail(objs), sessionId: null };
   for (const o of objs) {
     if (isStr(o.cwd)) r.cwd = o.cwd;
+    if (isStr(o.sessionId)) r.sessionId = o.sessionId;
     if (o.isSidechain === true) r.subagent = true;
     if (o.type !== 'user' && o.type !== 'assistant') continue;
     const t = tsOf(o);
@@ -179,8 +194,11 @@ function createWatcher(opts = {}) {
       r = readClaude(objs);
       if (!r.cwd) { const first = firstObject(file, o.headBytes); if (first && isStr(first.cwd)) r.cwd = first.cwd; }
       if (!r.subagent && /[\\/]subagents[\\/]/.test(file)) r.subagent = true;
+      // <session id>.jsonl, or <session id>/subagents/<agent>.jsonl (the subagent belongs to that session)
+      const sub = /([^\\/]+)[\\/]subagents[\\/][^\\/]+$/.exec(file);
+      r.sessionId = sub ? sub[1] : path.basename(file, '.jsonl');
     }
-    const info = { engine, state: r.state, cwd: r.cwd, model: r.model, subagent: r.subagent, lastTs: r.lastTs, text: r.text };
+    const info = { engine, state: r.state, cwd: r.cwd, model: r.model, subagent: r.subagent, lastTs: r.lastTs, text: r.text, closed: !!r.closed, sessionId: r.sessionId || null };
     perFile.set(file, { key, info });
     return info;
   }
@@ -204,31 +222,54 @@ function createWatcher(opts = {}) {
     return cache.rows;
   }
 
-  // sessions({ showText, resolveProject, now }) -> rows, newest first. `cwd` is for server-side
-  // use only; the API strips it.
-  function sessions({ showText = false, resolveProject = null, now = Date.now() } = {}) {
+  // sessions({ showText, resolveProject, now, idleMs, doneMs }) -> rows, newest first. `cwd` is for
+  // server-side use only; the API strips it. idleMs / doneMs come from board.session_idle_minutes /
+  // board.session_done_hours. A session is done when agent-crew recorded its end (newer than its last
+  // message), when its transcript ends in a closing record, or after doneMs of silence; a subagent
+  // follows its parent session.
+  function sessions({ showText = false, resolveProject = null, now = Date.now(), idleMs, doneMs } = {}) {
+    const lim = { ...o };
+    if (Number.isFinite(idleMs) && idleMs > 0) lim.waitMs = idleMs;
+    if (Number.isFinite(doneMs) && doneMs > 0) lim.doneMs = doneMs;
+    if (o.sessionEnds) { try { o.sessionEnds.refresh(); } catch { /* best effort */ } }
     const out = [];
+    const doneIds = new Set();   // ids of finished top-level sessions
     for (const { file, engine, st } of scan(now)) {
       const info = inspectFile(file, engine, st);
       const lastMs = Math.max(info.lastTs || 0, st.mtimeMs);
+      let status = statusOf(info.state, lastMs, now, lim);
+      if (engine === 'claude' && info.sessionId) {
+        const endedAt = o.sessionEnds ? o.sessionEnds.get(info.sessionId) : null;
+        const ended = endedAt !== null && endedAt >= (info.lastTs || st.mtimeMs);
+        const closed = info.closed && !info.subagent && now - st.mtimeMs > lim.closedMs;
+        if (ended || closed) status = 'done';
+        if (status === 'done' && !info.subagent) doneIds.add(info.sessionId);
+      }
       const row = {
         id: crypto.createHash('sha256').update(file).digest('hex').slice(0, 12),
         engine,
-        status: statusOf(info.state, lastMs, now, o),
+        status,
         lastActivity: new Date(lastMs).toISOString(),
         model: info.model,
         subagent: info.subagent,
         cwd: info.cwd,
-        folder: info.cwd ? path.basename(info.cwd.replace(/[\\/]+$/, '')) : null,
+        folder: info.cwd ? path.basename(info.cwd.replace(/[\/]+$/, '')) : null,
         project: null,
       };
       if (resolveProject && info.cwd) {
         try { const p = resolveProject(info.cwd); if (p) row.project = p.id; } catch { /* unresolved */ }
       }
       if (showText === true && info.text) row.text = snippet(info.text);
-      out.push(row);
+      out.push({ row, info });
     }
-    return out;
+    // a subagent takes its parent's state: the parent may have ended after the subagent's last line
+    for (const { row, info } of out) {
+      if (!row.subagent || row.engine !== 'claude' || !info.sessionId) continue;
+      if (doneIds.has(info.sessionId)) { row.status = 'done'; continue; }
+      const endedAt = o.sessionEnds ? o.sessionEnds.get(info.sessionId) : null;
+      if (endedAt !== null && endedAt >= (info.lastTs || 0)) row.status = 'done';
+    }
+    return out.map((x) => x.row);
   }
 
   return { sessions, options: o, claudeRoot: o.claudeRoot, codexRoot: o.codexRoot };

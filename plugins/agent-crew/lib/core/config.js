@@ -50,7 +50,7 @@ const GLOBAL_DEFAULTS = Object.freeze({
   port: 8781,
   usage_days: 14,
   prices: {},
-  board: { show_text: false },
+  board: { show_text: false, session_idle_minutes: 30, session_done_hours: 6 },
   engines: {
     codex: { command: 'codex', args: ['exec', '-s', 'read-only', '--skip-git-repo-check', '-'] },
   },
@@ -123,6 +123,8 @@ const GLOBAL_SCHEMA = [
   f('engines.*.args', 'array', d('Arguments; the prompt is passed on stdin.', '參數；提示內容由標準輸入傳入。'), { itemType: 'string' }),
   f('board', 'object', d('Board display options.', '看板顯示選項。')),
   f('board.show_text', 'boolean', d('Show a short redacted snippet of the last assistant message in the Sessions list.', '在工作階段清單顯示最後一則助理訊息的簡短（已遮罩）片段。')),
+  f('board.session_idle_minutes', 'integer', d('Minutes without activity after which a Sessions entry shows as idle.', '工作階段超過這段分鐘數沒有動靜就顯示為閒置。'), { min: 1, max: 1440 }),
+  f('board.session_done_hours', 'integer', d('Hours without activity after which a Sessions entry shows as done.', '工作階段超過這段小時數沒有動靜就顯示為已結束。'), { min: 1, max: 720 }),
 ];
 
 // ---------------------------------------------------------------- helpers

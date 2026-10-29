@@ -12,6 +12,7 @@ const store = require('../lib/core/store');
 const { CrewError } = require('../lib/core/errors');
 const { t } = require('../lib/core/i18n');
 const { createWatcher } = require('./watcher');
+const { createSessionEnds } = require('./session-ends');
 const { createUsage } = require('./usage');
 
 class ApiError extends Error {
@@ -162,7 +163,7 @@ function str(body, key, max = 2000) {
 // ---------------------------------------------------------------- the API
 // opts: { version, watcher, usage }
 function createApi(opts = {}) {
-  const watcher = opts.watcher || createWatcher();
+  const watcher = opts.watcher || createWatcher({ sessionEnds: createSessionEnds(() => projects.list().map((p) => paths.eventsFile(p.id))) });
   const usage = opts.usage || createUsage();
   const version = opts.version || '0.0.0';
   const rootCache = new Map();   // cwd -> { at, id }
@@ -201,7 +202,13 @@ function createApi(opts = {}) {
   }
 
   function sessionRows() {
-    return watcher.sessions({ showText: showText(), resolveProject });
+    const b = globalCfg().board || {};
+    return watcher.sessions({
+      showText: showText(),
+      resolveProject,
+      idleMs: Number.isInteger(b.session_idle_minutes) ? b.session_idle_minutes * 60 * 1000 : undefined,
+      doneMs: Number.isInteger(b.session_done_hours) ? b.session_done_hours * 60 * 60 * 1000 : undefined,
+    });
   }
 
   function publicSession(s) {

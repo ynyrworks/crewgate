@@ -71,5 +71,7 @@ Per user (override the folder with `AGENT_CREW_HOME`). Not part of any repositor
 | `engines.*` | object |  | One engine. | 單一引擎。 |
 | `engines.*.command` | string |  | Executable to run (resolved through PATH; on Windows .cmd and .bat files work too). | 要執行的程式（依 PATH 尋找；Windows 也支援 .cmd 與 .bat）。 |
 | `engines.*.args` | array of string |  | Arguments; the prompt is passed on stdin. | 參數；提示內容由標準輸入傳入。 |
-| `board` | object | `{"show_text":false}` | Board display options. | 看板顯示選項。 |
+| `board` | object | `{"show_text":false,"session_idle_minutes":30,"session_done_hours":6}` | Board display options. | 看板顯示選項。 |
 | `board.show_text` | boolean | `false` | Show a short redacted snippet of the last assistant message in the Sessions list. | 在工作階段清單顯示最後一則助理訊息的簡短（已遮罩）片段。 |
+| `board.session_idle_minutes` | integer; min 1; max 1440 | `30` | Minutes without activity after which a Sessions entry shows as idle. | 工作階段超過這段分鐘數沒有動靜就顯示為閒置。 |
+| `board.session_done_hours` | integer; min 1; max 720 | `6` | Hours without activity after which a Sessions entry shows as done. | 工作階段超過這段小時數沒有動靜就顯示為已結束。 |
