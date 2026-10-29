@@ -119,3 +119,45 @@ test('Git-Bash style /c/... paths resolve on Windows', { skip: process.platform 
   assert.equal(pushes(otherPid).length, 1);
   assert.equal(pushes(f.pid).length, 0);
 });
+
+test('detect: a cd in a subshell or pipeline does not carry past it; && and ; do', () => {
+  const cds = (c) => gitcmd.detect(c).map((x) => x.cd);
+  assert.deepEqual(cds('(cd /o && git push); git push'), [['/o'], []]);
+  assert.deepEqual(cds('(cd /o; git push) && git push'), [['/o'], []]);
+  assert.deepEqual(cds('cd /a && (cd /b && git push) && git push'), [['/a', '/b'], ['/a']]);
+  assert.deepEqual(cds('cd /o | cat; git push'), [[]]);
+  assert.deepEqual(cds('cd /o & git push'), [[]]);
+  assert.deepEqual(cds('echo | cd /o; git push'), [[]]);
+  assert.deepEqual(cds('cd /o && git push'), [['/o']]);
+  assert.deepEqual(cds('cd /o; git push'), [['/o']]);
+  assert.deepEqual(cds('cd /o || git push'), [['/o']]);
+  assert.deepEqual(cds(') git push'), [[]]);
+});
+
+test('subshell cd: the push after it is recorded in the session project', () => {
+  const { f, other, otherPid } = two();
+  post(f, `(cd ${fwd(other)} && git status); git push`, 's1');
+  assert.equal(pushes(f.pid).length, 1);
+  assert.equal(pushes(otherPid).length, 0);
+});
+
+test('a registered repo nested inside the session repo is its own project', () => {
+  const { f } = two();
+  const fs = require('node:fs');
+  const nested = path.join(f.repo, 'nested');
+  fs.mkdirSync(nested);
+  require('./helpers').git(nested, 'init', '-q');
+  fs.writeFileSync(path.join(nested, 'n.txt'), 'n\n');
+  require('./helpers').git(nested, 'add', '.');
+  require('./helpers').git(nested, 'commit', '-q', '-m', 'init');
+  const nestedPid = project.add(nested, { name: 'nested' }).project.id;
+  assert.notEqual(nestedPid, f.pid);
+  post(f, 'cd nested && git push', 'x1');
+  assert.equal(pushes(nestedPid).length, 1);
+  assert.equal(missing(nestedPid).length, 1);
+  assert.equal(pushes(f.pid).length, 0);
+  post(f, 'git -C nested push', 'x2');
+  assert.equal(pushes(nestedPid).length, 2);
+  post(f, 'git push', 'x3');
+  assert.equal(pushes(f.pid).length, 1);
+});

@@ -117,12 +117,13 @@ function onBash(payload) {
   // A command that cd's or uses git -C acts on that directory's project, not on the session's.
   // A directory outside every registered project records nothing (and is never registered here).
   const handles = new Map();
+  // Full resolution (no session-file shortcut): a registered repo nested inside the session repo is its own project.
   const handleFor = (f) => {
     const dir = targetDir(sessionCwd, f.cd);
     if (!dir) return h;
     if (!handles.has(dir)) {
       let t = null;
-      try { t = C.open({ ...payload, cwd: dir }); } catch { /* unusable directory */ }
+      try { t = C.open({ ...payload, cwd: dir }, { full: true }); } catch { /* unusable directory */ }
       handles.set(dir, t);
     }
     return handles.get(dir);

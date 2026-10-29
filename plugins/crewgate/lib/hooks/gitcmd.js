@@ -184,18 +184,35 @@ function cdTarget(seg) {
 function detect(command) {
   const out = [];
   let steps = [];
+  const saved = []; // steps at each open "(": a subshell's cd ends with its ")"
+  let prev = null; // operator before the current segment
+  const one = (seg, next) => {
+    const t = cdTarget(seg);
+    if (t !== undefined) {
+      // a cd on either side of | or & runs in a subshell and does not carry on
+      if (next !== '|' && next !== '&' && prev !== '|' && prev !== '&') steps = t === null ? [] : [...steps, t];
+      return;
+    }
+    const r = analyse(seg);
+    if (r) {
+      const own = r.cd || [];
+      r.cd = own.some(isDynamic) ? [] : [...steps, ...own];
+      out.push(r);
+    }
+  };
   try {
-    for (const seg of segments(tokenize(command))) {
-      const t = cdTarget(seg);
-      if (t !== undefined) { steps = t === null ? [] : [...steps, t]; continue; }
-      const r = analyse(seg);
-      if (r) {
-        const own = r.cd || [];
-        r.cd = own.some(isDynamic) ? [] : [...steps, ...own];
-        out.push(r);
-      }
+    let cur = [];
+    for (const t of tokenize(command)) {
+      if (typeof t === 'object' && OPS.has(t.op)) {
+        if (cur.length) one(cur, t.op);
+        cur = [];
+        if (t.op === '(') saved.push(steps);
+        else if (t.op === ')') { if (saved.length) steps = saved.pop(); }
+        prev = t.op;
+      } else cur.push(t);
       if (out.length >= 5) break;
     }
+    if (cur.length && out.length < 5) one(cur, null);
   } catch { /* unparseable: nothing */ }
   return out;
 }
