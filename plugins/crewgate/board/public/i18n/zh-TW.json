@@ -199,6 +199,8 @@
   "stats.linePrompts1": "{count} 次提示",
   "stats.lineTools": "{count} 次工具呼叫",
   "stats.lineTools1": "{count} 次工具呼叫",
+  "cap.items": "{count} 項",
+  "cap.items1": "{count} 項",
   "stats.lineTokens": "{count} token",
   "sessions.back": "所有工作階段",
   "sessions.parent": "上層工作階段",

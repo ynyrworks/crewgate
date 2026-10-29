@@ -28,7 +28,7 @@ nav a[aria-current="page"] { background: var(--track); color: var(--text); font-
 .tools label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
 .offline { margin: 0; padding: 8px 16px; background: var(--crit); color: #fff; }
 .offline[hidden] { display: none; }
-main { padding: 16px; max-width: 1400px; margin: 0 auto; }
+main { padding: 16px clamp(16px, 2vw, 40px); max-width: 2400px; margin: 0 auto; }
 h1 { font-size: 20px; margin: 0 0 12px; overflow-wrap: anywhere; }
 h2 { font-size: 15px; margin: 0 0 8px; }
 h3 { font-size: 13px; margin: 12px 0 4px; color: var(--text-2); }
@@ -178,4 +178,49 @@ button.older { margin: 0 0 10px; min-height: 36px; }
   .tl { padding-left: 10px; }
   .tl-item { padding-left: 10px; }
   .kinds button { flex: 1 1 auto; }
+}
+
+/* capped lists: a fixed height that scrolls inside the card, with a shadow where more content is hidden */
+.count { font-weight: 400; }
+.cap {
+  --cap-h: clamp(14rem, 38vh, 26rem);
+  max-height: var(--cap-h); overflow-y: auto; overscroll-behavior: contain; border-radius: 6px;
+  background:
+    linear-gradient(var(--surface) 30%, transparent) top / 100% 24px no-repeat local,
+    linear-gradient(transparent, var(--surface) 70%) bottom / 100% 24px no-repeat local,
+    radial-gradient(farthest-side at 50% 0, rgba(0, 0, 0, .22), transparent) top / 100% 8px no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, rgba(0, 0, 0, .22), transparent) bottom / 100% 8px no-repeat scroll,
+    var(--surface);
+}
+.cap.tall { --cap-h: clamp(18rem, 55vh, 40rem); }
+.cap.main { --cap-h: max(22rem, calc(100vh - 11rem)); }
+.cap.scroll { overflow-x: auto; }
+.cap thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; box-shadow: 0 1px 0 var(--border); }
+.cap > .stree > .sess:last-child, .cap > .list > li:last-child { margin-bottom: 0; }
+.card.cap { padding: 14px; }
+.card.cap .proj.head { position: sticky; top: -14px; background: var(--surface); z-index: 1; }
+/* wide screens: more columns, session cards side by side */
+@media (min-width: 1600px) {
+  .grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+  .card.wide .stree:not(.sub) { display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); gap: 0 14px; align-items: start; }
+}
+@media (min-width: 2200px) {
+  .grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); }
+  body { font-size: 15px; }
+}
+/* the update banner: long output scrolls inside the banner */
+.update pre { max-height: 14rem; overflow: auto; }
+.update .results { max-height: 10rem; overflow-y: auto; }
+/* phones: natural height, the page scrolls */
+@media (max-width: 720px) {
+  .cap { max-height: none; background: var(--surface); }
+  .cap.scroll { overflow-y: visible; }
+  .cap thead th { position: static; box-shadow: none; }
+  .card.cap .proj.head { position: static; }
+}
+/* print: nothing is clipped, no fade hints */
+@media print {
+  .cap, .cap.tall, .cap.main, .update pre, .update .results { max-height: none; overflow: visible; background: none; }
+  .cap thead th { position: static; box-shadow: none; }
+  .card.cap .proj.head { position: static; }
 }
