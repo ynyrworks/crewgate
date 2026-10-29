@@ -113,6 +113,13 @@ function crewAsync(args, cwd, extraEnv = {}) {
   });
 }
 
+// Versions relative to the running one (the manifest), so no test hard-codes a release number.
+function versions() {
+  const cur = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '.claude-plugin', 'plugin.json'), 'utf8')).version;
+  const [a, b, c] = cur.split('.').map(Number);
+  return { current: cur, same: cur, patch: `${a}.${b}.${c + 1}`, minor: `${a}.${b + 1}.0`, major: `${a + 1}.0.0`, older: a > 0 || b > 0 || c > 0 ? (c > 0 ? `${a}.${b}.${c - 1}` : b > 0 ? `${a}.${b - 1}.0` : `0.0.0`) : null };
+}
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-module.exports = { ...h, fakeGithub, release, fakeCli, CLAUDE_BODY, CODEX_BODY, freePort, crewAsync, fakeEnv, writeGlobalConfig, sleep };
+module.exports = { ...h, fakeGithub, release, fakeCli, CLAUDE_BODY, CODEX_BODY, freePort, crewAsync, versions, fakeEnv, writeGlobalConfig, sleep };

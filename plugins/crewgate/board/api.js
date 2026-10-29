@@ -14,6 +14,9 @@ const { t } = require('../lib/core/i18n');
 const { createWatcher } = require('./watcher');
 const { createSessionEnds } = require('./session-ends');
 const { createUsage } = require('./usage');
+const { createSessionStats, sumStats, topTools } = require('./session-stats');
+const { timeline: buildTimeline, KINDS: TIMELINE_KINDS } = require('./session-timeline');
+const { hashId } = require('./watcher');
 
 class ApiError extends Error {
   constructor(status, key, vars, extra) {
@@ -161,10 +164,11 @@ function str(body, key, max = 2000) {
 }
 
 // ---------------------------------------------------------------- the API
-// opts: { version, watcher, usage }
+// opts: { version, watcher, usage, stats }
 function createApi(opts = {}) {
   const watcher = opts.watcher || createWatcher({ sessionEnds: createSessionEnds(() => projects.list().map((p) => paths.eventsFile(p.id))) });
   const usage = opts.usage || createUsage();
+  const sessionStats = opts.stats || createSessionStats();
   const version = opts.version || '0.0.0';
   const rootCache = new Map();   // cwd -> { at, id }
 
@@ -215,7 +219,8 @@ function createApi(opts = {}) {
     return title;
   }
 
-  function sessionRows() {
+  // withStats: adds row.stats (and row.totals, a parent plus its subagents) from the incremental per-file cache.
+  function sessionRows({ withStats = false } = {}) {
     const b = globalCfg().board || {};
     const rows = watcher.sessions({
       showText: showText(),
@@ -228,7 +233,30 @@ function createApi(opts = {}) {
       if (r.task && r.project) r.task = { id: r.task.id, title: taskTitle(r.project, r.task.id) };
       else if (r.task) r.task = { id: r.task.id, title: null };
     }
+    if (withStats) attachStats(rows);
     return rows;
+  }
+
+  function attachStats(rows) {
+    const entries = [];
+    for (const r of rows) {
+      const f = watcher.fileFor ? watcher.fileFor(r.id) : null;
+      if (f) entries.push({ id: r.id, ...f });
+    }
+    const g = globalCfg();
+    const stats = sessionStats.collect(entries, { prices: isObj(g.prices) ? g.prices : {} });
+    const kids = new Map();
+    for (const r of rows) if (r.parent) (kids.get(r.parent) || kids.set(r.parent, []).get(r.parent)).push(r.id);
+    for (const r of rows) {
+      const own = stats.get(r.id);
+      if (!own) continue;
+      const mine = (kids.get(r.id) || []).map((id) => stats.get(id)).filter(Boolean);
+      r.stats = { ...own, tools: topTools(own.tools) };
+      if (mine.length) {
+        const all = sumStats([own, ...mine]);
+        r.totals = { ...all, tools: topTools(all.tools), sessions: mine.length + 1 };
+      }
+    }
   }
 
   function publicSession(s) {
@@ -288,7 +316,9 @@ function createApi(opts = {}) {
       created: tk.created, updated: tk.updated, history: Array.isArray(tk.history) ? tk.history : [],
       review: reviewStats(p.id, tk.id),
     }));
-    const sessions = sessionRows().filter((s) => s.project === p.id).map(publicSession);
+    const mineRows = sessionRows().filter((s) => s.project === p.id);
+    attachStats(mineRows);
+    const sessions = mineRows.map(publicSession);
     const days = cfg.config.lessons && Number.isInteger(cfg.config.lessons.promote_after_days) ? cfg.config.lessons.promote_after_days : 3;
     return {
       project: { id: p.id, name: p.name, added: p.added },
@@ -309,7 +339,42 @@ function createApi(opts = {}) {
 
   function sessionsList() {
     const projectNames = new Map(projects.list().map((p) => [p.id, p.name]));
-    return { show_text: showText(), sessions: sessionRows().map((s) => ({ ...publicSession(s), project_name: s.project ? projectNames.get(s.project) || null : null })) };
+    return { show_text: showText(), sessions: sessionRows({ withStats: true }).map((s) => ({ ...publicSession(s), project_name: s.project ? projectNames.get(s.project) || null : null })) };
+  }
+
+  // One session in detail: its row with statistics, and a page of its activity timeline.
+  function sessionDetail({ id, query }) {
+    if (!/^[0-9a-f]{12}$/.test(String(id))) throw new ApiError(404, 'api.notFound');
+    const rows = sessionRows();
+    const row = rows.find((r) => r.id === id);
+    const f = row && watcher.fileFor ? watcher.fileFor(id) : null;
+    if (!f) throw new ApiError(404, 'api.notFound');
+    const kids = rows.filter((r) => r.parent === id);
+    attachStats([row, ...kids]);
+    const uint = (v) => (/^\d{1,15}$/.test(String(v)) ? Number(v) : undefined);
+    const kinds = typeof query.kinds === 'string' ? query.kinds.split(',').filter((k) => TIMELINE_KINDS.includes(k)) : [];
+    const agentId = (/[\/]subagents[\/]agent-([^\/]+)\.jsonl$/.exec(f.file) || [])[1] || null;
+    let crewEvents = [];
+    if (row.project && (row.session || agentId)) {
+      crewEvents = tailEvents(row.project, 5000).filter((e) => (agentId ? e.agent === agentId : e.session === row.session));
+    }
+    const link = (agent) => {
+      if (row.subagent || f.engine !== 'claude' || !/^[\w.-]{1,80}$/.test(agent)) return null;
+      const child = hashId(path.join(path.dirname(f.file), path.basename(f.file, '.jsonl'), 'subagents', `agent-${agent}.jsonl`));
+      return watcher.fileFor(child) ? child : null;
+    };
+    const tl = buildTimeline({
+      file: f.file, engine: f.engine, cwd: row.cwd, showText: showText(), before: uint(query.before), beforeTs: uint(query.before_ts),
+      limit: uint(query.limit), kinds, crewEvents, link,
+    });
+    const names = new Map(projects.list().map((p) => [p.id, p.name]));
+    return {
+      show_text: showText(),
+      session: { ...publicSession(row), project_name: row.project ? names.get(row.project) || null : null },
+      children: kids.map(publicSession),
+      kinds: TIMELINE_KINDS,
+      ...tl,
+    };
   }
 
   function usageReport({ query }) {
@@ -346,6 +411,7 @@ function createApi(opts = {}) {
     ['GET', /^\/api\/overview$/, () => overview()],
     ['GET', /^\/api\/project\/([^/]+)$/, (a) => projectDetail({ id: a[0] })],
     ['GET', /^\/api\/sessions$/, () => sessionsList()],
+    ['GET', /^\/api\/session\/([^/]+)$/, (a, q) => sessionDetail({ id: a[0], query: q })],
     ['GET', /^\/api\/usage$/, (a, q) => usageReport({ query: q })],
     ['GET', /^\/api\/schema$/, () => ({ project: config.SCHEMA, global: config.GLOBAL_SCHEMA })],
     ['GET', /^\/api\/config$/, () => configView(config.loadGlobal())],

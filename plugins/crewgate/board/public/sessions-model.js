@@ -105,5 +105,100 @@
     return c;
   }
 
-  return { cleanFilter: cleanFilter, matches: matches, buildTree: buildTree, isOpen: isOpen, visible: visible, counts: counts, isRunning: isRunning, isWaiting: isWaiting, displayStatus: displayStatus, STATES: STATES, ENGINES: ENGINES };
+  // ---- statistics (numbers only; the server computes them) and the activity timeline
+
+  // 4m 12s / 1h 05m / 2d 3h; under a second is "<1s".
+  function fmtDuration(ms) {
+    if (!isFinite(ms) || ms < 0) return '–';
+    var s = Math.floor(ms / 1000);
+    if (s < 1) return ms > 0 ? '<1s' : '0s';
+    var d = Math.floor(s / 86400);
+    var hr = Math.floor((s % 86400) / 3600);
+    var mi = Math.floor((s % 3600) / 60);
+    var sec = s % 60;
+    if (d) return d + 'd ' + hr + 'h';
+    if (hr) return hr + 'h ' + (mi < 10 ? '0' : '') + mi + 'm';
+    if (mi) return mi + 'm ' + (sec < 10 ? '0' : '') + sec + 's';
+    return sec + 's';
+  }
+
+  // 950 -> 950, 12345 -> 12.3k, 3400000 -> 3.4M
+  function compact(n) {
+    n = Number(n) || 0;
+    if (n < 1000) return String(n);
+    if (n < 999500) return (n / 1e3 < 100 ? Math.round(n / 100) / 10 : Math.round(n / 1e3)) + 'k';
+    if (n < 1e9) return (n / 1e6 < 100 ? Math.round(n / 1e5) / 10 : Math.round(n / 1e6)) + 'M';
+    return Math.round(n / 1e8) / 10 + 'G';
+  }
+
+  function tokenSum(tk) { return tk ? (tk.input || 0) + (tk.output || 0) + (tk.cache_write || 0) + (tk.cache_read || 0) : 0; }
+
+  // What a session card shows: the totals of a parent (itself plus its subagents) when it has any,
+  // otherwise its own numbers. null while the server has no statistics for the row.
+  function cardStats(row) {
+    var own = row && row.stats;
+    if (!own) return null;
+    var s = row.totals || own;
+    return {
+      duration: s.duration_ms, prompts: s.prompts, tools: s.tool_calls, tokens: tokenSum(s.tokens), cost: s.cost,
+      costComplete: s.cost_complete !== false, partial: !!s.partial, sessions: row.totals ? row.totals.sessions : 1
+    };
+  }
+
+  var KIND_ORDER = ['prompt', 'tool', 'subagent', 'crew', 'error'];
+
+  // Timeline state: { events (oldest first), cursor, cursor_ts }. The newest page is fetched again on every
+  // refresh and merged in; older pages are prepended by "load more".
+  function emptyTimeline() { return { events: [], cursor: null, cursor_ts: null }; }
+
+  function byTime(a, b) { return (a.ts === null ? -1 : b.ts === null ? 1 : a.ts - b.ts); }
+
+  // A refresh brought the newest page. Overlapping with what is loaded: add the new steps and refresh the
+  // known ones (durations and links appear later), keeping the older cursor. No overlap (a lot happened, or
+  // nothing was loaded): start over from this page.
+  function mergeLatest(state, page) {
+    var have = {};
+    state.events.forEach(function (e) { have[e.key] = true; });
+    var overlap = page.events.some(function (e) { return have[e.key]; });
+    if (!state.events.length || !overlap) return { events: page.events.slice(), cursor: page.cursor, cursor_ts: page.cursor_ts };
+    var fresh = {};
+    page.events.forEach(function (e) { fresh[e.key] = e; });
+    var kept = state.events.map(function (e) { return fresh[e.key] || e; });
+    page.events.forEach(function (e) { if (!have[e.key]) kept.push(e); });
+    kept.sort(byTime);
+    return { events: kept, cursor: state.cursor, cursor_ts: state.cursor_ts };
+  }
+
+  function mergeOlder(state, page) {
+    var have = {};
+    state.events.forEach(function (e) { have[e.key] = true; });
+    var older = page.events.filter(function (e) { return !have[e.key]; });
+    return { events: older.concat(state.events), cursor: page.cursor, cursor_ts: page.cursor_ts };
+  }
+
+  // Display rows: each event with the time since the previous one and whether the day changed.
+  function withGaps(events) {
+    return events.map(function (e, i) {
+      var prev = i ? events[i - 1] : null;
+      var gap = prev && prev.ts !== null && e.ts !== null ? e.ts - prev.ts : null;
+      var newDay = !prev || (prev.ts !== null && e.ts !== null && new Date(prev.ts).toDateString() !== new Date(e.ts).toDateString());
+      return { ev: e, gap: gap, newDay: newDay };
+    });
+  }
+
+  function kindCounts(events) {
+    var c = {};
+    events.forEach(function (e) { c[e.kind] = (c[e.kind] || 0) + 1; });
+    return c;
+  }
+
+  // Text of a step. Private mode only removes; the server already left out what show_text does not allow.
+  function stepText(ev, priv) {
+    return { text: priv ? null : ev.text || null, target: priv ? null : ev.target || null, agentType: priv ? null : ev.agent_type || null };
+  }
+
+  // Only ids the server makes are used in links.
+  function validId(id) { return typeof id === 'string' && /^[0-9a-f]{12}$/.test(id); }
+
+  return { cleanFilter: cleanFilter, matches: matches, buildTree: buildTree, isOpen: isOpen, visible: visible, counts: counts, isRunning: isRunning, isWaiting: isWaiting, displayStatus: displayStatus, fmtDuration: fmtDuration, compact: compact, tokenSum: tokenSum, cardStats: cardStats, KIND_ORDER: KIND_ORDER, emptyTimeline: emptyTimeline, mergeLatest: mergeLatest, mergeOlder: mergeOlder, withGaps: withGaps, kindCounts: kindCounts, stepText: stepText, validId: validId, STATES: STATES, ENGINES: ENGINES };
 }));
