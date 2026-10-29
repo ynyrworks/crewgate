@@ -13,7 +13,7 @@
   "wf.init.keptHint": "既有檔案已保留。要重新產生請加 --force（舊檔會先備份）。",
   "wf.init.next": "下一步：執行 `crew doctor`，再用 /crewgate:crew 技能開始。",
 
-  "wf.task.usage": "task 可用 create | list | show | report | send-back | accept | merge | cancel",
+  "wf.task.usage": "task 可用 create | list | show | report | send-back | accept | merge | cancel | run",
   "wf.task.created": "已建立任務 {id}。",
   "wf.task.marker": "把下面這行原樣放進 Agent 的提示詞，任務才會和 worker 連結起來：",
   "wf.task.agentHint": "用 Agent 工具派出：subagent_type \"{agent}\"，model \"{model}\"。耗時的工作請用 run_in_background。",
@@ -42,6 +42,14 @@
   "wf.task.merged": "任務 {id} 已記錄為合併（沒有執行任何 git 指令）。",
   "wf.task.mergeNever": ".claude/crew.json 把合併關卡設為 \"never\"；請勿合併此任務",
   "wf.task.cancelled": "任務 {id} 已取消。",
+  "wf.task.run.claude": "task run 用來啟動外部引擎（例如 codex）；Claude worker 請用 Agent 工具派出",
+  "wf.task.run.badState": "任務 {id} 目前是 {state}；只有 created 或 dispatched 的任務可以執行",
+  "wf.task.run.insideRepo": "worktree {path} 位於儲存庫內部；請改用同層的資料夾",
+  "wf.task.run.worktreeBusy": "資料夾 {path} 已存在、不是空的，也不是 git worktree",
+  "wf.task.run.worktreeFailed": "無法建立 worktree：{detail}",
+  "wf.task.run.started": "正在用 {name} 執行任務 {id}（{worktree}，逾時 {timeout} 秒）...",
+  "wf.task.run.failed": "任務 {id}：{name} worker 失敗（{kind}）：{detail}。任務維持 dispatched，worktree {worktree} 保持原狀；修正後可重跑，或取消任務。",
+  "wf.task.run.done": "任務 {id} 已由 {name} 交回：{n} 個檔案提交為 {sha}（分支 {branch}）；報告 {tokens} tokens。下一步：crew task show {id}",
 
   "wf.review.usage": "review 可用 run | submit | filter | finalize | show | dismiss",
   "wf.review.noFile": "讀不到{what}檔案：{file}",

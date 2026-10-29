@@ -1,0 +1,26 @@
+{
+  "name": "crewgate",
+  "version": "0.9.0",
+  "description": "Delegated development: an orchestrator dispatches workers and reviewers in git worktrees, a deterministic review filter keeps only real findings, and hooks record progress on a local board. Codex support is experimental.",
+  "author": {
+    "name": "Ynyr"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/ynyrworks/crewgate",
+  "homepage": "https://github.com/ynyrworks/crewgate#readme",
+  "keywords": [
+    "subagents",
+    "orchestration",
+    "delegation",
+    "code-review",
+    "worktree",
+    "hooks"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks/codex-hooks.json",
+  "extensions": {
+    "com.openai": {
+      "hooks": "./hooks/codex-hooks.json"
+    }
+  }
+}

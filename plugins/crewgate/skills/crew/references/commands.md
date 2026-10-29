@@ -4,7 +4,7 @@ Call as `node "${CLAUDE_PLUGIN_ROOT}/bin/crew.js" ...`. Global options: `--json`
 `--lang en|zh-TW`. Exit codes: 0 ok, 1 runtime error, 2 usage error.
 
 ## Setup
-- `crew init [--lang en|zh-TW] [--force] [--reset-review-files]`: config, three agent copies, `.crew/` files, registers the
+- `crew init [--lang en|zh-TW] [--force] [--reset-review-files] [--engine claude|codex]`: (`--engine codex`, or an existing `.codex/` folder, also writes `.codex/agents/crew-reviewer.toml`, `crew-refuter.toml` and a marked crewgate block in `AGENTS.md`) config, three agent copies, `.crew/` files, registers the
   project. Never overwrites without `--force` (then `*.bak-<timestamp>` copies; your config values are kept; `.crew/REVIEW.md` and `.crew/LESSONS.md` are never touched by `--force`, only `--reset-review-files` replaces them, with a backup).
 - `crew doctor`: Node version, config validity (with field paths), registration, hooks file, board.
 - `crew project add|list|rm`
@@ -19,6 +19,7 @@ a send-back goes back to `dispatched`.
 - `crew task send-back <id> --note "..."`: refused at `max_returns_before_takeover` (records a takeover lesson).
 - `crew task accept <id> [--note]`, `crew task merge <id> [--note]` (records only; refused if `gates.merge` is
   `never`), `crew task cancel <id> [--note]`.
+- `crew task run <id> [--engine codex] [--timeout 1800] [--model M]`: runs the Codex CLI as the worker in the task's worktree (created from HEAD when missing), then commits as the repository user (trailer `Co-Authored-By: Codex`), files report and packet and moves the task to `returned`. Failure (bad output, timeout, non-zero exit, no changes): nothing committed, `task.failed` event, a need, task stays `dispatched`. Log: `codex.log` in the task folder.
 
 ## Review
 - `crew review run <task> [--engine claude|<name>] [--round N]`

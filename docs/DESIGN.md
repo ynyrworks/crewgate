@@ -311,11 +311,11 @@ prints the body fenced as untrusted data.
 `crew <group> <action> [options]`, `--json` on every read command, `--project <path|id>`
 to override detection. Exit codes: 0 ok, 1 runtime error, 2 usage error.
 
-- `crew init [--lang en|zh-TW] [--force] [--reset-review-files]` — write `.claude/crew.json`, render
+- `crew init [--lang en|zh-TW] [--force] [--reset-review-files] [--engine claude|codex]` — write `.claude/crew.json`, render
   `.claude/agents/crew-*.md`, create `.crew/REVIEW.md`, `.crew/LESSONS.md`, register
   project. Never overwrites without `--force` (then backs up).
 - `crew project add|list|rm`
-- `crew task create|list|show|report|send-back|accept|merge|cancel`
+- `crew task create|list|show|report|send-back|accept|merge|cancel|run`
 - `crew review run|filter|finalize|dismiss|show`
 - `crew handoff create|list|show|accept|cancel`
 - `crew lesson add|list|suggest|promote|retire`
@@ -350,3 +350,40 @@ masked for screen sharing.
 - Release acceptance: the flow above in the example project with a real Claude session
   without any manual board command; Windows run; macOS/Linux unit tests in CI; README
   install-to-first-dispatch within 10 minutes.
+
+## 16. Codex (experimental)
+
+Facts: [PLUGIN-FACTS.md](PLUGIN-FACTS.md), Codex section. Two independent uses.
+
+**Codex as a worker (`crew task run <id> --engine codex`).** A Codex sandbox cannot commit in a linked
+worktree or write `~/.crewgate`, so crewgate does everything that needs more than file edits, outside
+the sandbox:
+1. Make sure the task has a branch and worktree (created from HEAD when missing, never inside the repo).
+2. Dispatch: `created -> dispatched` (event `task.dispatched`, data `engine: codex`); a repeat run on a
+   dispatched task records a re-dispatch.
+3. Write `worker-prompt.md` (brief, scope, the rendered worker rules, and overrides: edit files only, no git writes,
+   no `crew` calls, final message = one JSON object with `changes, tests, assumptions, realenv`) and
+   `codex-schema.json` into the task folder. The prompt travels as a file because a long multi-line argument does
+   not survive a Windows `.cmd` shim.
+4. Run `<engine.command> exec -C <worktree> --sandbox workspace-write --skip-git-repo-check --output-schema <schema> -o <last-message> <short prompt>`
+   through `core/exec.js` (no shell), stdin closed, a timeout (default 1800 s) after which the process tree is killed.
+   The engine's own `args` (built for the reviewer) are not used.
+5. Success needs a valid JSON message and at least one changed file. crewgate runs `git add -A` and `git commit`
+   (author = the repository's git user, trailer `Co-Authored-By: Codex <noreply@openai.com>`), builds `report.md`
+   (branch and commit filled by crewgate) and `packet.md` (raw model output and full diff), both redacted, and moves the
+   task to `returned` (`task.returned`). It prints one summary line.
+6. Any failure (bad or missing output, timeout, non-zero exit, no changes, git error) commits nothing, appends `task.failed`
+   (kind: output, timeout, exit, no-changes, commit, ...), adds a need and leaves the worktree as is. The state machine has no
+   `failed` state: the task stays `dispatched` so it can be run again or cancelled.
+
+**Codex as the orchestrator.** The plugin folder serves both CLIs. `.codex-plugin/plugin.json` names the skills folder
+and `hooks/codex-hooks.json` (Codex has no `args` array, so commands are single strings with `commandWindows`; the
+Claude file keeps the exec form). Hook code treats `collaborationspawn_agent` like `Agent`: marker in `tool_input.message`,
+type from `task_name`, always a background launch. `crew init --engine codex` (or an existing `.codex/`) renders
+`.codex/agents/crew-reviewer.toml` and `crew-refuter.toml` from the same templates and adds a marked block to
+`AGENTS.md` (never touches text outside the markers). There is no Codex worker agent: subagents share the parent's
+sandbox, so workers always go through `crew task run`. Requirements: the user trusts the hooks once in `/hooks` (again
+after a command changes) and approves the `crew` commands because they write `~/.crewgate`.
+
+**Board.** Events carry the engine; Codex sessions are listed from their rollout files and linked to roles and tasks through
+`subagent.start` events like Claude sessions.

@@ -214,6 +214,16 @@ function transition(projectId, taskId, to, opts = {}) {
   return task;
 }
 
+// setFields(projectId, taskId, { branch, worktree }) -> task. Records where the task's work lives, without a state change.
+function setFields(projectId, taskId, fields) {
+  return json.update(taskFile(projectId, taskId), {}, (t) => {
+    if (!t.id) throw new CrewError('task.notFound', { id: taskId });
+    for (const k of ['branch', 'worktree']) if (fields && typeof fields[k] === 'string') t[k] = fields[k];
+    t.updated = new Date().toISOString();
+    return t;
+  });
+}
+
 const sendBack = (projectId, taskId, opts) => transition(projectId, taskId, 'dispatched', opts);
 
 // recordReport(projectId, taskId, { report, packet }, { maxTokens, ...transition opts })
@@ -247,5 +257,5 @@ function readBrief(projectId, taskId) {
 module.exports = {
   STATES, TRANSITIONS, BRIEF_SECTIONS, REPORT_SECTIONS,
   estimateTokens, validateBrief, validateReport, createTask, load, list, findMarker,
-  transition, sendBack, recordReport, readReport, readBrief,
+  transition, setFields, sendBack, recordReport, readReport, readBrief,
 };

@@ -20,14 +20,15 @@ function onAgent(payload) {
   const ti = C.obj(payload.tool_input);
   const tuid = C.str(payload.tool_use_id);
   sess.bumpTool(h, C.str(payload.tool_name) || 'Agent');
-  const id = tasks.findMarker(C.str(ti.prompt).slice(0, 1 << 20));
+  const id = tasks.findMarker(C.agentPrompt(ti).slice(0, 1 << 20));
   if (!id) return null;
   let task;
   try { task = tasks.load(h.pid, id); } catch { return null; }
 
-  const type = C.normType(ti.subagent_type);
-  const bg = ti.run_in_background === true;
+  const type = C.normType(C.agentTypeOf(ti));
+  const bg = ti.run_in_background === true || payload.tool_name === C.CODEX_SPAWN;
   const model = C.snippet(ti.model, 60) || null;
+  const eng = payload.tool_name === C.CODEX_SPAWN ? { engine: 'codex' } : {};
   const key = tuid || `${id}:${Date.now()}`;
   // Only a task that is waiting for (or already in) a worker run is a worker dispatch;
   // a task in review may be linked to a reviewer subagent and must not change state.
@@ -37,18 +38,18 @@ function onAgent(payload) {
     if (task.state === 'created') {
       tasks.transition(h.pid, id, 'dispatched', {
         src: 'hook', session: h.sid,
-        data: { agent_type: type, model, background: bg, tool_use_id: C.snippet(tuid, 80) || null },
+        data: { agent_type: type, model, background: bg, tool_use_id: C.snippet(tuid, 80) || null, ...eng },
       });
     } else if (task.state === 'dispatched' && !sess.byToolUse(h.pid, key)) {
       // Already dispatched through the CLI (send-back): record this launch.
       events.append(h.pid, {
         type: 'task.dispatched', src: 'hook', session: h.sid, task: id, tool_use_id: tuid,
-        data: { agent_type: type, model, background: bg, tool_use_id: C.snippet(tuid, 80), redispatch: true }, key,
+        data: { agent_type: type, model, background: bg, tool_use_id: C.snippet(tuid, 80), redispatch: true, ...eng }, key,
       });
     }
   } catch { /* an illegal transition must not stop the dispatch */ }
 
-  sess.remember(h.pid, key, { task: id, type, bg, worker, ts: Date.now(), agent: null, stopped: false });
+  sess.remember(h.pid, key, { task: id, type, bg, worker, ts: Date.now(), agent: null, stopped: false, ...(eng.engine ? { codex: true } : {}) });
   sess.touch(h, (s) => sess.addTask(s, id));
 
   if (!worker) return null;

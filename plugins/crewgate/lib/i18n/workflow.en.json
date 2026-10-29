@@ -13,7 +13,7 @@
   "wf.init.keptHint": "Existing files were kept. Use --force to regenerate them (the old copies are backed up first; .crew/REVIEW.md and .crew/LESSONS.md need --reset-review-files).",
   "wf.init.next": "Next: run `crew doctor`, then start with the /crewgate:crew skill.",
 
-  "wf.task.usage": "task takes create | list | show | report | send-back | accept | merge | cancel",
+  "wf.task.usage": "task takes create | list | show | report | send-back | accept | merge | cancel | run",
   "wf.task.created": "Task {id} created.",
   "wf.task.marker": "Put this exact line into the Agent prompt so the task is linked to its worker:",
   "wf.task.agentHint": "Dispatch with the Agent tool: subagent_type \"{agent}\", model \"{model}\". Use run_in_background for long work.",
@@ -42,6 +42,14 @@
   "wf.task.merged": "Task {id} recorded as merged (no git command was run).",
   "wf.task.mergeNever": "The merge gate is set to \"never\" in .claude/crew.json; do not merge this task",
   "wf.task.cancelled": "Task {id} cancelled.",
+  "wf.task.run.claude": "task run starts an external engine (for example codex); Claude workers are dispatched with the Agent tool",
+  "wf.task.run.badState": "Task {id} is {state}; only a created or dispatched task can be run",
+  "wf.task.run.insideRepo": "The worktree {path} is inside the repository; use a sibling folder",
+  "wf.task.run.worktreeBusy": "The folder {path} exists, is not empty and is not a git worktree",
+  "wf.task.run.worktreeFailed": "Could not create the worktree: {detail}",
+  "wf.task.run.started": "Running {name} for task {id} in {worktree} (timeout {timeout} s)...",
+  "wf.task.run.failed": "Task {id}: the {name} worker failed ({kind}): {detail}. The task stays dispatched and the worktree {worktree} was left as it is; fix and run again, or cancel the task.",
+  "wf.task.run.done": "Task {id} returned by {name}: {n} file(s) committed as {sha} on {branch}; report {tokens} tokens. Next: crew task show {id}",
 
   "wf.review.usage": "review takes run | submit | filter | finalize | show | dismiss",
   "wf.review.noFile": "Cannot read the {what} file: {file}",

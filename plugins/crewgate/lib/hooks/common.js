@@ -20,7 +20,9 @@ const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
 const str = (v) => (typeof v === 'string' ? v : '');
 
 // The tool name Claude Code uses to launch subagents (older builds: Task).
-const AGENT_TOOLS = new Set(['Agent', 'Task']);
+// Codex spells it collaborationspawn_agent (tool_input: task_name, message) and returns at once.
+const CODEX_SPAWN = 'collaborationspawn_agent';
+const AGENT_TOOLS = new Set(['Agent', 'Task', CODEX_SPAWN]);
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 
 function sessionKey(sid) {
@@ -117,9 +119,14 @@ function readHead(file, bytes) {
   } catch { return ''; } finally { if (fd !== undefined) try { fs.closeSync(fd); } catch { /* ignore */ } }
 }
 
+// The text that carries the crew-task marker: Claude's prompt, Codex's message.
+const agentPrompt = (ti) => str(ti.prompt) || str(ti.message);
+// Subagent type: Claude's subagent_type, Codex's task_name.
+const agentTypeOf = (ti) => ti.subagent_type || ti.agent_type || ti.task_name;
+
 const normType = (t) => String(t || 'general-purpose').split(':').pop().toLowerCase();
 
 module.exports = {
-  PLUGIN_ROOT, AGENT_TOOLS, EDIT_TOOLS, obj, str, sessionKey, open, crewCmd, snippet,
+  PLUGIN_ROOT, AGENT_TOOLS, CODEX_SPAWN, agentPrompt, agentTypeOf, EDIT_TOOLS, obj, str, sessionKey, open, crewCmd, snippet,
   withContext, notice, deny, readHead, normType,
 };
