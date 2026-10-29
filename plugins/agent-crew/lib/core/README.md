@@ -26,7 +26,7 @@ Conventions
 - `home()` (`AGENT_CREW_HOME` or `~/.agent-crew`), `configFile()`, `projectsFile()`.
 - `projectDir(id)`, `dataFile(id, name)` (`work|needs|log|mrs|validation`), `eventsFile(id)`,
   `tasksDir(id)`, `taskDir(id, taskId)`, `handoffDir(id, 'open'|'accepted'|'cancelled')`,
-  `handoffFile(id, state, handoffId)`, `projectConfigFile(root)` (`<root>/.claude/crew.json`).
+  `handoffFile(id, state, handoffId)`, `runtimeDir(id)` (hook dispatch map), `sessionsDir()` (hook session counters), `projectConfigFile(root)` (`<root>/.claude/crew.json`).
 - All ids are validated (`ID_RE`, `TASK_ID_RE`, `SAFE_ID_RE`); bad ones throw.
 
 ## json.js
@@ -63,10 +63,11 @@ Conventions
 - `load(root)` -> `{ config, errors, file, exists }` — never throws. Unknown keys are kept; invalid fields
   fall back to their default and are listed in `errors` (`{ file, path, message, key, vars }`).
 - `validate(obj)` -> `[{ path, message, key, vars }]`.
-- `save(root, obj)` — validates (throws `config.invalid`, `err.errors`), merges over the existing file
+- `save(root, obj, { src })` — validates (throws `config.invalid`, `err.errors`), merges over the existing file
   (unknown keys preserved; keys cannot be deleted), writes atomically, records `config.changed`
-  when the project is registered.
-- `loadGlobal()`, `validateGlobal(obj)`, `saveGlobal(obj)` — same for `~/.agent-crew/config.json`.
+  (`src` defaults to `cli`; the board passes `board`) when the project is registered.
+- `loadGlobal()`, `validateGlobal(obj)`, `saveGlobal(obj, { src })` — same for `~/.agent-crew/config.json`;
+  the change is recorded as `config.changed` (`scope: "global"`) in every registered project's log.
 - `SCHEMA`, `GLOBAL_SCHEMA` — `[{ path, type, enum?, min?, max?, itemType?, default, description: { en, 'zh-TW' } }]`;
   `*` in a path matches any key of a map (e.g. `roles.*.engine`). The board renders its Settings form from these.
 
@@ -90,7 +91,8 @@ Conventions
   -> task. The brief must have the five sections (en or zh-TW headings, non-empty) or
   `CrewError task.briefInvalid` (`err.missing`, `err.empty`). A `crew-task: <id>` first line is written to `brief.md`.
 - `load(projectId, taskId)`, `list(projectId, { state? })`, `readBrief`, `readReport`, `findMarker(text)` (task id or null).
-- `transition(projectId, taskId, to, { note, src, session, agent, maxReturns, fields: { branch, worktree } })` -> task.
+- `transition(projectId, taskId, to, { note, src, session, agent, maxReturns, fields: { branch, worktree }, data })` -> task.
+  `data` is merged into the event data (it cannot override `from|to|returns|note`).
   Allowed: created->dispatched; dispatched->returned; returned->reviewing|accepted|dispatched;
   reviewing->accepted|dispatched|returned; accepted->merged; any non-final->cancelled.
   Same-state is a silent no-op. `returned|reviewing -> dispatched` is a send-back (`returns++`, event

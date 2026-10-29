@@ -39,4 +39,5 @@ Notes
 - Tool counts in the digest cover the tools that have a hook entry (Agent/Task, Edit family, Read, Bash).
 - Hooks after SessionStart use the session file to find the project without spawning git; the Edit
   guard always asks git, because it has to tell the main checkout from a linked worktree.
-- Env knobs (tests): `AGENT_CREW_HOOK_GUARD_MS`, `AGENT_CREW_HOOK_TEST_SLEEP_MS`, `AGENT_CREW_LOCK_WAIT_MS`.
+- Env knobs: `AGENT_CREW_HOOK_GUARD_MS`, `AGENT_CREW_LOCK_WAIT_MS`. `AGENT_CREW_HOOK_TEST_SLEEP_MS` (simulates a stuck handler)
+  is honoured only when `AGENT_CREW_TEST=1`.

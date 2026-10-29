@@ -149,3 +149,24 @@ test('global config: defaults, validation, merge and save', () => {
   fs.writeFileSync(paths.configFile(), 'garbage');
   assert.equal(config.loadGlobal().errors[0].key, 'config.err.parse');
 });
+
+test('save and saveGlobal accept an event source; global saves record config.changed', () => {
+  const root = repoWith({});
+  const reg = project.add(root).project;
+  config.save(root, { limits: { report_max_tokens: 800 } }, { src: 'board' });
+  config.saveGlobal({ port: 9200 }, { src: 'board' });
+  config.saveGlobal({ port: 9201 });
+  const ev = events.read(reg.id, { types: 'config.changed' });
+  assert.deepEqual(ev.map((e) => e.src), ['board', 'board', 'cli']);
+  assert.equal(ev[1].data.scope, 'global');
+  config.saveGlobal({ port: 8781 });
+});
+
+test('global schema has board.show_text and cache prices', () => {
+  const paths_ = config.GLOBAL_SCHEMA.map((e) => e.path);
+  for (const p of ['board.show_text', 'prices.*.cache_write', 'prices.*.cache_read']) assert.ok(paths_.includes(p), p);
+  assert.equal(config.GLOBAL_SCHEMA.find((e) => e.path === 'board.show_text').default, false);
+  assert.deepEqual(config.validateGlobal({ board: { show_text: true }, prices: { m: { cache_read: 0.3, cache_write: 3.75 } } }), []);
+  assert.equal(config.validateGlobal({ prices: { m: { cache_read: -1 } } })[0].path, 'prices.m.cache_read');
+  assert.equal(config.validateGlobal({ board: { show_text: 'yes' } })[0].path, 'board.show_text');
+});

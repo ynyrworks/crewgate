@@ -12,7 +12,7 @@ const noWarn = () => {};
 const MAX_USES = 100;
 const SESSION_KEEP_MS = 3 * 24 * 3600 * 1000;
 
-const sessionsDir = () => path.join(paths.home(), 'sessions');
+const sessionsDir = () => paths.sessionsDir();
 const sessionFile = (sid) => path.join(sessionsDir(), `${sid}.json`);
 
 function read(sid) {
@@ -83,7 +83,7 @@ function prune() {
 
 // ---------------------------------------------------------------- dispatch map
 // uses[tool_use_id] = { task, type, bg, worker, ts, agent, stopped }
-const dispatchFile = (pid) => path.join(paths.projectDir(pid), 'runtime', 'dispatch.json');
+const dispatchFile = (pid) => path.join(paths.runtimeDir(pid), 'dispatch.json');
 
 function updateUses(pid, fn) {
   try {

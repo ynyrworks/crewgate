@@ -1,0 +1,1 @@
+{"fingerprint":"42a6dd5c56df741d1d7c74f7392d115e216f47bf49a84c6f284c0a8429ec8988","category":"maintainability","file":"src/todo.js","symbol":"add","snippet":"const next = items.reduce((max, t) => Math.max(max, t.id), 0) + 1;","reason":"ids come from the current max on purpose","scope":"always","decided_by":"user","date":"2026-10-16"}

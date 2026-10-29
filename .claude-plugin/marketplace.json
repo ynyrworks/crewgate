@@ -1,11 +1,16 @@
 {
   "name": "agent-crew",
   "owner": { "name": "Ynyr" },
+  "metadata": { "description": "Marketplace for the agent-crew delegated-development plugin." },
   "plugins": [
     {
       "name": "agent-crew",
       "source": "./plugins/agent-crew",
-      "description": "Delegated development for Claude Code: orchestrator, worker and reviewer subagents with hook-recorded progress and a local board."
+      "description": "Delegated development for Claude Code: orchestrator, worker, reviewer and refuter subagents in git worktrees, a deterministic review filter, hook-recorded progress and a local board.",
+      "version": "0.1.0",
+      "license": "MIT",
+      "repository": "https://github.com/<owner>/agent-crew",
+      "keywords": ["subagents", "orchestration", "delegation", "code-review", "worktree", "hooks"]
     }
   ]
 }

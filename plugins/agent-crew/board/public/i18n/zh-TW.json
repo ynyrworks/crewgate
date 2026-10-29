@@ -101,8 +101,8 @@
   "sessions.folder": "資料夾",
   "sessions.last": "最近活動",
   "sessions.text": "最後訊息",
-  "sessions.textOff": "預設不顯示訊息內容。在全域設定把 show_text 設為 true，就會顯示簡短片段。",
-  "sessions.textOn": "已顯示經遮蔽的簡短訊息片段（show_text 已開啟）。",
+  "sessions.textOff": "預設不顯示訊息內容。在全域設定把 board.show_text 設為 true，就會顯示簡短片段。",
+  "sessions.textOn": "已顯示經遮蔽的簡短訊息片段（board.show_text 已開啟）。",
 
   "usage.tokens": "Token 數",
   "usage.messages": "訊息數",

@@ -52,6 +52,7 @@ const GLOBAL_DEFAULTS = Object.freeze({
   port: 8781,
   usage_days: 14,
   prices: {},
+  board: { show_text: false },
 });
 
 const GATE = ['auto', 'ask', 'never'];
@@ -117,6 +118,10 @@ const GLOBAL_SCHEMA = [
   f('prices.*', 'object', d('One model.', '單一模型。')),
   f('prices.*.input', 'number', d('Input price.', '輸入單價。'), { min: 0 }),
   f('prices.*.output', 'number', d('Output price.', '輸出單價。'), { min: 0 }),
+  f('prices.*.cache_write', 'number', d('Cache write price.', '快取寫入單價。'), { min: 0 }),
+  f('prices.*.cache_read', 'number', d('Cache read price.', '快取讀取單價。'), { min: 0 }),
+  f('board', 'object', d('Board display options.', '看板顯示選項。')),
+  f('board.show_text', 'boolean', d('Show a short redacted snippet of the last assistant message in the Sessions list.', '在工作階段清單顯示最後一則助理訊息的簡短（已遮罩）片段。')),
 ];
 
 // ---------------------------------------------------------------- helpers
@@ -257,7 +262,8 @@ function load(root) {
 // save(root, obj): validates obj, then merges it over the existing file so keys the schema does
 // not know are preserved (keys cannot be deleted this way; set them to their default instead).
 // A corrupt existing file is moved aside first. Throws CrewError config.invalid (err.errors) on bad input.
-function save(root, obj) {
+// opts.src is the event source ('cli' by default; the board passes 'board').
+function save(root, obj, opts = {}) {
   const errors = validate(obj);
   if (errors.length) {
     const err = new CrewError('config.invalid', { count: errors.length, first: `${errors[0].path}: ${errors[0].message}` });
@@ -273,7 +279,7 @@ function save(root, obj) {
   });
   try {
     const id = project.projectId(root);
-    if (project.list().some((p) => p.id === id)) events.append(id, { type: 'config.changed', src: 'cli', data: { file: '.claude/crew.json' }, key: `${Date.now()}:${Math.random()}` });
+    if (project.list().some((p) => p.id === id)) events.append(id, { type: 'config.changed', src: opts.src || 'cli', data: { file: '.claude/crew.json' }, key: `${Date.now()}:${Math.random()}` });
   } catch { /* the event is best effort */ }
   return out;
 }
@@ -300,19 +306,26 @@ function loadGlobal() {
 
 function validateGlobal(obj) { return checkAgainst(obj, GLOBAL_SCHEMA); }
 
-function saveGlobal(obj) {
+// Events live per project, so a global change is recorded (config.changed, scope "global") in
+// the log of every registered project. opts.src as in save().
+function saveGlobal(obj, opts = {}) {
   const errors = validateGlobal(obj);
   if (errors.length) {
     const err = new CrewError('config.invalid', { count: errors.length, first: `${errors[0].path}: ${errors[0].message}` });
     err.errors = errors;
     throw err;
   }
-  return json.update(paths.configFile(), {}, (cur) => {
+  const out = json.update(paths.configFile(), {}, (cur) => {
     const next = deepMerge(cur, obj);
     for (const k of Object.keys(cur)) delete cur[k];
     Object.assign(cur, next);
     return next;
   });
+  try {
+    const key = `${Date.now()}:${Math.random()}`;
+    for (const p of project.list()) events.append(p.id, { type: 'config.changed', src: opts.src || 'cli', data: { file: 'config.json', scope: 'global' }, key });
+  } catch { /* the event is best effort */ }
+  return out;
 }
 
 module.exports = {

@@ -182,7 +182,8 @@ function eventType(from, to) {
   return { returned: 'task.returned', reviewing: 'task.reviewed', accepted: 'task.accepted', merged: 'task.merged', cancelled: 'task.cancelled' }[to];
 }
 
-// transition(projectId, taskId, to, { note, src, session, agent, maxReturns, fields }) -> task
+// transition(projectId, taskId, to, { note, src, session, agent, maxReturns, fields, data }) -> task
+// data: extra keys merged into the event data (they never override from/to/returns/note).
 // Moving to the state a task is already in is a no-op (hooks may fire twice).
 // returned/reviewing -> dispatched is a send-back: returns++ and, once returns >= maxReturns
 // (default 2), CrewError task.takeover is thrown instead. fields: { branch, worktree } to record.
@@ -206,7 +207,7 @@ function transition(projectId, taskId, to, opts = {}) {
     if (opts.fields) for (const k of ['branch', 'worktree']) if (typeof opts.fields[k] === 'string') t[k] = opts.fields[k];
     t.history = Array.isArray(t.history) ? t.history : [];
     t.history.push({ state: to, ts, note: clean(opts.note || '', 500) });
-    ev = { type, data: { from, to, returns: t.returns || 0, note: opts.note || '' }, key: `${t.id}:${t.history.length}` };
+    ev = { type, data: { ...(opts.data && typeof opts.data === 'object' ? opts.data : {}), from, to, returns: t.returns || 0, note: opts.note || '' }, key: `${t.id}:${t.history.length}` };
     return t;
   });
   if (ev) events.append(projectId, { ...ev, src: opts.src || 'cli', session: opts.session, task: taskId, agent: opts.agent });
