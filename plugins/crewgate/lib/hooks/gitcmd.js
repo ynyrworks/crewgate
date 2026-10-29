@@ -133,16 +133,20 @@ function analyse(seg) {
   const rest = seg.slice(i + 1);
   if (cmd === 'git') {
     let j = 0;
-    while (j < rest.length && rest[j].startsWith('-')) j += GIT_VALUED.has(rest[j]) ? 2 : 1;
+    const dirs = []; // every `-C <dir>`, applied in order
+    while (j < rest.length && rest[j].startsWith('-')) {
+      if (rest[j] === '-C' && j + 1 < rest.length) dirs.push(rest[j + 1]);
+      j += GIT_VALUED.has(rest[j]) ? 2 : 1;
+    }
     const sub = rest[j];
     const args = rest.slice(j + 1);
     if (sub === 'push') {
       const p = pushInfo(args);
-      return { type: 'git.push', data: { command: 'git push', remote: p.remote, refs: p.refs, flags: p.flags } };
+      return { type: 'git.push', data: { command: 'git push', remote: p.remote, refs: p.refs, flags: p.flags }, cd: dirs };
     }
     if (sub === 'merge') {
       const m = mergeInfo(args);
-      return m ? { type: 'git.merge', data: { command: 'git merge', branches: m.branches, flags: m.flags, ...(m.dynamic ? { dynamic: true } : {}) } } : null;
+      return m ? { type: 'git.merge', data: { command: 'git merge', branches: m.branches, flags: m.flags, ...(m.dynamic ? { dynamic: true } : {}) }, cd: dirs } : null;
     }
     return null;
   }
@@ -162,15 +166,53 @@ function analyse(seg) {
   return null;
 }
 
-// -> [{ type: 'git.push'|'git.merge', data }]
+// `cd X` / `pushd X` segment -> the directory word; null when the target is unknown (`popd`, `cd` alone,
+// `cd -`, `cd ~`, a dynamic word); undefined when the segment is not a directory change.
+function cdTarget(seg) {
+  const c = base(seg[0] || '');
+  if (c === 'popd') return null;
+  if (c !== 'cd' && c !== 'pushd') return undefined;
+  const w = seg.slice(1).filter((x) => x !== '--' && !/^-[LPe@]+$/.test(x))[0];
+  if (!w || w === '-' || w.startsWith('~') || isDynamic(w)) return null;
+  return w;
+}
+
+// -> [{ type: 'git.push'|'git.merge', data, cd }]
+// cd: the directory words that lead from the session cwd to the repo the command acts on, in order
+// (earlier `cd` segments of the command line, then `git -C`). [] = the session cwd. A dynamic or
+// unknown directory also gives [] (today's behaviour: the session project).
 function detect(command) {
   const out = [];
+  let steps = [];
+  const saved = []; // steps at each open "(": a subshell's cd ends with its ")"
+  let prev = null; // operator before the current segment
+  const one = (seg, next) => {
+    const t = cdTarget(seg);
+    if (t !== undefined) {
+      // a cd on either side of | or & runs in a subshell and does not carry on
+      if (next !== '|' && next !== '&' && prev !== '|' && prev !== '&') steps = t === null ? [] : [...steps, t];
+      return;
+    }
+    const r = analyse(seg);
+    if (r) {
+      const own = r.cd || [];
+      r.cd = own.some(isDynamic) ? [] : [...steps, ...own];
+      out.push(r);
+    }
+  };
   try {
-    for (const seg of segments(tokenize(command))) {
-      const r = analyse(seg);
-      if (r) out.push(r);
+    let cur = [];
+    for (const t of tokenize(command)) {
+      if (typeof t === 'object' && OPS.has(t.op)) {
+        if (cur.length) one(cur, t.op);
+        cur = [];
+        if (t.op === '(') saved.push(steps);
+        else if (t.op === ')') { if (saved.length) steps = saved.pop(); }
+        prev = t.op;
+      } else cur.push(t);
       if (out.length >= 5) break;
     }
+    if (cur.length && out.length < 5) one(cur, null);
   } catch { /* unparseable: nothing */ }
   return out;
 }

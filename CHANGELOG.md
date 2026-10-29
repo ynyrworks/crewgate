@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Git events and gates follow the repo a command targets. PostToolUse(Bash) used the project of the session cwd for `git.push` / `git.merge` events and the push / open_pr / merge gate check, so `cd <other repo> && git push` or `git -C <other repo> push` was recorded (and reminded) against the wrong project. The `cd` / `pushd` words before the command and `git -C` are now resolved from the session cwd (Git-Bash `/c/work/x` paths on Windows included) and the owning registered project is used for the events, `gate.missing` and the approval lookup; one command line can touch several projects. A directory outside every registered project records nothing (it is never registered), and a dynamic directory (`cd "$DIR"`, `$(...)`, `cd -`, `cd ~`) falls back to the session project as before.
+
 ## 0.12.1 — 2026-10-29
 
 Fixes from the first real one-click update (0.11.0 to 0.12.0 on Windows), where the Claude Code plugin updated but Codex was silently skipped.
