@@ -116,5 +116,6 @@
   "gate.alreadyAnswered": "Gate {id} was already answered ({answer})",
   "gate.asked": "Gate {gate} asked: {id}. Ask the user in chat, then run: gate answer {id} yes|no",
   "gate.askedAuto": "Gate {gate} is auto: approved ({id}).",
-  "gate.answered": "Gate {gate} ({id}): {answer}"
+  "gate.answered": "Gate {gate} ({id}): {answer}",
+  "gate.noUserTurn": "Warning: no user message was seen in this session since gate {id} was asked, so this answer will not count as an approval (gates.require_user_turn). Ask the user in chat, wait for the reply, then answer again with a new gate ask."
 }

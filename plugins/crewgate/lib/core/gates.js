@@ -18,6 +18,15 @@ function modeOf(cfg, gate) {
   return v === 'auto' || v === 'never' ? v : 'ask';
 }
 
+// gates.enforce: remind (default) | confirm | block. Anything else is remind.
+function enforceOf(cfg) {
+  const v = cfg && cfg.gates && cfg.gates.enforce;
+  return v === 'confirm' || v === 'block' ? v : 'remind';
+}
+
+// gates.require_user_turn: true unless it is explicitly false.
+const requiresUserTurn = (cfg) => !(cfg && cfg.gates && cfg.gates.require_user_turn === false);
+
 function checkGate(gate) {
   if (!GATES.includes(gate)) throw new UsageError('gate.unknown', { gate: String(gate), choices: GATES.join(', ') });
   return gate;
@@ -55,15 +64,39 @@ function answer(projectId, gateId, reply, note, opts = {}) {
     type: 'gate.answered', src: opts.src || 'cli', session: opts.session, task: asked.task || undefined, key: `${gateId}:answered`,
     data: { id: gateId, gate: asked.data.gate, answer: reply, auto: false, note: note || '' },
   });
-  return { id: gateId, gate: asked.data.gate, answer: reply };
+  const prompts = opts.prompts;
+  return {
+    id: gateId, gate: asked.data.gate, answer: reply,
+    user_turn: reply === 'yes' ? userTurnBetween(prompts, Date.parse(asked.ts), Date.now()) : null,
+  };
+}
+
+// Did the user send a message between two moments? `prompts` are the UserPromptSubmit times (ms) of the
+// session, kept by the UserPromptSubmit hook (no text). null = cannot tell (no list).
+function userTurnBetween(prompts, fromMs, toMs) {
+  if (!Array.isArray(prompts)) return null;
+  return prompts.some((t) => t >= fromMs && t <= toMs);
 }
 
 // Is there an approval for `gate` that this session can lean on? A gate.answered "yes" of the last 30
 // minutes counts when it belongs to this session, or to no session (the CLI cannot tell the session).
-function hasApproval(projectId, gate, session, now = Date.now()) {
+// With opts.requireUserTurn (config gates.require_user_turn, default true) a hand-recorded yes also needs a
+// user message of the session (opts.prompts, ms) between its "gate ask" and itself; the automatic yes of an
+// `auto` gate does not. Without opts the old rule applies.
+function hasApproval(projectId, gate, session, now = Date.now(), opts = {}) {
   const since = now - ANSWER_WINDOW_MS;
-  return events.read(projectId, { types: 'gate.answered', since }).some((e) => e.data && e.data.gate === gate && e.data.answer === 'yes'
-    && (!e.session || !session || e.session === session));
+  const need = opts.requireUserTurn === true;
+  const all = events.read(projectId, { types: need ? ['gate.asked', 'gate.answered'] : 'gate.answered', since: need ? since - ANSWER_WINDOW_MS : since });
+  const asked = new Map();
+  if (need) for (const e of all) if (e.type === 'gate.asked' && e.data) asked.set(e.data.id, Date.parse(e.ts));
+  return all.some((e) => {
+    if (e.type !== 'gate.answered' || !e.data || e.data.gate !== gate || e.data.answer !== 'yes') return false;
+    if (Date.parse(e.ts) < since) return false;
+    if (e.session && session && e.session !== session) return false;
+    if (!need || e.data.auto) return true;
+    const from = asked.get(e.data.id);
+    return from !== undefined && userTurnBetween(opts.prompts, from, Date.parse(e.ts)) === true;
+  });
 }
 
 // Which gate a detected git/PR command falls under (event types come from hooks/gitcmd.js).
@@ -93,4 +126,4 @@ function history(projectId, limit = 30) {
   return [...rows.values(), ...missing].sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0)).slice(0, limit);
 }
 
-module.exports = { GATES, ANSWER_WINDOW_MS, modeOf, ask, answer, hasApproval, gateOf, history };
+module.exports = { GATES, ANSWER_WINDOW_MS, modeOf, enforceOf, requiresUserTurn, userTurnBetween, ask, answer, hasApproval, gateOf, history };

@@ -134,6 +134,7 @@ test('full delegated flow: dispatch, report, review, send-back, accept, merge', 
   assert.equal(accepted.code, 0, accepted.err);
   const gate = wf.crewJson(['gate', 'ask', 'merge', '--task', id, '--detail', 'merge todo-due'], repo);
   assert.equal(gate.code, 0, gate.err);
+  hook('user-prompt-submit', base({ hook_event_name: 'UserPromptSubmit', prompt: 'yes, merge it' })); // the user's reply
   assert.equal(h.crew(['gate', 'answer', gate.data.id, 'yes', '--note', 'user said yes'], repo).code, 0);
   h.git(repo, 'merge', '-q', '--no-ff', '-m', 'merge todo-due', BRANCH);
   hook('post-tool-use', base({

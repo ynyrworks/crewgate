@@ -28,7 +28,9 @@
     "merge": "ask",
     "remote_hosts": "ask",
     "large_task": "ask",
-    "install_or_download": "ask"
+    "install_or_download": "ask",
+    "enforce": "remind",
+    "require_user_turn": true
   },
   "limits": {
     "max_parallel_workers": 3,

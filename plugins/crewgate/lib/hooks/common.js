@@ -114,6 +114,13 @@ function deny(reason, extra) {
   }, extra || {});
 }
 
+// Makes Claude Code itself ask the user whether this tool call may run (PreToolUse "ask").
+function ask(reason, extra) {
+  return Object.assign({
+    hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'ask', permissionDecisionReason: String(reason).slice(0, MAX_CONTEXT) },
+  }, extra || {});
+}
+
 // Reads at most `bytes` from the start of a regular file; '' on any problem.
 function readHead(file, bytes) {
   let fd;
@@ -176,5 +183,5 @@ const normType = (t) => agents.bareName(t);
 
 module.exports = {
   setEvent, PLUGIN_ROOT, AGENT_TOOLS, CODEX_SPAWN, agentPrompt, agentTypeOf, EDIT_TOOLS, obj, str, sessionKey, open, crewCmd, snippet,
-  withContext, notice, deny, readHead, readTail, codexSpawnMarker, normType,
+  withContext, notice, deny, ask, readHead, readTail, codexSpawnMarker, normType,
 };

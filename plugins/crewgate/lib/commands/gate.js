@@ -4,6 +4,7 @@ const { parse } = require('../core/args');
 const { UsageError } = require('../core/errors');
 const gates = require('../core/gates');
 const tasks = require('../core/tasks');
+const sess = require('../hooks/session');
 
 const SPECS = {
   ask: {
@@ -27,8 +28,13 @@ function run(argv, ctx) {
     const r = gates.ask(proj.id, ctx.config().config, a, opts);
     ctx.emit(r, [ctx.t(r.mode === 'auto' ? 'gate.askedAuto' : 'gate.asked', { id: r.id, gate: r.gate })]);
   } else {
-    const r = gates.answer(proj.id, a.id, a.answer, a.note, opts);
-    ctx.emit(r, ctx.t('gate.answered', { id: r.id, gate: r.gate, answer: r.answer }));
+    // The user-turn rule needs the session's prompt times (kept by the UserPromptSubmit hook).
+    const cfg = ctx.config().config;
+    const s = opts.session ? sess.read(opts.session) : null;
+    const r = gates.answer(proj.id, a.id, a.answer, a.note, { ...opts, prompts: s ? (Array.isArray(s.prompt_ts) ? s.prompt_ts : []) : undefined });
+    const lines = [ctx.t('gate.answered', { id: r.id, gate: r.gate, answer: r.answer })];
+    if (r.user_turn === false && gates.requiresUserTurn(cfg)) lines.push(ctx.t('gate.noUserTurn', { id: r.id }));
+    ctx.emit(r, lines);
   }
   return 0;
 }

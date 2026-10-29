@@ -36,6 +36,13 @@ Not: "Should I continue?". Name the action, the target and what you checked. Run
 after the user answers run `crew gate answer <gate-id> yes|no --note "<their words>"`. Record nothing as
 approved until the user answers in chat. If the user says yes to one push, the next push asks again.
 
+Two settings change what a recorded answer is worth. `gates.require_user_turn` (default true): the answer counts only
+when a user message arrived between your `gate ask` and your `gate answer yes`, so never run both in the same turn;
+ask, stop, and answer after the user replied (`crew gate answer` warns when it saw no user message). `gates.enforce`
+(`remind` | `confirm` | `block`): with `confirm` Claude Code itself asks the user before the push, PR or merge runs when
+there is no valid answer (wait for the user, do not rephrase the command to avoid it); with `block` the command is
+denied until a valid answer exists.
+
 ## Handoff body template
 
 ```markdown

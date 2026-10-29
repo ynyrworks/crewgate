@@ -67,6 +67,8 @@ test('a codex spawn without a marker changes nothing', () => {
 test('codex-hooks.json mirrors hooks.json: same events, timeouts and matchers, single-string commands', () => {
   const dir = path.join(__dirname, '..', 'hooks');
   const claude = JSON.parse(fs.readFileSync(path.join(dir, 'hooks.json'), 'utf8')).hooks;
+  // The Bash PreToolUse entry (gates.enforce confirm / block) is Claude Code only: Codex "ask" support is unverified.
+  claude.PreToolUse = claude.PreToolUse.filter((g) => g.matcher !== 'Bash');
   const codex = JSON.parse(fs.readFileSync(path.join(dir, 'codex-hooks.json'), 'utf8')).hooks;
   assert.deepEqual(Object.keys(codex), Object.keys(claude));
   for (const ev of Object.keys(claude)) {

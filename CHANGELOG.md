@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+Gate enforcement and the user-turn rule.
+
+- `gates.enforce` (`remind` | `confirm` | `block`, default `remind`). `remind` is today's behaviour (PostToolUse records `gate.missing` and reminds). `confirm`: a new PreToolUse(Bash) hook finds a push / PR / merge under an `ask` gate without a valid approval and answers `permissionDecision: "ask"` with the command, project and gate, so Claude Code asks the user; if the command then runs, PostToolUse records `gate.confirmed` (`via: "permission-prompt"`) instead of `gate.missing`. `block`: the same check answers `deny` with instructions (`gate ask` -> ask the user -> `gate answer`). New events `gate.prompted`, `gate.blocked`, `gate.confirmed`. The target project of `cd` / `git -C` decides the mode; an unregistered target is never enforced. Codex payloads (`turn_id`) stay on `remind`, and the Bash PreToolUse entry is only in `hooks.json`, not `codex-hooks.json`, because Codex `ask` support is unverified. Behaviour in bypass-permissions mode is unverified too; the hook records the `permission_mode` it saw.
+- `gates.require_user_turn` (boolean, default `true`). A hand-recorded approval counts only when a user message of the same session arrived between its `gate ask` and its `gate answer yes`; `UserPromptSubmit` keeps the times (ms, no text) of the last 20 prompts in the session file. `crew gate answer` warns when no user message happened since the ask. `false` restores the old rule. This changes existing behaviour for `remind` as well: an ask and answer in one turn no longer silences the reminder.
+- `crew doctor` shows the enforce mode, the user-turn rule and the Codex fallback.
+- Docs: `docs/DESIGN.md` §8.1 (steps per mode, pros and cons, limits, recommended settings), README gates section (en, zh-TW), skill and gate references, `docs/CONFIG.md` regenerated.
+- Internal: the target-project resolution and approval check shared by PreToolUse and PostToolUse moved to `lib/hooks/gatecheck.js`.
+
 Stability fixes from a day of real local use (3 projects, about 490 events).
 
 - Redirects are not words. `git push origin main 2>&1 | tail -2` recorded a bogus `2>` ref (76% of hook push / merge events): the command tokenizer treated the `&` of `2>&1` as an operator. Redirect operators and their targets (`2>&1`, `>&2`, `&>f`, `>f`, `>>f`, `<f`, `2>/dev/null`) are now dropped before refs and branches are read.

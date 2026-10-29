@@ -21,6 +21,7 @@ const DEFAULTS = Object.freeze({
   },
   gates: {
     push: 'ask', open_pr: 'ask', merge: 'ask', remote_hosts: 'ask', large_task: 'ask', install_or_download: 'ask',
+    enforce: 'remind', require_user_turn: true,
   },
   limits: {
     max_parallel_workers: 3,
@@ -81,6 +82,12 @@ const SCHEMA = [
   f('gates', 'object', d('Approval gates.', '核准關卡。')),
   ...['push', 'open_pr', 'merge', 'remote_hosts', 'large_task', 'install_or_download']
     .map((k) => f(`gates.${k}`, 'string', GATE_DESC, { enum: GATE })),
+  f('gates.enforce', 'string', d(
+    'When a push, PR or merge under an "ask" gate is checked: remind (after the command, reminder only), confirm (before it, Claude Code asks you to allow it) or block (before it, the command is denied until an approval is recorded).',
+    '「ask」關卡的推送、PR、合併何時檢查：remind（執行後提醒）、confirm（執行前由 Claude Code 詢問你是否允許）、block（執行前拒絕，直到記錄核准）。'), { enum: ['remind', 'confirm', 'block'] }),
+  f('gates.require_user_turn', 'boolean', d(
+    'An approval counts only when you sent a message between "gate ask" and "gate answer yes", so the model cannot approve itself within one turn.',
+    '核准要在「gate ask」與「gate answer yes」之間有使用者送出訊息才算數，避免模型在同一輪自己核准。')),
   f('limits', 'object', d('Limits and guards.', '限制與守門。')),
   f('limits.max_parallel_workers', 'integer', d('Most workers running at once.', '同時進行的 worker 上限。'), { min: 1, max: 20 }),
   f('limits.max_returns_before_takeover', 'integer', d('Send-backs allowed before the orchestrator takes the task over.', '退回幾次後改由統籌接手。'), { min: 1, max: 20 }),

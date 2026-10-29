@@ -40,6 +40,9 @@ function writeConfig(repo, cfg) {
   fs.writeFileSync(path.join(repo, '.claude', 'crew.json'), JSON.stringify(cfg));
 }
 
+// A user message in the session (UserPromptSubmit); an approval needs one between "gate ask" and "gate answer".
+const prompt = (f) => runHook('user-prompt-submit', { session_id: f.sid, cwd: f.repo, prompt: 'go ahead' }, { cwd: f.repo });
+
 const base = (f, extra) => ({ session_id: f.sid, cwd: f.repo, ...extra });
 
 // Starts the session (creates the session file that the fast paths rely on).
@@ -54,4 +57,4 @@ const agentPayload = (f, task, extra) => base(f, {
   tool_input: { prompt: `crew-task: ${task.id}\n\ndo it`, subagent_type: 'crew-worker', description: 'x' }, ...extra,
 });
 
-module.exports = { HOOK, runHook, fixture, writeConfig, base, start, evs, newTask, agentPayload };
+module.exports = { HOOK, runHook, fixture, writeConfig, prompt, base, start, evs, newTask, agentPayload };

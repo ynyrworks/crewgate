@@ -11,19 +11,20 @@ Rules every hook follows
   `CREWGATE_HOME` (default `~/.crewgate`). No network, no model calls (the only outbound request in crewgate is the board's optional update check).
 - Stored text is redacted first, then truncated. Handoff bodies and file contents are never injected,
   only counts and ids. The SessionStart brief wraps file-derived data in `<crew-state untrusted="true">`.
-- The only deliberate refusal is PreToolUse `permissionDecision: "deny"` (JSON, exit 0) when
-  `limits.orchestrator_edit` is `block`. Stop never uses `decision: "block"`.
+- The only deliberate refusals are PreToolUse `permissionDecision: "deny"` (JSON, exit 0) when
+  `limits.orchestrator_edit` is `block` or `gates.enforce` is `block` (and `"ask"` for `gates.enforce: confirm`). Stop never uses `decision: "block"`.
 - Language of injected text comes from `language` in `.claude/crew.json` (`lib/i18n/hooks.*.json`).
 
 | Event (arg) | Matcher | What it does |
 |---|---|---|
 | `session-start` | all | Records `session.start`, creates the session counter file, injects the brief (<= 4,000 bytes). |
-| `user-prompt-submit` | all | Counts prompts, keeps a 200-char redacted first/last prompt. Adds no context. |
+| `user-prompt-submit` | all | Counts prompts, keeps a 200-char redacted first/last prompt and the times (ms, no text) of the last 20 prompts for the gate user-turn rule. Adds no context. |
 | `pre-tool-use` | `Agent\|Task\|collaborationspawn_agent` | Marker `crew-task: <id>` in the prompt: `created` -> `dispatched` (`task.dispatched`), remembers tool_use_id -> task, warns above `max_parallel_workers`. |
 | `pre-tool-use` | `Edit\|Write\|MultiEdit\|NotebookEdit` | Main session + main worktree + path inside the project and outside `orchestrator_edit_allow`: `warn` (context + user message + `orchestrator.warned`), `block` (deny), `off`. |
 | `pre-tool-use` | `Read` | Main session, no `limit`, file longer than `orchestrator_read_warn_lines`: one reminder. Lines are counted with an early stop; binaries and files over 20 MB are skipped. |
+| `pre-tool-use` | `Bash` | Only with `gates.enforce` `confirm` or `block`: a push, PR or merge under an `ask` gate without a valid approval (target repo of `cd` / `git -C`, an unregistered target is skipped) gets `permissionDecision: "ask"` (`gate.prompted`) or `"deny"` (`gate.blocked`). Silent for `remind` and for Codex payloads (`turn_id`). Design: docs/DESIGN.md §8.1. |
 | `post-tool-use` | `Agent\|Task\|collaborationspawn_agent` | Foreground worker finished: `dispatched` -> `returned` if it did not report through the CLI, and a review reminder. Background launch: nothing. |
-| `post-tool-use` | `Bash` | `git push`, `git merge`, `gh pr create|merge`, `glab mr create|merge` -> `git.push` / `git.merge` with command name, remote and branch words only (a word with `$`, a backtick or `%VAR%` is never a branch: `branches: []`, `dynamic: true`; merges are counted from the output). Then the gate check: a push, PR or merge under an `ask` gate without a `gate.answered yes` of the last 30 minutes records `gate.missing` and adds a non-blocking `additionalContext` reminder. |
+| `post-tool-use` | `Bash` | `git push`, `git merge`, `gh pr create|merge`, `glab mr create|merge` -> `git.push` / `git.merge` with command name, remote and branch words only (a word with `$`, a backtick or `%VAR%` is never a branch: `branches: []`, `dynamic: true`; merges are counted from the output). Then the gate check: a push, PR or merge under an `ask` gate without a `gate.answered yes` of the last 30 minutes records `gate.missing` and adds a non-blocking `additionalContext` reminder; under `gates.enforce: confirm` a command that was put to the user and ran records `gate.confirmed` instead. An approval needs a user message between its ask and its answer unless `gates.require_user_turn` is `false`. |
 | `subagent-start` | all | `subagent.start`; binds the agent id to the oldest unbound dispatch of the same type. |
 | `subagent-stop` | all | `subagent.stop`; links the task (dispatch map, else marker in the first 64 KB of the transcript, else in the last message); a still-`dispatched` worker task becomes `returned`; review reminder. |
 | `stop` | all | One reminder when tasks are `returned` but unreviewed or background tasks still run (same reminder is not repeated); nothing when `stop_hook_active`. |

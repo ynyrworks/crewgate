@@ -32,7 +32,9 @@ test('push without a recorded approval: reminder + gate.missing; with a yes it s
   assert.equal(miss[0].data.gate, 'push');
   assert.equal(miss[0].data.command, 'git push');
 
-  gates.answer(f.pid, gates.ask(f.pid, { gates: { push: 'ask' } }, { gate: 'push' }).id, 'yes', 'ok');
+  const ask = gates.ask(f.pid, { gates: { push: 'ask' } }, { gate: 'push' });
+  H.prompt(f); // the user replies
+  gates.answer(f.pid, ask.id, 'yes', 'ok');
   assert.equal(post(f, 'git push origin feat/x', 'p2').out, '{}');
   assert.equal(H.evs(f, 'gate.missing').length, 1);
 });
