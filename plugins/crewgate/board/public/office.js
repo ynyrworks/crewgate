@@ -170,6 +170,17 @@
     String(s || '').toUpperCase().split('').forEach(function (ch) { if (SP.glyph(ch) && ch !== ' ' && out.length < max) out += ch; });
     return out;
   }
+  function badge(text) {   // "+N": more residents than lounge spots
+    var key = theme() + ':badge:' + text;
+    if (!cache[key]) {
+      var pal = SP.PALETTES[theme()];
+      var w = SP.textWidth(text) + 6;
+      var o = canvasOf(w, 11);
+      if (o.g) { fill(o.g, pal.D, 1, 0, w - 2, 11); fill(o.g, pal.D, 0, 1, w, 9); fill(o.g, pal.w, 1, 1, w - 2, 9); drawText(o.g, text, 3, 2, pal.o); }
+      cache[key] = o.c;
+    }
+    return cache[key];
+  }
   var TAGS = { orchestrator: 'LEAD', worker: 'WORK', reviewer: 'REVIEW', refuter: 'REFUTE', other: 'AGENT' };
   function tagCanvas(role) {
     var key = theme() + ':tag:' + role;
@@ -205,11 +216,11 @@
   }
 
   function windowRects(room) {
-    var n = Math.max(1, Math.floor((room.w - 90) / 60));
+    var n = Math.max(1, Math.floor((room.w - 130) / 60));
     var out = [];
     for (var i = 0; i < n; i++) {
-      var span = room.w - 34 - 56 - 30;
-      out.push({ x: n === 1 ? Math.round((room.w - 30) / 2) : Math.round(34 + i * span / (n - 1)), y: 8, w: 30, h: 24 });
+      var span = room.w - 74 - 56 - 30;   // the left 70 px of the wall stay free for the cork board
+      out.push({ x: n === 1 ? Math.round((room.w - 30) / 2) : Math.round(74 + i * span / (n - 1)), y: 8, w: 30, h: 24 });
     }
     return out;
   }
@@ -325,10 +336,15 @@
       for (var i = 0; i < spans.length; i++) if (spans[i][1] - spans[i][0] >= wd + 2) { var px = spans[i][0] + 1; spans[i][0] += wd + 5; return px; }
       return -1;
     };
-    var chars = printable(label, 6) || '...';
+    // the project name goes into the widest free span, shortened with an ellipsis only when it does not fit
+    var widest = 0;
+    spans.forEach(function (sp, si) { if (sp[1] - sp[0] > spans[widest][1] - spans[widest][0]) widest = si; });
+    var fitChars = spans.length ? Math.max(3, Math.min(12, Math.floor((spans[widest][1] - spans[widest][0] - 10 + 1) / 6))) : 3;
+    var full = printable(label, 40) || '...';
+    var chars = full.length > fitChars ? full.slice(0, fitChars - 1) + '…' : full;
     var cw = SP.textWidth(chars) + 8;
-    var px0 = place(cw);
-    if (px0 < 0 && chars.length > 3) { chars = chars.slice(0, 3); cw = SP.textWidth(chars) + 8; px0 = place(cw); }
+    var px0 = -1;
+    if (spans.length) { var sp0 = spans[widest]; if (sp0[1] - sp0[0] >= cw + 2) { px0 = sp0[0] + 1; sp0[0] += cw + 5; } }
     if (px0 >= 0) {   // cork board with the project name
       fill(g, sc.corkFrame, px0, 6, cw, 17); fill(g, sc.cork, px0 + 1, 7, cw - 2, 15); fill(g, sc.corkHi, px0 + 1, 7, cw - 2, 1, 0.7); fill(g, sc.corkLo, px0 + 1, 21, cw - 2, 1, 0.7);
       for (var cp = 0; cp < 5; cp++) fill(g, sc.corkLo, px0 + 2 + Math.floor(r() * (cw - 5)), 8 + Math.floor(r() * 12), 1, 1, 0.5);
@@ -443,7 +459,7 @@
     this.walking = false; this.spot = -1; this.geo = ''; this.look = false; this.pendingEnd = null;
   }
   function seatPos(d) { return { x: d.x + CELL.charX, y: d.y + CELL.charY }; }
-  function besidePos(room, td) { return { x: td.x + (td.x > room.w / 2 ? -8 : 40), y: td.y + 24 }; }
+  function besidePos(room, td) { return { x: td.x + (td.x > room.w / 2 ? -8 : 40), y: td.y + 28 }; }
   function wantOf(row) { return M.placeFor(row, Date.now()); }
 
   function spotOf(rc, a) {
@@ -452,7 +468,7 @@
     var i = list.indexOf(a.id);
     if (i < 0) { i = list.indexOf(null); if (i < 0) { i = list.length; list.push(a.id); } else list[i] = a.id; }
     a.spot = i;
-    return rc.room.spots[i % rc.room.spots.length];
+    return rc.room.spots[Math.min(i, rc.room.spots.length - 1)];   // past the last spot nobody is drawn: the room shows a "+N" badge
   }
   function releaseSpot(rc, a) {
     var list = loungeSeats[rc.room.key] || [];
@@ -748,7 +764,7 @@
       }
       if (seated && an.pose !== 'away' && an.coffee && calm) { g.fillStyle = pal.w; g.globalAlpha = 0.6; g.fillRect(d.x + CELL.mugX + 2, d.y + CELL.mugY - 2, 1, 2); g.globalAlpha = 1; }
       // name tag on the desk front: on hover, always for the orchestrator
-      if (seated && (hot || it.look.role === 'orchestrator')) g.drawImage(tagCanvas(it.look.role), Math.round(d.x + CELL.w / 2 - tagCanvas(it.look.role).width / 2), d.y + CELL.deskY + 12);
+      if (seated && (hot || it.look.role === 'orchestrator')) g.drawImage(tagCanvas(it.look.role), Math.round(d.x + CELL.w / 2 - tagCanvas(it.look.role).width / 2), d.y + CELL.deskY + 9);
     } });
   }
 
@@ -773,7 +789,8 @@
   }
 
   function pushRest(list, rc, a, it, t, calm) {
-    var spot = rc.room.spots[a.spot % rc.room.spots.length];
+    if (a.spot >= rc.room.spots.length) return;
+    var spot = rc.room.spots[a.spot];
     var ph = t + it.look.phase;
     var sofa = spot.kind === 'sofa';
     list.push({ y: a.y + CHH - 1, f: function (g) {
@@ -847,6 +864,9 @@
       if (a.state === 'rest' && !a.busy) pushRest(list, rc, a, item, t, calm);
       else if (a.state !== 'seated' || a.busy) pushWalker(list, a, item, t, calm);
     }
+    var over = 0;
+    for (i = 0; i < rc.occupied.length; i++) { var ra = actors[rc.occupied[i].id]; if (ra && ra.state === 'rest' && !ra.busy && ra.spot >= rc.room.spots.length) over++; }
+    if (over) { var bd = badge('+' + over); list.push({ y: lg.y + LNG.sofaFrontY + 19, s: 5, f: function (gg) { gg.drawImage(bd, lg.x + lg.w - bd.width - 2, lg.y + 1); } }); }
     list.forEach(function (e, n) { e.n = n; if (e.s === undefined) e.s = 0; });
     list.sort(function (p, q) { return p.y - q.y || p.s - q.s || p.n - q.n; });
     for (i = 0; i < list.length; i++) list[i].f(g);
@@ -1040,7 +1060,9 @@
         if (a.geo !== geo) { a.geo = geo; settle(rc, a, d, self.items[d.id].row); }
       });
     });
-    Object.keys(actors).forEach(function (id) { if (!alive[id]) delete actors[id]; });
+    M.prune(actors, alive);
+    M.prune(blinks, alive);
+    M.prune(seen, alive);
     Object.keys(loungeSeats).forEach(function (key) { loungeSeats[key] = loungeSeats[key].map(function (id) { return id && alive[id] ? id : null; }); });
     if (reduced()) this.settleAll();
     this.buildList();
@@ -1052,6 +1074,17 @@
     if (!r.width) return null;
     var x = (ev.clientX - r.left) * rc.room.w / r.width;
     var y = (ev.clientY - r.top) * rc.room.h / r.height;
+    // characters away from their desk (resting, walking) are hit at the place they are drawn, the topmost first
+    var cands = [];
+    rc.occupied.forEach(function (dd) {
+      var a = actors[dd.id];
+      if (!a || a.state === 'gone') return;
+      var s0 = seatPos(dd);
+      var away = a.state === 'rest' ? a.spot >= 0 && a.spot < rc.room.spots.length : a.busy && (a.hopping || Math.abs(a.x - s0.x) > 1 || Math.abs(a.y - s0.y) > 1);
+      if (away) cands.push({ id: dd.id, x: a.x, y: a.y, w: CHW, h: CHH });
+    });
+    var who = M.pickActor(cands, x, y);
+    if (who) { var wa = actors[who]; return { id: who, x: wa.x + 12 - CELL.w / 2, y: wa.y - 4 }; }
     for (var i = 0; i < rc.occupied.length; i++) {
       var d = rc.occupied[i];
       if (x >= d.x + 2 && x < d.x + CELL.w - 2 && y >= d.y + 20 && y < d.y + 70) return d;

@@ -345,22 +345,20 @@
     }
   }
 
-  // Cute face: 2x3 eyes with a highlight, blush, a 1-2 px mouth that depends on the pose.
+  // Cute face: wide-set 3x3 eyes with a highlight (they read at 2x), blush, a 1-2 px mouth that depends on the pose.
   function drawFace(g, hx, hy, mood) {
     var X = function (x) { return x + hx; };
     var Y = function (y) { return y + hy; };
     rect(g, X(6), Y(13), 2, 1, 'x'); rect(g, X(16), Y(13), 2, 1, 'x');
-    [8, 14].forEach(function (ex0) {
+    [7, 14].forEach(function (ex0) {
       var ex = mood === 'look' ? ex0 - 1 : ex0;
       if (mood === 'blink') {
-        px(g, X(ex), Y(11), 'e'); px(g, X(ex + 1), Y(11), 'e');
+        rect(g, X(ex), Y(11), 3, 1, 'e');
       } else if (mood === 'happy') {
-        var o = ex === 8 ? 0 : -1;
-        px(g, X(ex + o), Y(11), 'e'); px(g, X(ex + o + 1), Y(10), 'e'); px(g, X(ex + o + 2), Y(11), 'e');
+        px(g, X(ex), Y(11), 'e'); px(g, X(ex + 1), Y(10), 'e'); px(g, X(ex + 2), Y(11), 'e');
       } else {
-        px(g, X(ex), Y(10), 'w'); px(g, X(ex + 1), Y(10), 'e');
-        px(g, X(ex), Y(11), 'e'); px(g, X(ex + 1), Y(11), 'e');
-        px(g, X(ex), Y(12), 'M'); px(g, X(ex + 1), Y(12), 'M');
+        rect(g, X(ex), Y(10), 3, 2, 'e'); rect(g, X(ex), Y(12), 3, 1, 'M');
+        px(g, X(ex), Y(10), 'w');
       }
     });
     if (mood === 'alert') { rect(g, X(11), Y(13), 2, 2, 'm'); }
@@ -373,8 +371,9 @@
     var X = function (x) { return x + hx; };
     var Y = function (y) { return y + hy; };
     if (acc === 'glasses') {
-      [[7, 14], [13, 16]].forEach(function (p) { rect(g, X(p[0]), Y(9), 4, 1, 'D'); rect(g, X(p[0]), Y(13), 4, 1, 'D'); rect(g, X(p[0]), Y(10), 1, 3, 'D'); rect(g, X(p[0] + 3), Y(10), 1, 3, 'D'); });
-      rect(g, X(11), Y(10), 2, 1, 'D');
+      // thin frames: a top rim and the sides of each lens, the eyes stay open; a bridge and two temples
+      [6, 13].forEach(function (x0) { rect(g, X(x0), Y(9), 5, 1, 'G'); px(g, X(x0), Y(10), 'G'); px(g, X(x0 + 4), Y(10), 'G'); px(g, X(x0), Y(11), 'G'); px(g, X(x0 + 4), Y(11), 'G'); });
+      px(g, X(11), Y(10), 'G'); px(g, X(12), Y(10), 'G'); px(g, X(5), Y(10), 'G'); px(g, X(18), Y(10), 'G');
     } else if (acc === 'phones' || acc === 'headset') {
       rect(g, X(4), Y(8), 2, 5, 'D'); rect(g, X(18), Y(8), 2, 5, 'D'); px(g, X(4), Y(8), 'G'); px(g, X(18), Y(8), 'G');
       [[5, 4], [6, 3], [7, 3], [16, 3], [17, 3], [18, 4]].forEach(function (p) { px(g, X(p[0]), Y(p[1]), 'D'); });
@@ -443,12 +442,12 @@
   }
 
   // desk: top surface (10 rows, lit edge at the back), front panel with a drawer, legs
-  var desk = make(42, 22, function (g) {
-    rect(g, 1, 1, 40, 10, 't'); rect(g, 1, 1, 40, 1, 'Y'); rect(g, 1, 10, 40, 1, 'T');
-    rect(g, 3, 4, 8, 1, 'T'); rect(g, 25, 6, 9, 1, 'T');                       // grain
-    rect(g, 2, 11, 38, 8, 'T'); rect(g, 2, 11, 38, 1, 'W'); rect(g, 2, 12, 38, 1, 't');
-    rect(g, 14, 13, 14, 5, 't'); rect(g, 14, 13, 14, 1, 'Y'); rect(g, 14, 17, 14, 1, 'W'); rect(g, 19, 15, 4, 1, 'G'); px(g, 19, 14, 'g');
-    rect(g, 3, 19, 3, 2, 'W'); rect(g, 36, 19, 3, 2, 'W');
+  var desk = make(42, 18, function (g) {
+    rect(g, 1, 1, 40, 8, 't'); rect(g, 1, 1, 40, 1, 'Y'); rect(g, 1, 8, 40, 1, 'T');
+    rect(g, 3, 4, 8, 1, 'T'); rect(g, 25, 5, 9, 1, 'T');                       // grain
+    rect(g, 2, 9, 38, 6, 'T'); rect(g, 2, 9, 38, 1, 'W'); rect(g, 2, 10, 38, 1, 't');
+    rect(g, 14, 11, 14, 4, 't'); rect(g, 14, 11, 14, 1, 'Y'); rect(g, 14, 14, 14, 1, 'W'); rect(g, 19, 12, 4, 1, 'G'); px(g, 19, 12, 'g');
+    rect(g, 3, 15, 3, 2, 'W'); rect(g, 36, 15, 3, 2, 'W');
   });
   var chair = make(20, 16, function (g) {
     ell(g, 10, 6, 7, 6, shaded('Q', 'I', 'C'));
@@ -578,8 +577,8 @@
 
   // Where things sit inside a 48 x 72 desk cell (renderer and tests share these).
   var CELL = {
-    w: 48, h: 72, charX: 18, charY: 22, deskX: 3, deskY: 49, monX: 3, monY: 34, kbX: 21, kbY: 54, handsX: 22, handsY: 52,
-    mugX: 37, mugY: 53, lampX: 37, lampY: 38, chairX: 20, chairY: 38, bubbleX: 16, bubbleY: 0, shadowX: 1, shadowY: 67,
+    w: 48, h: 72, charX: 18, charY: 28, deskX: 3, deskY: 53, monX: 3, monY: 38, kbX: 21, kbY: 56, handsX: 22, handsY: 54,
+    mugX: 37, mugY: 54, lampX: 37, lampY: 42, chairX: 20, chairY: 44, bubbleX: 16, bubbleY: 0, shadowX: 1, shadowY: 67,
     screen: { x: 3, y: 3, w: 14, h: 9 }
   };
   // The lounge corner (offsets inside the lounge strip of a room; office-model.js places the seats with the same numbers).
@@ -608,6 +607,7 @@
     '-': ['.....', '.....', '.....', '#####', '.....', '.....', '.....'], '.': ['.....', '.....', '.....', '.....', '.....', '.##..', '.##..'],
     '/': ['....#', '....#', '...#.', '..#..', '.#...', '#....', '#....'], '_': ['.....', '.....', '.....', '.....', '.....', '.....', '#####'],
     ':': ['.....', '.##..', '.##..', '.....', '.##..', '.##..', '.....'], '?': ['.###.', '#...#', '....#', '...#.', '..#..', '.....', '..#..'],
+    '…': ['.....', '.....', '.....', '.....', '.....', '.....', '#.#.#'],
     ' ': ['.....', '.....', '.....', '.....', '.....', '.....', '.....']
   };
   var FONT_W = 5;

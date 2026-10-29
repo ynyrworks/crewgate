@@ -151,7 +151,7 @@ test('layout: one room per project, orchestrator in the middle of the top row, c
     room.desks.forEach((d) => { const k = `${d.x},${d.y}`; assert.ok(!seen.has(k), `overlap at ${k}`); seen.add(k); assert.ok(d.x >= 0 && d.x + OM.CELL_W <= room.w && d.y + OM.CELL_H <= room.h, 'inside the room'); });
   });
   // free seats are still drawn so the pod looks like an office
-  assert.ok(lay.rooms.every((r) => r.desks.length >= 3 && r.desks.length % 3 === 0));
+  assert.ok(lay.rooms.every((r) => r.desks.length >= 2));
 });
 
 test('layout: stable seats across refreshes; leavers leave a hole, newcomers take it', () => {
@@ -219,7 +219,7 @@ test('layout: pods per row follow maxCols but never reassign seats', () => {
   const one = OM.layout(st, { maxCols: 1 });
   const three = OM.layout(st, { maxCols: 3 });
   assert.equal(one.rooms[0].cols, 1);
-  assert.equal(three.rooms[0].cols, 3);
+  assert.ok(three.rooms[0].cols >= 3 && three.rooms[0].cols <= 4);
   assert.ok(three.rooms[0].w > one.rooms[0].w);
   assert.ok(three.rooms[0].h < one.rooms[0].h);
   assert.equal(OM.layout(st, { maxCols: 99 }).rooms[0].cols, 5);
@@ -420,7 +420,7 @@ test('interactions: report, review, debate and dispatch events come from state c
 test('layout: every room has a lounge, a door and enough rest spots inside the room', () => {
   const st = OM.assign(null, [row({ id: 'a', project: 'p1' }), row({ id: 'b', project: 'p1' })]);
   const room = OM.layout(st, { maxCols: 1 }).rooms[0];
-  assert.equal(room.spots.length, 5);
+  assert.ok(room.spots.length >= 5 && room.spots.length <= OM.LOUNGE_MAX);
   assert.equal(room.spots.filter((s) => s.kind === 'sofa').length, 3);
   const last = Math.max(...room.desks.map((d) => d.y + OM.CELL_H));
   assert.ok(room.lounge.y >= last - 20 && room.lounge.y + room.lounge.h <= room.h, 'lounge sits under the pods, inside the room');
@@ -443,4 +443,60 @@ test('looks: roles keep a signature accessory, everyone else varies with the id'
   }
   assert.ok(accs.size >= 4);
   assert.ok(combos.size > 150, 'two characters rarely look the same: ' + combos.size);
+});
+
+test('layout: pods are sized to the people in them, plus one spare desk, and stay put between refreshes', () => {
+  const kid = (id, parent) => row({ id, parent, subagent: true, project: 'p1' });
+  const solo = OM.layout(OM.assign(null, [row({ id: 'S', project: 'p1' })]), { maxCols: 3 }).rooms[0];
+  assert.equal(solo.desks.length, 2, 'one person: their desk and one spare');
+  assert.equal(solo.desks.filter((d) => d.id).length, 1);
+  const pair = OM.layout(OM.assign(null, [row({ id: 'P', project: 'p1' }), kid('k1', 'P')]), { maxCols: 3 }).rooms[0];
+  assert.equal(pair.desks.length, 3);
+  const five = OM.layout(OM.assign(null, [row({ id: 'P', project: 'p1' }), kid('a', 'P'), kid('b', 'P'), kid('c', 'P'), kid('d', 'P')]), { maxCols: 3 }).rooms[0];
+  assert.equal(five.desks.length, 6, 'five people: a row of three plus a row of three, one spare');
+  assert.ok(five.desks.every((d) => !d.free || d.y > five.desks[0].y), 'the spare desk is in the last row');
+  // five lone sessions no longer get 15 desks
+  const rows = [];
+  for (let i = 0; i < 5; i++) rows.push(row({ id: 'q' + i, project: 'p1' }));
+  const many = OM.layout(OM.assign(null, rows), { maxCols: 4 }).rooms[0];
+  assert.equal(many.desks.length, 10);
+  assert.ok(many.w >= OM.MIN_ROOM_W);
+  // an unchanged refresh gives the same coordinates; a newcomer in another pod moves nobody who was already placed
+  const st1 = OM.assign(null, rows);
+  const a1 = OM.layout(st1, { maxCols: 4 }).pos;
+  const st2 = OM.assign(st1, rows.slice().reverse());
+  const a2 = OM.layout(st2, { maxCols: 4 }).pos;
+  assert.deepEqual(a2, a1);
+  const st3 = OM.assign(st2, rows.concat(row({ id: 'q9', project: 'p1' })));
+  const a3 = OM.layout(st3, { maxCols: 4 }).pos;
+  for (const id of Object.keys(a1)) assert.deepEqual([a3[id].x, a3[id].y], [a1[id].x, a1[id].y], id);
+});
+
+test('lounge: more spots in wider rooms, capped; hit-picking takes the topmost character; per-id state is pruned', () => {
+  const narrow = OM.loungeSpots({ x: 10, y: 100, w: 144, h: 44 });
+  const wide = OM.loungeSpots({ x: 10, y: 100, w: 700, h: 44 });
+  assert.ok(wide.length > narrow.length);
+  assert.equal(wide.length, OM.LOUNGE_MAX);
+  assert.equal(new Set(wide.map((s) => s.x + ',' + s.y)).size, wide.length, 'no two spots on the same pixel');
+  // a walker in front of a desk wins over characters behind it; outside everyone: null
+  const cands = [{ id: 'back', x: 10, y: 10, w: 24, h: 32 }, { id: 'front', x: 20, y: 30, w: 24, h: 32 }];
+  assert.equal(OM.pickActor(cands, 25, 35), 'front');
+  assert.equal(OM.pickActor(cands, 12, 12), 'back');
+  assert.equal(OM.pickActor(cands, 100, 100), null);
+  assert.equal(OM.pickActor([], 1, 1), null);
+  // departed ids leave every per-id map
+  const blinks = { a: 1, b: 2, c: 3 };
+  assert.equal(OM.prune(blinks, { a: true }), 2);
+  assert.deepEqual(Object.keys(blinks), ['a']);
+});
+
+test('office page strings describe the v3 office', () => {
+  for (const l of ['en', 'zh-TW']) {
+    const s = table(l)['office.states'];
+    assert.doesNotMatch(s, /Empty desk|空桌/, l + ' no longer says an empty desk means done');
+  }
+  assert.match(table('en')['office.states'], /door/i);
+  assert.match(table('en')['office.states'], /sofa/i);
+  assert.match(table('zh-TW')['office.states'], /門/);
+  assert.match(table('zh-TW')['office.states'], /沙發/);
 });
