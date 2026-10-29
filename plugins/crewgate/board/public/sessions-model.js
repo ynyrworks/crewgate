@@ -197,8 +197,19 @@
     return { text: priv ? null : ev.text || null, target: priv ? null : ev.target || null, agentType: priv ? null : ev.agent_type || null };
   }
 
+  // Does a step match the search text? Case-insensitive, every word must occur somewhere in the step's names
+  // (kind, tool, crewgate event type, task id) or, unless private mode hides text, its prompt snippet, tool target
+  // and subagent type. Private mode only removes fields, so it never makes a search find more.
+  function stepMatches(ev, query, priv) {
+    var words = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return true;
+    var st = stepText(ev, priv);
+    var hay = [ev.kind, ev.tool, ev.type, ev.task, ev.phase === 'stop' ? 'finished stop' : ev.phase === 'start' ? 'started start' : '', st.text, st.target, st.agentType].filter(Boolean).join(' ').toLowerCase();
+    return words.every(function (w) { return hay.indexOf(w) >= 0; });
+  }
+
   // Only ids the server makes are used in links.
   function validId(id) { return typeof id === 'string' && /^[0-9a-f]{12}$/.test(id); }
 
-  return { cleanFilter: cleanFilter, matches: matches, buildTree: buildTree, isOpen: isOpen, visible: visible, counts: counts, isRunning: isRunning, isWaiting: isWaiting, displayStatus: displayStatus, fmtDuration: fmtDuration, compact: compact, tokenSum: tokenSum, cardStats: cardStats, KIND_ORDER: KIND_ORDER, emptyTimeline: emptyTimeline, mergeLatest: mergeLatest, mergeOlder: mergeOlder, withGaps: withGaps, kindCounts: kindCounts, stepText: stepText, validId: validId, STATES: STATES, ENGINES: ENGINES };
+  return { cleanFilter: cleanFilter, matches: matches, buildTree: buildTree, isOpen: isOpen, visible: visible, counts: counts, isRunning: isRunning, isWaiting: isWaiting, displayStatus: displayStatus, fmtDuration: fmtDuration, compact: compact, tokenSum: tokenSum, cardStats: cardStats, KIND_ORDER: KIND_ORDER, emptyTimeline: emptyTimeline, mergeLatest: mergeLatest, mergeOlder: mergeOlder, withGaps: withGaps, kindCounts: kindCounts, stepText: stepText, stepMatches: stepMatches, validId: validId, STATES: STATES, ENGINES: ENGINES };
 }));

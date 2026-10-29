@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+Activity timeline polish.
+
+- Search box on the timeline page: filters the loaded steps (tool name, target, prompt snippet, crewgate event type, task id) as you type, case-insensitive, all words must match, with a match count. In private mode only names and kinds are searched. It searches loaded steps only; load older steps to search further back.
+- Tool durations across the page edge: a call opened on an older page now gets its duration, failure flag and subagent link from a forward look-ahead past the page edge (at most 512 KiB, stops when every open call is answered). The answer gains an additive field X (bytes read forward).
+- crewgate events older than the board's recent event tail now show: the API reads the project's `events.jsonl` backwards for the time window of the page (at most 4 MiB), filtered by session.
+
 ## 0.12.1 — 2026-10-29
 
 Fixes from the first real one-click update (0.11.0 to 0.12.0 on Windows), where the Claude Code plugin updated but Codex was silently skipped.

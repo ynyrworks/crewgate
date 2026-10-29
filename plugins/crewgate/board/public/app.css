@@ -163,6 +163,8 @@ button.older { margin: 0 0 10px; min-height: 36px; }
 .tl-item.k-crew::before { border-color: var(--good); transform: rotate(45deg); border-radius: 0; }
 .tl-item.is-err::before { border-color: var(--crit); background: var(--crit); }
 .tl-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-radius: 4px; }
+.tl-search { width: 100%; max-width: 28em; margin: 0 0 4px; }
+.tl-count { margin: 0 0 8px; min-height: 1.2em; font-size: 12px; }
 .tl-day { margin: 8px 0 2px -12px; font-weight: 600; color: var(--text-2); font-size: 12px; }
 .tl-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; font-size: 12px; }
 .tl-time { font-variant-numeric: tabular-nums; color: var(--text-2); }

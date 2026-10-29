@@ -145,3 +145,39 @@ test('styles: waiting rows are highlighted, chips differ by more than colour, na
   assert.match(css, /max-width: 480px/);
   assert.match(css, /prefers-color-scheme: dark[\s\S]*--warn-bg/);
 });
+
+test('timeline search: case-insensitive words over names and kinds; text only when not private', () => {
+  const tool = { kind: 'tool', tool: 'Bash', target: 'npm test --silent', ts: 1 };
+  const prompt = { kind: 'prompt', text: 'Fix the Login bug', ts: 2 };
+  const crew = { kind: 'crew', type: 'task.dispatched', task: 'T-12', ts: 3 };
+  const sub = { kind: 'subagent', phase: 'stop', agent_type: 'crewgate:crew-worker', ts: 4 };
+  assert.equal(SM.stepMatches(tool, '', false), true, 'empty search matches everything');
+  assert.equal(SM.stepMatches(tool, '  ', false), true);
+  assert.equal(SM.stepMatches(tool, 'BASH', false), true);
+  assert.equal(SM.stepMatches(tool, 'npm silent', false), true, 'words are ANDed');
+  assert.equal(SM.stepMatches(tool, 'npm yarn', false), false);
+  assert.equal(SM.stepMatches(prompt, 'login', false), true);
+  assert.equal(SM.stepMatches(crew, 'DISPATCHED', false), true);
+  assert.equal(SM.stepMatches(crew, 't-12', false), true);
+  assert.equal(SM.stepMatches(sub, 'crew-worker', false), true);
+  assert.equal(SM.stepMatches(sub, 'finished', false), true);
+  // private mode: names and kinds only
+  assert.equal(SM.stepMatches(tool, 'npm', true), false);
+  assert.equal(SM.stepMatches(tool, 'bash', true), true);
+  assert.equal(SM.stepMatches(prompt, 'login', true), false);
+  assert.equal(SM.stepMatches(prompt, 'prompt', true), true);
+  assert.equal(SM.stepMatches(sub, 'crew-worker', true), false);
+  assert.equal(SM.stepMatches(crew, 'dispatched', true), true);
+});
+
+test('timeline search: page wiring has no inline handlers and strings exist in both languages', () => {
+  const src = read('app.js');
+  assert.match(src, /type: 'search'/);
+  assert.match(src, /SM\.stepMatches\(r\.ev, DET\.q, S\.mask\)/, 'the private-mode flag is passed to the matcher');
+  assert.doesNotMatch(read('index.html'), /\son(?:input|click)=/);
+  const en = table('en');
+  const zh = table('zh-TW');
+  for (const k of ['sessions.search', 'sessions.searchCount', 'sessions.searchLoaded', 'sessions.noMatch']) { assert.ok(en[k], `en ${k}`); assert.ok(zh[k], `zh-TW ${k}`); }
+  assert.match(en['sessions.searchCount'], /\{shown\}.*\{total\}/);
+  assert.match(zh['sessions.searchCount'], /\{shown\}/);
+});
