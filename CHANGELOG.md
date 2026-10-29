@@ -2,7 +2,11 @@
 
 ## Unreleased
 
+## 0.11.0 — 2026-10-29
+
 - Update notice and one-click update. The board server asks GitHub once a day (global config `updates.check`, default on; off means no request at all) whether a newer release exists and shows a banner on every page: fix / new features / major, release notes, **Update now**, **Skip this version**. **Update now** runs fixed commands only (`claude plugin marketplace update crewgate`, `claude plugin update crewgate@crewgate`, `codex plugin marketplace upgrade crewgate`) for an installed plugin, then restarts the board from the updated code; a development checkout or a machine without the CLIs gets copyable commands. New `crew update check|apply`; `crew doctor` shows the cached latest release. New endpoints `GET /api/update`, `POST /api/update/check`, `POST /api/update/apply`, `GET /api/update/status`.
+- The update check is the only outbound request crewgate makes (at most once a day, `updates.check`, on by default). If **Update now** cannot run the commands it falls back to copyable commands, and the board restarts itself from the updated code afterwards. A release whose notes contain `<!-- crewgate:rehook -->` tells the banner that hook commands changed and need re-trusting.
+- Upgrading Codex needs only `codex plugin marketplace upgrade crewgate` (verified: it refreshes the installed plugin; no `codex plugin add` needed). README text corrected in both languages.
 
 ## 0.10.1 — 2026-10-29
 
