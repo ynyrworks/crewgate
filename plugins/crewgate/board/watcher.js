@@ -275,6 +275,7 @@ function createWatcher(opts = {}) {
   const o = { ...DEFAULTS, ...defaultRoots(), ...opts };
   let cache = null;
   const perFile = new Map();   // file -> { key, info }
+  let idFiles = new Map();     // row id -> file, for the files of the latest scan (stats and timeline lookups)
   const git = o.gitInfo || createGitInfo();
 
   function inspectFile(file, engine, st) {
@@ -321,6 +322,7 @@ function createWatcher(opts = {}) {
     }
     rows.sort((a, b) => b.st.mtimeMs - a.st.mtimeMs);
     cache = { at: now, rows: rows.slice(0, o.maxFiles) };
+    idFiles = new Map(cache.rows.map((r) => [hashId(r.file), { file: r.file, engine: r.engine, size: r.st.size, mtimeMs: r.st.mtimeMs }]));
     const live = new Set(cache.rows.map((r) => r.file));
     for (const k of perFile.keys()) if (!live.has(k)) perFile.delete(k);
     return cache.rows;
@@ -424,7 +426,11 @@ function createWatcher(opts = {}) {
     return out.map((x) => x.row);
   }
 
-  return { sessions, options: o, claudeRoot: o.claudeRoot, codexRoot: o.codexRoot };
+  // fileFor(id) -> { file, engine, size, mtimeMs } for a row id of the latest scan, or null. Ids are hashes the scan itself made,
+  // so a caller cannot name an arbitrary path.
+  const fileFor = (id) => idFiles.get(String(id)) || null;
+
+  return { sessions, fileFor, options: o, claudeRoot: o.claudeRoot, codexRoot: o.codexRoot };
 }
 
-module.exports = { createWatcher, readClaude, readCodex, statusOf, targetOf, toolArg, roleOf, tailObjects, DEFAULTS, walk, defaultRoots };
+module.exports = { createWatcher, promptText, hashId, codexArg, snippet, readClaude, readCodex, statusOf, targetOf, toolArg, roleOf, tailObjects, DEFAULTS, walk, defaultRoots };

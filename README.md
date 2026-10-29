@@ -260,7 +260,8 @@ codex plugin add crewgate@crewgate
 - `crew task merge` records a merge; it does not run git. The orchestrator merges, the hook records the command.
 - Worker isolation is a worktree plus instructions, not a container.
 - The board lists sessions by reading local Claude Code and Codex logs; message text is hidden unless you set
-  `board.show_text` in the global config.
+  `board.show_text` in the global config. Session statistics (duration, prompts, tool calls, tokens, cost) are numbers only;
+  they are cached per transcript under `~/.crewgate/cache/sessions`.
 - No animated "office" view. A Codex orchestrator is experimental; there is no Gemini support.
 
 ## Contributing
