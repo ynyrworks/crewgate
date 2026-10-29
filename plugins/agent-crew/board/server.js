@@ -60,6 +60,11 @@ function createBoard(opts = {}) {
   if (opts.codexRoot !== undefined) watcherOpts.codexRoot = opts.codexRoot;
   const { createWatcher } = require('./watcher');
   const { createUsage } = require('./usage');
+  if (!watcherOpts.sessionEnds) {
+    const projects = require('../lib/core/project');
+    const paths = require('../lib/core/paths');
+    watcherOpts.sessionEnds = require('./session-ends').createSessionEnds(() => projects.list().map((p) => paths.eventsFile(p.id)));
+  }
   const api = createApi({ version, watcher: createWatcher(watcherOpts), usage: createUsage(watcherOpts) });
   let boundPort = opts.port || 0;
   let indexHtml = null;

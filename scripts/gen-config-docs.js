@@ -60,7 +60,7 @@ if (require.main === module) {
   if (process.argv.includes('--check')) {
     let cur = '';
     try { cur = fs.readFileSync(OUT, 'utf8'); } catch { /* missing */ }
-    if (cur !== text) { process.stderr.write('docs/CONFIG.md is stale: run node scripts/gen-config-docs.js\n'); process.exit(1); }
+    if (cur.replace(/\r\n/g, '\n') !== text) { process.stderr.write('docs/CONFIG.md is stale: run node scripts/gen-config-docs.js\n'); process.exit(1); }
   } else {
     fs.mkdirSync(path.dirname(OUT), { recursive: true });
     fs.writeFileSync(OUT, text);
