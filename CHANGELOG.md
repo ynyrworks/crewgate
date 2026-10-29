@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.12.0 — 2026-10-29
+
+Highlights: the experimental office view, session statistics and the activity timeline, and fixes from an analysis of real use (gate commands and reminders, hooks-last-seen, merge records, `via`, agent name normalisation, work item updates, default checks detection, flaky test fixes).
+
+Upgrade notes: hook command strings did not change since 0.11.0 (only `hooks/README.md` differs), so Codex does not need `/hooks` re-approval.
+
 Fixes from an analysis of real use (7 tasks, 10 dispatches, 115 events).
 
 - Gates are recorded. New `crew gate ask <gate> --task <id> [--detail T]` (prints a gate id; `auto` answers yes at once, `never` exits 1) and `crew gate answer <gate-id> yes|no [--note T]` write `gate.asked` / `gate.answered`. The PostToolUse(Bash) hook reminds the model (non-blocking) and records `gate.missing` when a `git push`, `gh pr create` / `glab mr create` or merge runs under an `ask` gate with no yes of the last 30 minutes. The skill and `references/lessons-and-gates.md` tell the orchestrator to ask through the CLI first. The project page shows the gate history (asked / answered / no approval).
