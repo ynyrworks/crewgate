@@ -135,7 +135,7 @@ function codexEvents(x, ctx) {
     const ev = { ts, ref: isStr(p.call_id) ? p.call_id : null };
     if (res && res.ts !== null && ts !== null && res.ts >= ts) ev.dur_ms = res.ts - ts;
     if (!res && ev.ref) ctx.pending.set(ev.ref, ev);
-    if (/(?:^|[._])spawn_agent$/.test(p.name)) { out.push({ ...ev, kind: 'subagent', phase: 'start', agent: null }); return out; }
+    if (/(?:^|[._])spawn_agent$/.test(p.name)) { Object.assign(ev, { kind: 'subagent', phase: 'start', agent: null }); out.push(ev); return out; }   // pending must hold the pushed object
     Object.assign(ev, { kind: 'tool', tool: p.name.slice(0, 60) });
     if (ctx.showText) { const tg = targetOf(codexArg(p), ctx.cwd); if (tg) ev.target = tg; }
     out.push(ev);

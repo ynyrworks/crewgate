@@ -287,3 +287,19 @@ test('timeline asks a crewEvents function for the span of the page: events older
   // a throwing provider does not break the page
   assert.equal(timeline(claudeOpts(f, { limit: 5, crewEvents: () => { throw new Error('x'); } })).events.length, 5);
 });
+
+test('Codex spawn_agent: the duration also appears when the result is across the page edge', () => {
+  const c = newFile();
+  const rec = (sec, type, payload) => ({ timestamp: iso(sec), type, payload });
+  fs.writeFileSync(c, jl([
+    rec(0, 'response_item', { type: 'function_call', name: 'spawn_agent', call_id: 'sp1', arguments: '{}' }),
+    rec(1, 'event_msg', { type: 'user_message', message: 'a' }),
+    rec(2, 'event_msg', { type: 'user_message', message: 'b' }),
+    rec(7, 'response_item', { type: 'function_call_output', call_id: 'sp1', output: 'x' }),
+  ]));
+  const whole = timeline({ file: c, engine: 'codex', cwd: CWD });
+  assert.equal(whole.events.find((e) => e.kind === 'subagent').dur_ms, 7000);
+  const p1 = timeline({ file: c, engine: 'codex', cwd: CWD, limit: 2 });
+  const p2 = timeline({ file: c, engine: 'codex', cwd: CWD, limit: 10, before: p1.cursor, beforeTs: p1.cursor_ts });
+  assert.equal(p2.events.find((e) => e.kind === 'subagent').dur_ms, 7000);
+});
