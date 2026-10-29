@@ -40,14 +40,30 @@ function git(args, cwd) {
   }
 }
 
-// One git call: { commonDir, gitDir } as absolute paths, or null outside a repository / without git.
+// git(), but keeps what was printed before a failure: `--show-toplevel` fails inside a git dir or a
+// bare repository after the other values were already written.
+function gitPartial(args, cwd) {
+  try {
+    return execFileSync('git', args, {
+      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000, windowsHide: true,
+    }).trim();
+  } catch (e) {
+    return typeof e.stdout === 'string' && e.stdout.trim() ? e.stdout.trim() : null;
+  }
+}
+
+// One git call: { commonDir, gitDir, top } as absolute paths, or null outside a repository / without git.
+// top = the work tree root of cwd (null inside a git dir or a bare repository).
 function gitDirs(cwd) {
-  let out = git(['rev-parse', '--path-format=absolute', '--git-common-dir', '--git-dir'], cwd);
-  if (out === null) out = git(['rev-parse', '--git-common-dir', '--git-dir'], cwd); // git < 2.31
+  let out = gitPartial(['rev-parse', '--path-format=absolute', '--git-common-dir', '--git-dir', '--show-toplevel'], cwd);
+  if (out === null) out = gitPartial(['rev-parse', '--git-common-dir', '--git-dir', '--show-toplevel'], cwd); // git < 2.31
   if (out === null) return null;
   const lines = out.split(/\r?\n/).filter(Boolean);
   if (lines.length < 2) return null;
-  return { commonDir: path.resolve(cwd, lines[0]), gitDir: path.resolve(cwd, lines[1]) };
+  return {
+    commonDir: path.resolve(cwd, lines[0]), gitDir: path.resolve(cwd, lines[1]),
+    top: lines[2] ? path.resolve(cwd, lines[2]) : null,
+  };
 }
 
 function nearestCrewJsonRoot(start) {
@@ -60,8 +76,10 @@ function nearestCrewJsonRoot(start) {
   }
 }
 
-// -> { root, linked, git }. root = main worktree (dirname of the git common dir), else the
-// nearest ancestor holding .claude/crew.json, else null. linked = cwd is in a linked worktree.
+// -> { root, workTree, linked, git }. root = main worktree (dirname of the git common dir), else the
+// nearest ancestor holding .claude/crew.json, else null. workTree = root of the work tree that holds
+// cwd (git's --show-toplevel; equals root outside linked worktrees; null when root is null).
+// linked = cwd is in a linked worktree.
 function inspect(cwd = process.cwd()) {
   const dirs = gitDirs(cwd);
   if (dirs) {
@@ -74,13 +92,33 @@ function inspect(cwd = process.cwd()) {
       const top = git(['rev-parse', '--show-toplevel'], cwd);
       if (top) root = path.resolve(top);
     }
-    if (root) return { root: physical(root), linked, git: true };
+    if (root) {
+      const r = physical(root);
+      return { root: r, workTree: linked && dirs.top ? physical(dirs.top) : r, linked, git: true };
+    }
   }
   const cr = nearestCrewJsonRoot(cwd);
-  return { root: cr ? physical(cr) : null, linked: false, git: !!dirs };
+  const r = cr ? physical(cr) : null;
+  return { root: r, workTree: r, linked: false, git: !!dirs };
 }
 
 function detectRoot(cwd = process.cwd()) { return inspect(cwd).root; }
+// Root of the work tree that holds cwd: the place for files tracked in the repo (config, agents, .crew).
+function detectWorkTree(cwd = process.cwd()) { return inspect(cwd).workTree; }
+// Same without git, for hooks on the fast path: walks up from cwd to `root` looking for a `.git`
+// entry (a linked worktree has a `.git` file). -> canonical path; `root` when none is found.
+function workTreeWithin(cwd, root) {
+  const stop = normalizePath(root);
+  let dir = path.resolve(cwd);
+  for (;;) {
+    const here = normalizePath(dir);
+    if (here === stop || !here.startsWith(`${stop}/`)) return root;
+    if (fs.existsSync(path.join(dir, '.git'))) return physical(dir);
+    const up = path.dirname(dir);
+    if (up === dir) return root;
+    dir = up;
+  }
+}
 function isLinkedWorktree(cwd = process.cwd()) { return inspect(cwd).linked; }
 
 // ---------------------------------------------------------------- registry
@@ -189,6 +227,6 @@ function remove(spec) {
 }
 
 module.exports = {
-  normalizePath, projectId, inspect, detectRoot, isLinkedWorktree, nearestCrewJsonRoot,
+  normalizePath, projectId, inspect, detectRoot, detectWorkTree, workTreeWithin, isLinkedWorktree, nearestCrewJsonRoot,
   list, find, findByCwd, resolve, add, remove,
 };

@@ -123,6 +123,8 @@
   "wf.doctor.name.node": "Node.js",
   "wf.doctor.name.config": "專案設定",
   "wf.doctor.name.registration": "登錄",
+  "wf.doctor.name.worktree": "工作樹",
+  "wf.doctor.worktree": "連結的 worktree {workTree}（專案根目錄：{root}）；專案檔案從此工作樹讀取",
   "wf.doctor.name.files": "專案檔案",
   "wf.doctor.name.hooks": "外掛 hooks",
   "wf.doctor.name.board": "看板",

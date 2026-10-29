@@ -4,14 +4,16 @@
 const project = require('./project');
 
 // resolve(payload?, cwd?) -> {
-//   cwd, isSubagent, isMainWorktree, projectRoot, projectId, registered, project }
+//   cwd, isSubagent, isMainWorktree, projectRoot, workTreeRoot, projectId, registered, project }
+// projectRoot = main checkout (identity, registry, runtime data); workTreeRoot = the work tree that holds
+// cwd (files tracked in the repo: config, agents, .crew/*); the two differ only in a linked worktree.
 // payload.cwd wins over the cwd argument. A call without an agent_id is the main thread.
 // Never throws: outside git, or with git missing, isMainWorktree is true and projectRoot may be null.
 function resolve(payload, cwd) {
   const p = payload && typeof payload === 'object' ? payload : {};
   const dir = (typeof p.cwd === 'string' && p.cwd) || cwd || process.cwd();
   const isSubagent = typeof p.agent_id === 'string' ? p.agent_id !== '' : !!p.agent_id;
-  let info = { root: null, linked: false };
+  let info = { root: null, workTree: null, linked: false };
   try { info = project.inspect(dir); } catch { /* keep defaults */ }
   let registered = null;
   let projectId = null;
@@ -27,6 +29,7 @@ function resolve(payload, cwd) {
     isSubagent,
     isMainWorktree: !info.linked,
     projectRoot: info.root || (registered ? registered.path : null),
+    workTreeRoot: info.workTree || info.root || (registered ? registered.path : null),
     projectId,
     registered: !!registered,
     project: registered,
