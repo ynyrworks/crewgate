@@ -1,0 +1,11 @@
+{
+  "name": "agent-crew",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Repository root of the agent-crew Claude Code plugin (dev scripts only).",
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "node scripts/run-tests.js"
+  }
+}
