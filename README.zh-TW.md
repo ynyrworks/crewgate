@@ -171,7 +171,23 @@ crewgate 會組出提示詞（任務書、審查規則、diff），從標準輸�
 指令依 `PATH` 尋找（Windows 也支援 `.cmd`/`.bat`，不經 shell 啟動）。專案的 `.claude/crew.json` 只能用名稱引用引擎
 （`roles.*.engine`）；專案檔裡的 `engines` 會被忽略並顯示警告，因為複製來的儲存庫不該決定 `crew review run` 要執行哪個程式。
 `crew doctor` 會顯示每個引擎是否找得到。
-Codex 只支援當審查員，不能當統籌。
+Codex 當工人與當統籌的做法見下一節。
+
+## 搭配 Codex 使用（實驗性）
+
+crewgate 也能搭配 Codex CLI。這部分是實驗性的：只用 Codex CLI 0.160 量測過，尚未長期實際使用。
+
+在 Codex 安裝外掛（讀的是同一個 marketplace）：
+
+```
+codex plugin marketplace add ynyrworks/crewgate
+codex plugin add crewgate@crewgate
+```
+
+- **hook 要信任一次。** 在 Codex 輸入 `/hooks` 信任 crewgate 的 hook；外掛更新而指令字串改變時要再信任一次。
+- **設定專案：** `crew init --engine codex` 會新增 `.codex/agents/crew-reviewer.toml`、`crew-refuter.toml`，以及 `AGENTS.md` 裡有標記的區塊（既有內容不動）。
+- **Codex 當工人**（統籌可以是 Claude 或 Codex）：`crew task run <id> --engine codex`。Codex 在任務的 worktree 內改檔；commit 由 crewgate 做（Codex 沙盒做不到），並寫報告、把任務交回。失敗時不 commit，worktree 原樣保留供檢查。
+- **權限。** `crew` 會寫入 `~/.crewgate`，Codex 預設的 workspace-write 沙盒會擋：請核准 `crew` 指令，或改用較寬的沙盒。Codex 子代理與父層共用沙盒、無法 commit，所以工人不會以 Codex 子代理執行。
 
 ## 限制
 
@@ -180,7 +196,7 @@ Codex 只支援當審查員，不能當統籌。
 - `crew task merge` 只記錄合併，不會執行 git。合併由統籌執行，hook 負責記錄那個指令。
 - 工人的隔離方式是 worktree 加上指示，不是容器。
 - 看板的工作階段清單是讀取本機 Claude Code 與 Codex 的紀錄；除非在全域設定打開 `board.show_text`，否則不顯示訊息文字。
-- 沒有動畫式「辦公室」畫面，也不支援以 Codex 或 Gemini 當統籌。
+- 沒有動畫式「辦公室」畫面。以 Codex 當統籌屬實驗性；不支援 Gemini。
 
 ## 參與貢獻
 

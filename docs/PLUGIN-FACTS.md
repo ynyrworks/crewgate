@@ -78,3 +78,43 @@ Plugin skills are invoked namespaced: `/crewgate:crew`. Frontmatter: `name`,
 `$ARGUMENTS` holds the arguments. In the body `${CLAUDE_PLUGIN_ROOT}` and
 `${CLAUDE_SKILL_DIR}` are substituted, so the skill calls the CLI as
 `node "${CLAUDE_PLUGIN_ROOT}/bin/crew.js" ...`.
+
+# Codex CLI facts (measured with Codex CLI 0.160 on Windows, 2026-10)
+
+Sources: https://developers.openai.com/codex/plugins/build · https://learn.chatgpt.com/docs/hooks ·
+https://learn.chatgpt.com/docs/agent-configuration/subagents · https://learn.chatgpt.com/docs/non-interactive-mode
+
+## Non-interactive runs
+- `codex exec -C <dir> --sandbox workspace-write --skip-git-repo-check "<prompt>"`. stdin must be closed
+  (`stdio[0] = 'ignore'`), otherwise it waits forever on "Reading additional input from stdin".
+- `--output-schema <file>` asks for a final message that matches a JSON Schema; `-o <file>` /
+  `--output-last-message` writes the final message to a file (it is still printed on stdout).
+- In `workspace-write` the files of a linked worktree can be edited, but `git add` / `git commit`
+  fail: `Unable to create '<repo>/.git/worktrees/<name>/index.lock': Permission denied`. The sandbox also
+  cannot write outside the workspace, so it cannot write `~/.crewgate`. Hence crewgate commits for Codex workers.
+- `codex exec` runs hooks: project `.codex/hooks.json` with `--dangerously-bypass-hook-trust`; plugin
+  hooks need a one-time trust in `/hooks` and again whenever the command string changes.
+
+## Hooks
+- Payload shape matches Claude Code: `session_id, transcript_path, cwd, hook_event_name, model, permission_mode`;
+  PreToolUse/PostToolUse add `turn_id, tool_name, tool_input, tool_use_id` (PostToolUse also `tool_response`);
+  inside a subagent also `agent_id, agent_type`.
+- Spawning a subagent is the tool `collaborationspawn_agent` with `tool_input.task_name` and `.message`;
+  waiting is `collaborationwait_agent` (`timeout_ms`). SubagentStart: `agent_id, agent_type` (observed
+  `default`); SubagentStop adds `agent_transcript_path, last_assistant_message, stop_hook_active`.
+  Stop: `stop_hook_active, last_assistant_message`. SessionEnd: `reason` (always `other`), about 1 s budget
+  (default 1, at most 3). The shell tool is `Bash` with `tool_input.command`.
+- Handler fields: `command` (one string; no `args` array is documented), `commandWindows`, `timeout` (seconds),
+  `statusMessage`, `async`. Matchers are regular expressions on the tool name (or agent type, reason, source).
+- **The spawn `message` in PreToolUse/PostToolUse is opaque** (an encrypted-looking base64 string, about 200 characters), so a `crew-task:` marker cannot be read there. `task_name` is chosen by the model (observed `crew_task`), `tool_response` is `{"task_name":"/root/<task_name>"}`. SubagentStart has only `agent_id` and `agent_type` (`default`), but the subagent's own rollout file `<dir of transcript_path>/rollout-<timestamp>-<agent_id>.jsonl` already exists and holds the message (and possibly forked parent history); SubagentStop adds `agent_transcript_path` pointing at it.
+- Project-level `.codex/hooks.json` loads only when the project is trusted (`[projects."<path>"] trust_level = "trusted"`; for a one-off `codex exec` use `-c "projects={ '<path>' = { trust_level = 'trusted' } }"`) in addition to hook trust (`--dangerously-bypass-hook-trust`).
+- Plugin hooks get `PLUGIN_ROOT` and `CLAUDE_PLUGIN_ROOT` (and the `_DATA` twins) in their environment.
+
+## Plugins, skills, agents
+- Codex reads `.codex-plugin/plugin.json` (a compatibility overlay; a root `plugin.json` is preferred) and
+  `hooks/hooks.json` unless the manifest names hooks (path, list of paths or inline object; paths start with
+  `./`). Marketplaces: `codex plugin marketplace add owner/repo` (also reads `.claude-plugin/marketplace.json`),
+  install with `codex plugin add crewgate@crewgate`.
+- Skills: `skills/<name>/SKILL.md` with `name` and `description`; there is no `$ARGUMENTS`.
+- Plugins cannot ship agents. Custom agents are TOML files in `.codex/agents/` (`name`, `description`,
+  `developer_instructions`, optional `model`). Subagents inherit the parent's sandbox.

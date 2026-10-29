@@ -7,12 +7,12 @@
       { "hooks": [ { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js", "user-prompt-submit"], "timeout": 5 } ] }
     ],
     "PreToolUse": [
-      { "matcher": "Agent|Task", "hooks": [ { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js", "pre-tool-use"], "timeout": 10 } ] },
+      { "matcher": "Agent|Task|collaborationspawn_agent", "hooks": [ { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js", "pre-tool-use"], "timeout": 10 } ] },
       { "matcher": "Edit|Write|MultiEdit|NotebookEdit", "hooks": [ { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js", "pre-tool-use"], "timeout": 10 } ] },
       { "matcher": "Read", "hooks": [ { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js", "pre-tool-use"], "timeout": 5 } ] }
     ],
     "PostToolUse": [
-      { "matcher": "Agent|Task", "hooks": [ { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js", "post-tool-use"], "timeout": 10 } ] },
+      { "matcher": "Agent|Task|collaborationspawn_agent", "hooks": [ { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js", "post-tool-use"], "timeout": 10 } ] },
       { "matcher": "Bash", "hooks": [ { "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js", "post-tool-use"], "timeout": 10 } ] }
     ],
     "SubagentStart": [

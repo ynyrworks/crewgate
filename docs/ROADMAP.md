@@ -9,8 +9,7 @@ what matters. Details of how things work today are in [DESIGN.md](DESIGN.md).
   running a tool and on what, writing, waiting for you), role and task of each session and subagent, a
   parent/child tree, last prompt and reply snippets, branch and worktree, filters, and a private mode.
   Everything stays local, tail-read and redacted.
-- **Codex support.** Codex as a worker or reviewer comes first. Codex as an orchestrator is under
-  investigation: it depends on how Codex maps hooks, skills and subagents, and we will not ship a guess.
+- **Codex support (experimental, shipped in this cycle).** Codex as a worker through `crew task run --engine codex` (crewgate commits, because the Codex sandbox cannot), Codex as a reviewer, and Codex as an orchestrator through the same plugin folder (hooks, skill, custom agents). Still to do: verification on more platforms and Codex versions, and Codex subagent workers once their sandbox can commit.
 
 ## Later
 

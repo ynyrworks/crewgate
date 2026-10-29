@@ -20,7 +20,9 @@ const obj = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
 const str = (v) => (typeof v === 'string' ? v : '');
 
 // The tool name Claude Code uses to launch subagents (older builds: Task).
-const AGENT_TOOLS = new Set(['Agent', 'Task']);
+// Codex spells it collaborationspawn_agent (tool_input: task_name, message) and returns at once.
+const CODEX_SPAWN = 'collaborationspawn_agent';
+const AGENT_TOOLS = new Set(['Agent', 'Task', CODEX_SPAWN]);
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 
 function sessionKey(sid) {
@@ -118,9 +120,54 @@ function readHead(file, bytes) {
   } catch { return ''; } finally { if (fd !== undefined) try { fs.closeSync(fd); } catch { /* ignore */ } }
 }
 
+// The text that carries the crew-task marker: Claude's prompt, Codex's message.
+const agentPrompt = (ti) => str(ti.prompt) || str(ti.message);
+// Subagent type: Claude's subagent_type, Codex's task_name.
+const agentTypeOf = (ti) => ti.subagent_type || ti.agent_type || ti.task_name;
+
+// Reads at most `bytes` from the end of a regular file; '' on any problem.
+function readTail(file, bytes) {
+  let fd;
+  try {
+    if (typeof file !== 'string' || !file) return '';
+    const st = fs.statSync(file);
+    if (!st.isFile()) return '';
+    fd = fs.openSync(file, 'r');
+    const len = Math.min(st.size, bytes);
+    const buf = Buffer.alloc(len);
+    fs.readSync(fd, buf, 0, len, st.size - len);
+    return buf.toString('utf8');
+  } catch { return ''; } finally { if (fd !== undefined) try { fs.closeSync(fd); } catch { /* ignore */ } }
+}
+
+// Codex hands PreToolUse an opaque (encrypted) spawn message, so the marker cannot be read there. The
+// new subagent's own rollout file (<dir of the parent transcript>/rollout-*-<agent_id>.jsonl, or the
+// transcript_path itself when that is the subagent's file) holds the message it was started with. It may
+// also hold forked parent history, so the LAST marker wins: the spawn message is the newest input.
+const MARKER_ALL = /crew-task:[ \t]*(t-\d{8}-[0-9a-z]{4})\b/g;
+function codexSpawnMarker(payload) {
+  const agentId = str(payload.agent_id);
+  if (!agentId || !/^[0-9A-Za-z._-]+$/.test(agentId)) return null;
+  const tp = str(payload.transcript_path);
+  const files = [];
+  if (tp && path.basename(tp).includes(agentId)) files.push(tp);
+  else if (tp) {
+    try {
+      const dir = path.dirname(tp);
+      for (const n of fs.readdirSync(dir)) if (n.includes(agentId) && n.endsWith('.jsonl')) files.push(path.join(dir, n));
+    } catch { /* no directory */ }
+  }
+  for (const f of files.slice(0, 2)) {
+    let last = null;
+    for (const m of readTail(f, 512 * 1024).matchAll(MARKER_ALL)) last = m[1];
+    if (last) return last;
+  }
+  return null;
+}
+
 const normType = (t) => String(t || 'general-purpose').split(':').pop().toLowerCase();
 
 module.exports = {
-  PLUGIN_ROOT, AGENT_TOOLS, EDIT_TOOLS, obj, str, sessionKey, open, crewCmd, snippet,
-  withContext, notice, deny, readHead, normType,
+  PLUGIN_ROOT, AGENT_TOOLS, CODEX_SPAWN, agentPrompt, agentTypeOf, EDIT_TOOLS, obj, str, sessionKey, open, crewCmd, snippet,
+  withContext, notice, deny, readHead, readTail, codexSpawnMarker, normType,
 };

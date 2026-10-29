@@ -113,7 +113,7 @@ function bindAgent(pid, agentId, type) {
   return updateUses(pid, (u) => {
     const now = Date.now();
     const cands = Object.entries(u)
-      .filter(([, r]) => !r.agent && r.type === type && now - (r.ts || 0) < 15 * 60 * 1000)
+      .filter(([, r]) => !r.agent && (r.type === type || r.codex) && now - (r.ts || 0) < 15 * 60 * 1000)
       .sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0));
     if (!cands.length) return null;
     cands[0][1].agent = agentId;

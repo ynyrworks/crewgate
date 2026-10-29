@@ -1,0 +1,147 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" session-start",
+            "commandWindows": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" session-start",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" user-prompt-submit",
+            "commandWindows": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" user-prompt-submit",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Agent|Task|collaborationspawn_agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" pre-tool-use",
+            "commandWindows": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" pre-tool-use",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" pre-tool-use",
+            "commandWindows": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" pre-tool-use",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" pre-tool-use",
+            "commandWindows": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" pre-tool-use",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent|Task|collaborationspawn_agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" post-tool-use",
+            "commandWindows": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" post-tool-use",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" post-tool-use",
+            "commandWindows": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" post-tool-use",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" subagent-start",
+            "commandWindows": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" subagent-start",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" subagent-stop",
+            "commandWindows": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" subagent-stop",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" stop",
+            "commandWindows": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" stop",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" pre-compact",
+            "commandWindows": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" pre-compact",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" session-end",
+            "commandWindows": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" session-end",
+            "timeout": 2
+          }
+        ]
+      }
+    ]
+  }
+}

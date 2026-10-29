@@ -188,8 +188,23 @@ from stdout and continues with the same filter and refute stages. Add your own e
 `PATH` (on Windows also `.cmd`/`.bat`, started without a shell). A project's `.claude/crew.json` can only *name*
 an engine (`roles.*.engine`): an `engines` block in a project file is ignored with a warning, because a cloned
 repository must not choose which program `crew review run` starts. `crew doctor` shows whether each engine
-resolves. Codex is supported as a reviewer only, not as the
-orchestrator.
+resolves. Codex as a worker and as an orchestrator is described in the next section.
+
+## Using with Codex (experimental)
+
+crewgate also runs with the Codex CLI. This is experimental: it was measured with Codex CLI 0.160 and has not seen long real use.
+
+Install the plugin in Codex (it reads the same marketplace):
+
+```
+codex plugin marketplace add ynyrworks/crewgate
+codex plugin add crewgate@crewgate
+```
+
+- **Trust the hooks once.** Open `/hooks` in Codex and trust the crewgate hooks; do it again after a plugin update changes a command.
+- **Set up the project:** `crew init --engine codex` adds `.codex/agents/crew-reviewer.toml`, `crew-refuter.toml` and a marked block in `AGENTS.md` (existing text is kept).
+- **Codex as a worker** (from a Claude or a Codex orchestrator): `crew task run <id> --engine codex`. Codex edits files in the task's worktree; crewgate commits (the Codex sandbox cannot), writes the report and returns the task. Failures commit nothing and leave the worktree for inspection.
+- **Permissions.** `crew` writes under `~/.crewgate`, which Codex's default workspace-write sandbox blocks: approve the `crew` commands or run Codex with a wider sandbox. Codex subagents share the parent's sandbox and cannot commit, so workers never run as Codex subagents.
 
 ## Limitations
 
@@ -200,7 +215,7 @@ orchestrator.
 - Worker isolation is a worktree plus instructions, not a container.
 - The board lists sessions by reading local Claude Code and Codex logs; message text is hidden unless you set
   `board.show_text` in the global config.
-- No animated "office" view, and no Codex or Gemini orchestrator.
+- No animated "office" view. A Codex orchestrator is experimental; there is no Gemini support.
 
 ## Contributing
 

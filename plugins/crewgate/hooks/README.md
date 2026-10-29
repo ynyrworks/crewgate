@@ -19,16 +19,18 @@ Rules every hook follows
 |---|---|---|
 | `session-start` | all | Records `session.start`, creates the session counter file, injects the brief (<= 4,000 bytes). |
 | `user-prompt-submit` | all | Counts prompts, keeps a 200-char redacted first/last prompt. Adds no context. |
-| `pre-tool-use` | `Agent\|Task` | Marker `crew-task: <id>` in the prompt: `created` -> `dispatched` (`task.dispatched`), remembers tool_use_id -> task, warns above `max_parallel_workers`. |
+| `pre-tool-use` | `Agent\|Task\|collaborationspawn_agent` | Marker `crew-task: <id>` in the prompt: `created` -> `dispatched` (`task.dispatched`), remembers tool_use_id -> task, warns above `max_parallel_workers`. |
 | `pre-tool-use` | `Edit\|Write\|MultiEdit\|NotebookEdit` | Main session + main worktree + path inside the project and outside `orchestrator_edit_allow`: `warn` (context + user message + `orchestrator.warned`), `block` (deny), `off`. |
 | `pre-tool-use` | `Read` | Main session, no `limit`, file longer than `orchestrator_read_warn_lines`: one reminder. Lines are counted with an early stop; binaries and files over 20 MB are skipped. |
-| `post-tool-use` | `Agent\|Task` | Foreground worker finished: `dispatched` -> `returned` if it did not report through the CLI, and a review reminder. Background launch: nothing. |
+| `post-tool-use` | `Agent\|Task\|collaborationspawn_agent` | Foreground worker finished: `dispatched` -> `returned` if it did not report through the CLI, and a review reminder. Background launch: nothing. |
 | `post-tool-use` | `Bash` | `git push`, `git merge`, `gh pr create|merge`, `glab mr create|merge` -> `git.push` / `git.merge` with command name, remote and branch words only. |
 | `subagent-start` | all | `subagent.start`; binds the agent id to the oldest unbound dispatch of the same type. |
 | `subagent-stop` | all | `subagent.stop`; links the task (dispatch map, else marker in the first 64 KB of the transcript, else in the last message); a still-`dispatched` worker task becomes `returned`; review reminder. |
 | `stop` | all | One reminder when tasks are `returned` but unreviewed or background tasks still run (same reminder is not repeated); nothing when `stop_hook_active`. |
 | `pre-compact` | all | `session.compact` with a small counter checkpoint. |
 | `session-end` | all | `session.end` digest from the counter file; flags `tasks_in_flight`, `ended_with_question`, `no_stop_seen` each add a need; removes the counter file. |
+
+Codex: `.codex-plugin/plugin.json` points Codex at `hooks/codex-hooks.json`, the same table with one-string commands (Codex has no `args` array) and `commandWindows`. `collaborationspawn_agent` is handled like `Agent`: the marker is read from `tool_input.message`, the type from `task_name`, the spawn counts as a background launch (it returns at once) and the event data carries `engine: "codex"`. Real Codex sends an opaque spawn message, so `subagent-start` also reads the marker from the subagent's rollout file (last marker wins) and records the dispatch there (`via: "subagent-start"`). Codex reports subagents as `default`, so a Codex dispatch binds to the next SubagentStart whatever its type. Keep the command strings stable: Codex asks the user to trust a hook again whenever its command changes.
 
 Files written
 - `<home>/sessions/<session>.json` — running counters (pruned after 3 days).

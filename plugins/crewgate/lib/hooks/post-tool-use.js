@@ -18,9 +18,9 @@ function onAgent(payload) {
   const resp = C.obj(payload.tool_response);
   const tuid = C.str(payload.tool_use_id);
   const rec = tuid ? sess.byToolUse(h.pid, tuid) : null;
-  const id = (rec && rec.task) || tasks.findMarker(C.str(ti.prompt).slice(0, 1 << 20));
+  const id = (rec && rec.task) || tasks.findMarker(C.agentPrompt(ti).slice(0, 1 << 20));
   if (!id) return null;
-  const bg = ti.run_in_background === true || (rec && rec.bg) || resp.isAsync === true
+  const bg = ti.run_in_background === true || payload.tool_name === C.CODEX_SPAWN || (rec && rec.bg) || resp.isAsync === true
     || /async|background/i.test(C.str(resp.status));
   if (bg) return null; // wait for SubagentStop
 

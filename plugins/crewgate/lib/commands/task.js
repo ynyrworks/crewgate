@@ -11,6 +11,7 @@ const { LANGUAGE_NAME } = require('../features/init');
 const common = require('../features/common');
 const review = require('../features/review');
 const lessons = require('../features/lessons');
+const codexrun = require('../features/codexrun');
 
 const STATES = tasks.STATES;
 const NOTE = { '--note': { dest: 'note' } };
@@ -33,6 +34,12 @@ const SPECS = {
   accept: { positionals: [{ name: 'id' }], options: NOTE },
   merge: { positionals: [{ name: 'id' }], options: NOTE },
   cancel: { positionals: [{ name: 'id' }], options: NOTE },
+  run: {
+    positionals: [{ name: 'id' }],
+    options: {
+      '--engine': { dest: 'engine', default: 'codex' }, '--timeout': { dest: 'timeout', int: true }, '--model': { dest: 'model' },
+    },
+  },
 };
 
 const need = (v, name) => { if (!v) throw new UsageError('args.missing', { name }); return v; };
@@ -156,6 +163,11 @@ function run(argv, ctx) {
     ];
     if (busy >= cfg.limits.max_parallel_workers) L.push(ctx.t('wf.task.parallelWarn', { n: busy, max: cfg.limits.max_parallel_workers }));
     ctx.emit(data, L);
+  } else if (sub === 'run') {
+    const timeoutS = a.timeout === undefined ? codexrun.DEFAULT_TIMEOUT_S : a.timeout;
+    if (!(timeoutS >= 1)) throw new UsageError('args.badChoice', { name: '--timeout', choices: '>= 1' });
+    if (a.engine === 'claude') throw new UsageError('wf.task.run.claude');
+    return codexrun.runCodex(ctx, proj, cfg, tasks.load(proj.id, a.id), { engine: a.engine, model: a.model || '', timeoutS, workTree: ctx.workTree() });
   } else if (sub === 'list') {
     const rows = tasks.list(proj.id, a.state ? { state: a.state } : {});
     ctx.emit(rows, rows.length
@@ -192,7 +204,7 @@ function run(argv, ctx) {
       task = tasks.sendBack(proj.id, a.id, { ...opts, note });
     } catch (e) {
       if (e && e.key === 'task.takeover') {
-        lessons.add(proj.path, proj.id, {
+        lessons.add(ctx.workTree() || proj.path, proj.id, {
           key: 'takeover-limit', kind: 'takeover',
           text: `Task ${a.id} hit the send-back limit (${max}); the orchestrator had to take it over. Last note: ${note}`,
         });
@@ -231,6 +243,7 @@ module.exports = {
       '  crew task accept <id> [--note "..."]',
       '  crew task merge <id> [--note "..."]    (records the merge; it does not run git)',
       '  crew task cancel <id> [--note "..."]',
+      '  crew task run <id> [--engine codex] [--timeout 1800] [--model M]   (run a Codex CLI worker in the task worktree)',
     ].join('\n'),
     'zh-TW': [
       '  crew task create --title T --brief-file F [--role worker] [--branch B] [--worktree W] [--allow G] [--deny G]',
@@ -241,6 +254,7 @@ module.exports = {
       '  crew task accept <id> [--note "..."]',
       '  crew task merge <id> [--note "..."]    （只記錄合併，不執行 git）',
       '  crew task cancel <id> [--note "..."]',
+      '  crew task run <id> [--engine codex] [--timeout 1800] [--model M]   (run a Codex CLI worker in the task worktree)',
     ].join('\n'),
   },
   run,
