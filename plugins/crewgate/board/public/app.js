@@ -247,6 +247,7 @@
     var p = (hash || '#/').replace(/^#/, '').split('/').filter(Boolean);
     if (!p.length) return { page: 'overview' };
     if (p[0] === 'p' && p[1]) return p[2] === 'settings' ? { page: 'psettings', id: p[1] } : { page: 'project', id: p[1] };
+    if (p[0] === 's' && p[1]) return { page: 'session', id: p[1] };
     if (['sessions', 'office', 'usage', 'settings'].indexOf(p[0]) >= 0) return { page: p[0] };
     return { page: 'overview' };
   }
@@ -261,7 +262,7 @@
     var nav = $('nav');
     nav.textContent = '';
     items.forEach(function (it) {
-      var cur = it[0] === page || (it[0] === 'overview' && (page === 'project' || page === 'psettings'));
+      var cur = it[0] === page || (it[0] === 'overview' && (page === 'project' || page === 'psettings')) || (it[0] === 'sessions' && page === 'session');
       nav.appendChild(h('a', { href: it[1], 'aria-current': cur ? 'page' : false, text: it[2] }));
     });
     var tools = $('tools');
@@ -461,6 +462,7 @@
     if (act !== t('state.' + shown) && act !== t('act.' + shown)) head.appendChild(h('span', { class: 's-act', text: act }));
     if (r.role) head.appendChild(h('span', { class: 'role r-' + r.role, text: t('role.' + (ROLES.indexOf(r.role) >= 0 ? r.role : 'other')) }));
     if (n.children.length) head.appendChild(h('span', { class: 'muted', text: t('sessions.running', { running: n.running, count: n.children.length }) }));
+    head.appendChild(h('a', { class: 's-link', href: '#/s/' + r.id, text: t('stats.open'), 'aria-label': t('stats.openFor', { name: (r.engine === 'codex' ? 'Codex' : 'Claude') + (r.model ? ' ' + r.model : '') }) }));
     head.appendChild(h('span', { class: 's-time muted', text: ago(r.lastActivity) }));
 
     var meta = [r.engine === 'codex' ? 'Codex' : 'Claude'];
@@ -474,6 +476,8 @@
     var li = h('li', { class: 'sess' + (SM.isWaiting(r) ? ' is-waiting' : '') + (r.subagent ? ' is-sub' : '') },
       head,
       h('div', { class: 's-meta muted', text: meta.join(' · ') }));
+    var sl = statsLine(r);
+    if (sl) li.appendChild(sl);
     if (where.length) li.appendChild(h('div', { class: 's-where', text: where.join(' · ') }));
     if (r.task) li.appendChild(h('div', { class: 's-task' }, h('span', { class: 'task-id', text: r.task.id }), v.taskTitle ? ' ' + v.taskTitle : ''));
     if (v.title) li.appendChild(h('div', { class: 's-title', text: v.title }));
@@ -528,6 +532,203 @@
     return h('div', null, h('h1', { text: t('nav.sessions') }), kp, d.sessions.length ? filterBar(d.sessions) : null,
       h('div', { class: 'card' }, d.sessions.length ? sessionTree(d.sessions, true, S.sf) : empty('sessions.none')),
       h('p', { class: 'muted', text: note }));
+  }
+
+  // ------------------------------------------------------------------ session statistics and detail (#/s/<id>)
+  function plural(base, n) { return t(n === 1 ? base + '1' : base, { count: num(n) }); }
+  function costText(cost, complete) { return cost === null || cost === undefined ? '–' : (cost > 0 && cost < 0.01 ? '<$0.01' : (complete === false ? '≥' : '') + money(cost)); }
+
+  // The compact line on a session card: duration · prompts · tool calls · tokens · cost. A parent shows the totals
+  // of itself plus its subagents. Numbers only, so private mode and board.show_text do not matter here.
+  function statsLine(r) {
+    var c = SM.cardStats(r);
+    if (!c) return null;
+    var parts = [SM.fmtDuration(c.duration)];
+    if (c.prompts) parts.push(plural('stats.linePrompts', c.prompts));
+    if (c.tools) parts.push(plural('stats.lineTools', c.tools));
+    if (c.tokens) parts.push(t('stats.lineTokens', { count: SM.compact(c.tokens) }));
+    if (c.cost !== null) parts.push(costText(c.cost, c.costComplete));
+    var text = parts.join(' · ') + (c.partial ? ' …' : '');
+    var tools = (r.totals || r.stats).tools || {};
+    var tip = Object.keys(tools).sort(function (a, b) { return tools[b] - tools[a]; }).map(function (k) { return k + ' ' + tools[k]; }).join(', ');
+    var el = h('div', { class: 's-stats', title: tip || false }, h('span', { text: text }));
+    if (c.sessions > 1) el.appendChild(h('span', { class: 'muted', text: ' · ' + t('stats.withSub', { count: c.sessions - 1 }) }));
+    if (c.partial) el.appendChild(h('span', { class: 'sr-only', text: ' ' + t('stats.partial') }));
+    return el;
+  }
+
+  var DET = { id: null, kinds: [], tl: null, data: null, loading: false, focusKey: null };
+  function detReset(id) { DET = { id: id, kinds: [], tl: SM.emptyTimeline(), data: null, loading: false, focusKey: null }; }
+  function detQuery(extra) {
+    var q = [];
+    if (DET.kinds.length) q.push('kinds=' + DET.kinds.join(','));
+    Object.keys(extra || {}).forEach(function (k) { if (extra[k] !== null && extra[k] !== undefined) q.push(k + '=' + encodeURIComponent(extra[k])); });
+    return q.length ? '?' + q.join('&') : '';
+  }
+
+  // Redraw the detail page and keep keyboard focus on the same control (or on the step that was first before "load older").
+  function detDraw() {
+    var fid = DET.focusKey ? 'ev-' + DET.focusKey : document.activeElement && document.activeElement.getAttribute ? document.activeElement.getAttribute('data-fid') : null;
+    DET.focusKey = null;
+    S.last = '';
+    render(sessionDetailPage(), 'sd' + Date.now());
+    if (fid) {
+      var el = document.querySelector('[data-fid="' + fid + '"]');
+      if (el) { try { el.focus(); } catch (e) { /* ignore */ } }
+    }
+  }
+
+  function loadOlder() {
+    var id = DET.id;
+    if (DET.loading || !DET.tl || DET.tl.cursor === null) return;
+    DET.loading = true;
+    detDraw();
+    api('/api/session/' + id + detQuery({ before: DET.tl.cursor, before_ts: DET.tl.cursor_ts, limit: 200 })).then(function (res) {
+      if (DET.id !== id) return;
+      DET.loading = false;
+      if (res.status < 400) {
+        DET.focusKey = DET.tl.events.length ? DET.tl.events[0].key : null;
+        DET.tl = SM.mergeOlder(DET.tl, res.data);
+      }
+      detDraw();
+    }).catch(function () { DET.loading = false; detDraw(); });
+  }
+
+  function setKinds(kinds) {
+    DET.kinds = kinds;
+    DET.tl = SM.emptyTimeline();
+    DET.data = null;
+    S.last = '';
+    refresh(true);
+  }
+
+  function timeText(ms) { return new Date(ms).toLocaleTimeString(S.lang, { hour12: false }); }
+  var KIND_KEY = { prompt: 'sessions.kindPrompt', tool: 'sessions.kindTool', subagent: 'sessions.kindSubagent', crew: 'sessions.kindCrew', error: 'sessions.kindError' };
+  var EV_GLYPH = { prompt: '✎', tool: '⚙', subagent: '⧉', crew: '◆', error: '✖' };
+
+  function stepItem(row) {
+    var ev = row.ev;
+    var st = SM.stepText(ev, S.mask);
+    var li = h('li', { class: 'tl-item k-' + ev.kind + (ev.err || ev.kind === 'error' ? ' is-err' : ''), tabindex: '-1', 'data-fid': 'ev-' + ev.key });
+    if (row.newDay && ev.ts !== null) li.appendChild(h('div', { class: 'tl-day', text: new Date(ev.ts).toLocaleDateString(S.lang) }));
+    var head = h('div', { class: 'tl-head' });
+    if (ev.ts !== null) head.appendChild(h('time', { class: 'tl-time', datetime: new Date(ev.ts).toISOString(), text: timeText(ev.ts) }));
+    if (row.gap !== null && row.gap >= 1000) head.appendChild(h('span', { class: 'tl-gap muted', title: t('sessions.gapHint'), text: '+' + SM.fmtDuration(row.gap) }));
+    head.appendChild(h('span', { class: 'tl-kind' }, h('span', { class: 'glyph', 'aria-hidden': 'true', text: EV_GLYPH[ev.kind] || '' }), t(KIND_KEY[ev.kind] || 'sessions.kindTool')));
+    li.appendChild(head);
+    var body = h('div', { class: 'tl-body' });
+    if (ev.kind === 'prompt') {
+      body.appendChild(st.text ? h('span', { class: 'tl-text', text: st.text }) : h('span', { class: 'muted', text: t('sessions.evPrompt') }));
+    } else if (ev.kind === 'tool') {
+      body.appendChild(h('strong', { text: ev.tool }));
+      if (st.target) body.appendChild(h('code', { class: 'tl-target', text: st.target }));
+      if (ev.err) body.appendChild(h('span', { class: 'badge s-failed', text: t('sessions.evFailed') }));
+    } else if (ev.kind === 'subagent') {
+      body.appendChild(h('strong', { text: ev.phase === 'stop' ? t('sessions.evSubStop') : t('sessions.evSubStart') }));
+      if (st.agentType) body.appendChild(h('code', { class: 'tl-target', text: st.agentType }));
+      if (ev.task) body.appendChild(h('span', { class: 'task-id', text: ev.task }));
+    } else if (ev.kind === 'crew') {
+      body.appendChild(h('code', { text: ev.type }));
+      if (ev.task) body.appendChild(h('span', { class: 'task-id', text: ev.task }));
+    } else {
+      body.appendChild(h('strong', { text: t('sessions.evError') }));
+      if (ev.tool) body.appendChild(h('code', { class: 'tl-target', text: ev.tool }));
+    }
+    if (ev.dur_ms !== undefined && ev.dur_ms >= 1000) body.appendChild(h('span', { class: 'muted', text: t('sessions.evTook', { d: SM.fmtDuration(ev.dur_ms) }) }));
+    if (ev.kind === 'subagent' && SM.validId(ev.agent)) body.appendChild(h('a', { class: 's-link', href: '#/s/' + ev.agent, text: t('sessions.evOpen') }));
+    li.appendChild(body);
+    return li;
+  }
+
+  function statsCard(d) {
+    var own = d.session.stats;
+    if (!own) return null;
+    var tot = d.session.totals || null;
+    var rowOf = function (label, f) { var cells = [td(label), td(f(own), true)]; if (tot) cells.push(td(f(tot), true)); return h('tr', null, cells); };
+    var head = ['', t('stats.own')];
+    if (tot) head.push(t('stats.total', { count: tot.sessions - 1 }));
+    var rows = [
+      rowOf(t('stats.duration'), function (s) { return SM.fmtDuration(s.duration_ms); }),
+      rowOf(t('stats.prompts'), function (s) { return num(s.prompts); }),
+      rowOf(t('stats.toolCalls'), function (s) { return num(s.tool_calls); }),
+      rowOf(t('stats.subagents'), function (s) { return num(s.subagents); }),
+      rowOf(t('stats.errors'), function (s) { return num(s.errors); }),
+      rowOf(t('stats.tokensIn'), function (s) { return num(s.tokens.input); }),
+      rowOf(t('stats.tokensOut'), function (s) { return num(s.tokens.output); }),
+      rowOf(t('stats.cacheWrite'), function (s) { return num(s.tokens.cache_write); }),
+      rowOf(t('stats.cacheRead'), function (s) { return num(s.tokens.cache_read); }),
+      rowOf(t('stats.cost'), function (s) { return costText(s.cost, s.cost_complete); })
+    ];
+    var body = h('div', null, h('div', { class: 'scroll' }, table(head, rows, tot ? [1, 2] : [1])));
+    var tools = (tot || own).tools || {};
+    var names = Object.keys(tools).sort(function (a, b) { return tools[b] - tools[a]; });
+    if (names.length) {
+      body.appendChild(h('h3', { text: t('stats.tools') }));
+      body.appendChild(h('ul', { class: 'chips' }, names.map(function (k) { return h('li', { class: 'badge' }, k + ' ', h('b', { text: num(tools[k]) })); })));
+    }
+    var costs = own.cost === null && (!tot || tot.cost === null) ? t('stats.noPrices') : (own.cost_complete === false || (tot && tot.cost_complete === false)) ? t('stats.costPartial') : '';
+    if (costs) body.appendChild(h('p', { class: 'muted', text: costs }));
+    if (own.partial || (tot && tot.partial)) body.appendChild(h('p', { class: 'muted', role: 'status', text: t('stats.partial') }));
+    return card(t('stats.title'), body);
+  }
+
+  function sessionDetailPage() {
+    var d = DET.data;
+    var s = d.session;
+    var v = SM.visible(s, S.mask);
+    var shown = SM.displayStatus(s);
+    var title = (s.engine === 'codex' ? 'Codex' : 'Claude') + (s.model ? ' · ' + s.model : '');
+    var meta = [];
+    if (s.subagent) meta.push(s.agent_type && !S.mask ? s.agent_type : t('sessions.subagent'));
+    if (s.project) meta.push(pname({ id: s.project, name: s.project_name || s.project }));
+    if (v.folder) meta.push(v.folder);
+    if (v.branch) meta.push((s.detached ? t('sessions.detached') + ' ' : '') + v.branch);
+    if (v.worktree) meta.push(t('sessions.worktree', { name: v.worktree }));
+    var top = h('div', { class: 's-head' }, chip(shown));
+    if (s.role) top.appendChild(h('span', { class: 'role r-' + s.role, text: t('role.' + (ROLES.indexOf(s.role) >= 0 ? s.role : 'other')) }));
+    top.appendChild(h('span', { class: 's-time muted', text: ago(s.lastActivity) }));
+    var root = h('div', null,
+      h('p', null, h('a', { href: '#/sessions', text: '← ' + t('sessions.back') })),
+      h('h1', { text: title }), top, h('div', { class: 's-meta muted', text: meta.join(' · ') }));
+    if (SM.validId(s.parent)) root.appendChild(h('p', null, h('a', { href: '#/s/' + s.parent, text: t('sessions.parent') })));
+    if (s.task) root.appendChild(h('div', { class: 's-task' }, h('span', { class: 'task-id', text: s.task.id }), v.taskTitle ? ' ' + v.taskTitle : ''));
+    var sc = statsCard(d);
+    var kids = d.children || [];
+    var kidBody = kids.length ? h('ul', { class: 'stree' }, kids.map(function (k) {
+      var kv = SM.visible(k, S.mask);
+      var li = h('li', { class: 'sess is-sub' },
+        h('div', { class: 's-head' }, chip(SM.displayStatus(k)), k.role ? h('span', { class: 'role r-' + k.role, text: t('role.' + (ROLES.indexOf(k.role) >= 0 ? k.role : 'other')) }) : null,
+          h('span', { class: 's-meta muted', text: k.agent_type && !S.mask ? k.agent_type : t('sessions.subagent') }),
+          h('a', { class: 's-link', href: '#/s/' + k.id, text: t('stats.open') })));
+      var line = statsLine(k);
+      if (line) li.appendChild(line);
+      if (kv.taskTitle) li.appendChild(h('div', { class: 's-task' }, kv.taskTitle));
+      return li;
+    })) : null;
+    root.appendChild(h('div', { class: 'grid' }, sc, kidBody ? card(t('sessions.subagents'), kidBody) : null));
+
+    // activity timeline
+    var tl = DET.tl;
+    var counts = SM.kindCounts(tl.events);
+    var kinds = d.kinds || SM.KIND_ORDER;
+    var bar = h('div', { class: 'filters kinds', role: 'group', 'aria-label': t('sessions.kinds') },
+      h('button', { type: 'button', 'data-fid': 'k-all', 'aria-pressed': DET.kinds.length ? 'false' : 'true', onclick: function () { setKinds([]); }, text: t('sessions.fAll') }),
+      kinds.map(function (k) {
+        var on = DET.kinds.indexOf(k) >= 0;
+        return h('button', {
+          type: 'button', 'data-fid': 'k-' + k, 'aria-pressed': on ? 'true' : 'false',
+          onclick: function () { setKinds(on ? DET.kinds.filter(function (x) { return x !== k; }) : DET.kinds.concat([k])); }
+        }, t(KIND_KEY[k] || 'sessions.kindTool') + (counts[k] ? ' ' + counts[k] : ''));
+      }));
+    var more = tl.cursor !== null
+      ? h('button', { type: 'button', class: 'older', 'data-fid': 'older', disabled: DET.loading, onclick: loadOlder, text: DET.loading ? t('sessions.loading') : t('sessions.loadOlder') })
+      : h('p', { class: 'muted', text: t('sessions.startReached') });
+    var list = tl.events.length
+      ? h('ol', { class: 'tl', 'aria-label': t('sessions.timeline') }, SM.withGaps(tl.events).map(stepItem))
+      : empty('sessions.noEvents');
+    var note = S.mask ? t('sessions.textPrivate') : d.show_text ? t('sessions.textOn') : t('sessions.tlTextOff');
+    root.appendChild(h('section', { class: 'card' }, h('h2', { text: t('sessions.timeline') }), h('p', { class: 'muted', text: note }), bar, more, list));
+    return root;
   }
 
   var FAMS = ['opus', 'sonnet', 'haiku', 'openai', 'other'];
@@ -680,6 +881,14 @@
     var hasSession = parseHash('#/s/x').page !== 'overview';
     return window.Office.page(d, {
       t: t, ago: ago, pname: pname, mask: S.mask,
+      stats: function (r) {   // compact numbers only: duration · tokens · cost
+        var c = SM.cardStats(r);
+        if (!c) return null;
+        var parts = [SM.fmtDuration(c.duration)];
+        if (c.tokens) parts.push(t('stats.lineTokens', { count: SM.compact(c.tokens) }));
+        if (c.cost !== null) parts.push(costText(c.cost, c.costComplete));
+        return parts.join(' · ');
+      },
       href: function (r) { return hasSession ? '#/s/' + encodeURIComponent(r.id) : '#/sessions'; },
       prepare: function (r) { if (!hasSession) saveFilter({ project: r.project || '-', state: 'all', engine: 'all' }); }
     });
@@ -709,6 +918,23 @@
     S.busy = true;
     var done = function () { S.busy = false; };
     var fail = function () { S.busy = false; };
+    if (r.page === 'session') {
+      if (!SM.validId(r.id)) { render(card(t('error'), h('p', { class: 'err', text: t('sessions.gone') })), 'sgone' + tag); done(); return; }
+      if (DET.id !== r.id) detReset(r.id);
+      var asked = r.id;
+      api('/api/session/' + asked + detQuery()).then(function (res) {
+        if (DET.id !== asked) return;
+        if (res.status >= 400) { render(card(t('error'), h('p', { class: 'err', text: res.status === 404 ? t('sessions.gone') : (res.data.error ? res.data.error.message : 'Error') })), 'sgone' + tag); return; }
+        DET.data = res.data;
+        DET.tl = SM.mergeLatest(DET.tl, res.data);
+        var sig = 'sd' + tag + JSON.stringify([res.data.session, res.data.children, DET.tl.events.length, DET.tl.cursor, DET.loading, DET.kinds, DET.tl.events.slice(-3)]);
+        if (S.last === sig) return;
+        var fid = document.activeElement && document.activeElement.getAttribute ? document.activeElement.getAttribute('data-fid') : null;
+        render(sessionDetailPage(), sig);
+        if (fid) { var el = document.querySelector('[data-fid="' + fid + '"]'); if (el) { try { el.focus(); } catch (e) { /* ignore */ } } }
+      }).then(done, fail);
+      return;
+    }
     if (r.page === 'settings' || r.page === 'psettings') {
       if (!force && S.last.indexOf('settings') === 0) { done(); return; }   // do not refresh a form while editing
       var pid = r.page === 'psettings' ? r.id : null;

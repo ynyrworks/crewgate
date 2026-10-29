@@ -246,7 +246,7 @@ codex plugin add crewgate@crewgate
 - Hook 看不到模型的思考過程，只能記錄發生了什麼（派工、停止、git 指令），不知道為什麼。
 - `crew task merge` 只記錄合併，不會執行 git。合併由統籌執行，hook 負責記錄那個指令。
 - 工人的隔離方式是 worktree 加上指示，不是容器。
-- 看板的工作階段清單是讀取本機 Claude Code 與 Codex 的紀錄；除非在全域設定打開 `board.show_text`，否則不顯示訊息文字。
+- 看板的工作階段清單是讀取本機 Claude Code 與 Codex 的紀錄；除非在全域設定打開 `board.show_text`，否則不顯示訊息文字。工作階段統計（時長、提示、工具呼叫、token、費用）只有數字，依對話紀錄快取在 `~/.crewgate/cache/sessions`。
 - 沒有動畫式「辦公室」畫面。以 Codex 當統籌屬實驗性；不支援 Gemini。
 
 ## 參與貢獻

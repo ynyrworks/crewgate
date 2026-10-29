@@ -11,10 +11,15 @@ what matters. Details of how things work today are in [DESIGN.md](DESIGN.md).
   Everything stays local, tail-read and redacted.
 - **Codex support (experimental, shipped in this cycle).** Codex as a worker through `crew task run --engine codex` (crewgate commits, because the Codex sandbox cannot), Codex as a reviewer, and Codex as an orchestrator through the same plugin folder (hooks, skill, custom agents). Still to do: verification on more platforms and Codex versions, and Codex subagent workers once their sandbox can commit.
 
+## Built, waiting for a release
+
+- Session statistics: duration, prompts, tool counts, subagents, tokens and estimated cost per session, with totals per parent (cached incrementally per file, bounded work per request).
+- A per-session activity timeline you can drill into (`#/s/<id>`): 200 steps per page, paging backwards by byte offsets, filter by kind, links to subagent pages.
+
 ## Later
 
-- Session statistics: duration, prompts, tool counts, tokens and cost per session.
-- A per-session activity timeline you can drill into.
+- Timeline polish: tool durations at the page boundary, a search box, and crewgate events older than the board's event tail.
+- Statistics for sessions older than the 24-hour list window (a history view).
 - Promoted-rule scoring: measure whether a promoted lesson actually reduces repeat corrections.
 
 ## Exploring

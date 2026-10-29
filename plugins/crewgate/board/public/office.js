@@ -498,6 +498,8 @@
     tip.appendChild(el('div', 'o-tip-line muted', (d.engine === 'codex' ? 'Codex' : 'Claude') + (d.model ? ' · ' + d.model : '') + (d.subagent ? ' · ' + c.t('sessions.subagent') : '')));
     var where = this.projectText(d);
     if (where) tip.appendChild(el('div', 'o-tip-line muted', where));
+    var st = c.stats ? c.stats(it.row) : null;
+    if (st) tip.appendChild(el('div', 'o-tip-line muted', st));
     tip.appendChild(el('div', 'o-tip-line muted', c.ago(d.lastActivity)));
     tip.appendChild(el('div', 'o-tip-hint', c.t('office.open')));
   };
@@ -519,6 +521,8 @@
         parts.push((d.engine === 'codex' ? 'Codex' : 'Claude') + (d.model ? ' ' + d.model : ''));
         var where = self.projectText(d);
         if (where) parts.push(where);
+        var st = c.stats ? c.stats(it.row) : null;
+        if (st) parts.push(st);
         parts.push(c.ago(d.lastActivity));
         var a = el('a', 'o-item', parts.join(' · '));
         a.setAttribute('href', c.href(it.row));

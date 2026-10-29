@@ -372,6 +372,21 @@ version, kind (fix / new features / major), release notes link, **Update now**, 
 (remembered in the browser per version) and, when the release carries the rehook marker, a re-approval hint
 for Codex. The banner shows progress, the copyable commands when nothing can be run, and the restart.
 
+Session statistics and timeline. `GET /api/sessions` and the project page add `stats` to each row and `totals` to a
+parent (itself plus its subagents): duration, prompts, tool calls by name, subagents, errors, tokens per model and the cost
+from `prices`. Totals need more than the watcher's tail read, so `board/session-stats.js` parses each transcript
+incrementally: per file it keeps the byte offset, a hash of the first 256 bytes (a changed head or a smaller file means
+rotation or truncation and a rebuild), counters per tool and per model, and the last message id (a message logged once
+per content block counts once). The cache is `<home>/cache/sessions/<hash>.json`; it holds counters only. A call parses
+at most 8 MB across all files, newest first; a file still behind reports `partial` and continues on the next call. A
+last line without a newline counts only once it parses as JSON. `GET /api/session/<id>` returns the row, its subagents
+and one page of the timeline (`board/session-timeline.js`): the transcript is read backwards from `before` (a byte
+offset taken from the previous answer's `cursor`), at most 8 MB per page, until `limit` (200) steps of the wanted
+`kinds` are found. Steps carry kind, time, tool name, duration (call to result when both are in the page) and links to
+the subagent session; prompt text and tool targets are included only when `board.show_text` is on, redacted like the
+live activity. Crewgate events of the session (from the project's event tail) are merged by time into the span the page
+covers.
+
 ## 15. Testing and acceptance
 
 - Unit tests per module; hook tests feed fixture payloads on stdin and assert stdout,
