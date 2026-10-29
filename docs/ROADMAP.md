@@ -1,37 +1,39 @@
 # Roadmap
 
 A short, honest list of where crewgate is going. No dates are promised; items move as real use shows
-what matters. Details of how things work today are in [DESIGN.md](DESIGN.md).
+what matters. Details of how things work today are in [DESIGN.md](DESIGN.md); what changed in each version is in
+the [CHANGELOG](../CHANGELOG.md).
 
-## Next (0.10)
+## Released
 
-- **Richer Sessions view.** Answer "who is doing what right now" at a glance: current activity (thinking,
-  running a tool and on what, writing, waiting for you), role and task of each session and subagent, a
-  parent/child tree, last prompt and reply snippets, branch and worktree, filters, and a private mode.
-  Everything stays local, tail-read and redacted.
-- **Codex support (experimental, shipped in this cycle).** Codex as a worker through `crew task run --engine codex` (crewgate commits, because the Codex sandbox cannot), Codex as a reviewer, and Codex as an orchestrator through the same plugin folder (hooks, skill, custom agents). Still to do: verification on more platforms and Codex versions, and Codex subagent workers once their sandbox can commit.
+One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.md).
 
-## Released in 0.12
+- **0.12** — Session statistics (duration, prompts, tool counts, tokens, estimated cost), a per-session activity timeline (`#/s/<id>`), the experimental Office view, and fixes from real use (recorded gates, hooks-last-seen, merge records, `via`, agent names, work item updates, default checks detection).
+- **0.11** — Update banner and one-click update on the board (one optional request a day, off with `updates.check`).
+- **0.10** — Codex support (experimental): Codex as worker, reviewer and orchestrator; a richer Sessions view (current activity, role and task, parent / child tree, filters, private mode).
+- **0.9** — First public release: orchestrator skill, worker / reviewer / refuter agents, five-section briefs, task state machine, three-stage review, lessons, hooks, local board.
 
-- Session statistics: duration, prompts, tool counts, subagents, tokens and estimated cost per session, with totals per parent (cached incrementally per file, bounded work per request).
-- A per-session activity timeline you can drill into (`#/s/<id>`): 200 steps per page, paging backwards by byte offsets, filter by kind, links to subagent pages.
-- Office view (experimental): `#/office`, a pixel-art office of live sessions.
-- Fixes from real use: recorded gates, hooks-last-seen, merge records, `via`, agent name normalisation, work item updates, default checks detection.
+## Unreleased / next release
 
-## Unreleased
+What is on `main` and will ship in the next version (details under "Unreleased" in the [CHANGELOG](../CHANGELOG.md)).
 
-- History view (`#/history`): statistics and timelines for sessions older than the 24-hour list window, by day, with a range and project filter.
+- **Gates follow the repo and can be enforced.** Git events and gate checks use the repository a command targets (`cd`, `git -C`); `gates.enforce` (`remind`, `confirm`, `block`) with a PreToolUse(Bash) hook; `gates.require_user_turn`; the session id read from `CLAUDE_CODE_SESSION_ID`. `confirm` is unverified in bypass-permissions mode, and Codex stays on `remind`.
+- **History.** `#/history` looks back up to 90 days with the Sessions statistics, by day, with a range and project filter.
+- **Timeline polish.** A search box, tool durations across page edges, and crewgate events older than the board's recent event tail.
+- **Board layout.** Capped, scrolling lists inside cards, wide-screen layout up to 2400 px, more grid columns.
+- **Stability fixes from real use.** Redirects and heredocs are not parsed as git words, a hook error log (`hook-errors.jsonl`) and `crew doctor` counts, `subagent.stop` `last` only from a final message, deduplicated Codex session events and merges, orphan subagent marking, timestamps in `board.log`.
+- **Office view v3.** Redrawn pixel art; behaviour follows the activity (reading, searching, editing, running, waiting), errands between sessions, a lounge for idle sessions, walking out when done, and a different look per role.
 
 ## Later
 
-- Timeline polish: tool durations at the page boundary, a search box, and crewgate events older than the board's event tail.
-- Promoted-rule scoring: measure whether a promoted lesson actually reduces repeat corrections.
+- **Per-account labelling of sessions.** Show which Claude account or plan a session used, with an optional "expected account" warning per project. Idea stage: it is not verified that the account can be detected from what Claude Code exposes locally.
+- **Office view: test-result reactions** (a celebration or a slump when checks pass or fail; the result is not in the data the office receives today) and **bigger character sprites**.
+- **Promoted-rule scoring.** Measure whether a promoted lesson actually reduces repeat corrections.
+- **Codex.** Verification on more platforms and Codex versions, honouring hook `ask` / `deny` if Codex supports it, and Codex subagent workers once their sandbox can commit.
 
 ## Exploring
 
-- **Office view (shipped in 0.12, experimental).** `#/office` shows live sessions as a pixel-art office, drawn from
-  scratch on a canvas. The list view stays the default and the only one that must work everywhere. Still
-  open: feedback from real use, more poses and room decoration, and whether a 3D variant is worth it.
+- **Office view (experimental).** The list view stays the default and the only one that must work everywhere. Still open: feedback from real use, more poses and room decoration, and whether a 3D variant is worth it.
 
 ## 1.0 criteria
 

@@ -28,8 +28,8 @@ Goals
 Non-goals (first release)
 - No LLM calls from hooks or the board. No network access, with one exception: the board's update check
   (section 10), which is on by default and can be turned off.
-- No animated "office" view. A plain live-session list is enough.
-- Codex/Gemini as orchestrator (no Codex plugin rendering yet).
+- No 3D or game-like board. The live-session list is the default and the only view that must work everywhere; the pixel-art Office page (section 14) is an experimental extra.
+- Gemini. Codex as orchestrator, worker and reviewer is supported experimentally (section 16).
 
 ## 2. Clean-room rule
 
@@ -86,6 +86,9 @@ Runtime data layout:
 ```
 ~/.crewgate/
   config.json                          global: port, usage prices, language default
+  hook-errors.jsonl                    one line per hook failure (§8); rotated at 1 MiB to hook-errors.1.jsonl
+  board.log                            output of the board server, each line with an ISO timestamp
+  cache/sessions/                      per-transcript session statistics (counters only, §14)
   projects.json                        registry: id -> { path, name, added }
   projects/<id>/
     events.jsonl                       append-only event log (hooks + CLI)
@@ -208,7 +211,11 @@ must skip a malformed trailing line).
   over the plugin copy, so both spellings occur; `lib/core/agents.js` is the one place that normalises them.
 - `subagent.stop` `last` is a redacted snippet (up to 200 chars) of the subagent final message: the payload
   `last_assistant_message` (string or content blocks), else the last assistant text at the end of `agent_transcript_path`;
-  `last_src` is `payload` | `transcript` | `none`. The board shows it only when `board.show_text` is on.
+  `last_src` is `payload` | `transcript` | `transcript_partial` | `none`. The transcript fallback accepts only the final assistant
+  entry (no tool call in it, no tool result after it); anything else is `transcript_partial` with an empty `last`, so mid-run text
+  is never taken as the final message. The event also records `had_transcript_path` and `had_last_message`, and `orphan: true`
+  when no `subagent.start` and no task link exists (the compaction / summary agent), so counts of real subagents can skip it.
+  The board shows `last` only when `board.show_text` is on.
 - `git.merge` `branches` never holds an unexpanded shell word (`$b`, backticks, `%VAR%`): such a command records
   `branches: []` + `dynamic: true`. The hook counts merges from the command output ("Merge made by", "Fast-forward",
   "Squash commit", "Updating a..b"): a loop with unknown branches yields one event per merge (`seq`/`of`), otherwise
@@ -259,7 +266,10 @@ tells the orchestrator to take the task over itself (and records a lesson candid
 Single entry `node "${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js" <event>`. Contract:
 read all stdin, never throw, never exit non-zero except a deliberate PreToolUse block
 (exit 2) when `orchestrator_edit` is `block`; print `{}` or a valid hook JSON object;
-finish in < 200 ms typical; unregistered project → `{}`.
+finish in < 200 ms typical; unregistered project → `{}`. A failure that answers `{}` is not silent: a handler error, a worker
+crash and a guard expiry append one line `{ts, event, kind: error|guard|worker_exit, msg, version}` to
+`<home>/hook-errors.jsonl` (`lib/core/hooklog.js`: message redacted and cut to 300 characters, a file over 1 MiB renamed to
+`hook-errors.1.jsonl`, logging itself never throws). `crew doctor` shows the counts of the last 24 hours and 7 days.
 
 | Event | Behaviour |
 |---|---|
@@ -270,7 +280,7 @@ finish in < 200 ms typical; unregistered project → `{}`.
 | PreToolUse (Edit/Write/MultiEdit/NotebookEdit, main session, main worktree) | If the target is not matched by `orchestrator_edit_allow`: `warn` → non-blocking reminder to delegate + `orchestrator.warned`; `block` → deny with reason. Never applies inside subagents or linked worktrees. |
 | PreToolUse (Read, main session) | If the file has more lines than `orchestrator_read_warn_lines` and no `limit` was given, add a reminder to read the report/diff stat first and use line ranges. Never blocks. |
 | PreToolUse (Bash) | Only when `gates.enforce` is `confirm` or `block` (§8.1): a push / PR / merge under an `ask` gate with no approval gets `permissionDecision` `ask` or `deny`. Skipped for Codex payloads. |
-| PostToolUse (Bash) | Detect `git push`, `git merge`, `gh pr create`, `glab mr create` in the command; record `git.push` / `git.merge` (merge parsing: §6). Then the gate check: push → `push`, `gh pr create` / `glab mr create` → `open_pr`, merge → `merge`; if that gate is `ask` and no `gate.answered yes` of the last 30 minutes exists, record `gate.missing` and add a non-blocking reminder (`additionalContext`) to run `crew gate ask` / `answer` first (with `gates.enforce: confirm`, a command that was put to the user and ran records `gate.confirmed` instead). |
+| PostToolUse (Bash) | Detect `git push`, `git merge`, `gh pr create`, `glab mr create` in the command (redirections, comments and heredoc bodies are not commands; the repository a `cd` / `git -C` points to decides which project the events and the gate check belong to, §8.1); record `git.push` / `git.merge` (merge parsing: §6). Then the gate check: push → `push`, `gh pr create` / `glab mr create` → `open_pr`, merge → `merge`; if that gate is `ask` and no `gate.answered yes` of the last 30 minutes exists, record `gate.missing` and add a non-blocking reminder (`additionalContext`) to run `crew gate ask` / `answer` first (with `gates.enforce: confirm`, a command that was put to the user and ran records `gate.confirmed` instead). |
 | every event | Whenever a hook resolves a registered project it notes the event in `runtime/hook-seen.json` (`{ events: { SessionStart: iso, ... } }`, at most one write per event type per 60 s). `crew doctor` and the board show it; SessionStart/Stop/SessionEnd never seen means the session began before the plugin was installed (or the wiring is broken). |
 | Stop | If tasks are `returned` but not reviewed, or dispatched background tasks are still running, add a one-line reminder. Respect `stop_hook_active` (never loop). |
 | PreCompact | Record `session.compact` with a digest checkpoint. |
@@ -428,6 +438,8 @@ snippet). `once` stops matching when the snippet no longer exists in the file;
   127.0.0.1, ::1 and 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24 (documentation ranges).
 - Writes are atomic (write `*.tmp` in the same dir, then rename). Corrupt JSON files
   are moved aside to `<name>.corrupt-<ts>` and reported, never silently overwritten.
+- Hook failures go to `<home>/hook-errors.jsonl` (§8): local, redacted before truncation, messages cut to 300 characters, one
+  file of at most about 1 MiB plus the previous one. Nothing in it leaves the machine.
 - Hooks run with the user's permissions outside the sandbox: they only read stdin, the
   project's git metadata and crewgate files, and only write under `~/.crewgate/`.
 - Agent files rendered by `crew init` include the default worker boundaries: work only
@@ -491,13 +503,21 @@ Pages: Overview (all projects) · Project (tasks by state with returns count, li
 subagents, needs waiting for the user, work streams, log, MRs, validation, handoffs,
 lessons, review stats, approval-gate history asked/answered/missing, hooks last seen, per-event `via`/branches) · Sessions (live list of local Claude Code / Codex sessions:
 working / running a tool / waiting for user / idle / done, read-only from
-`~/.claude/projects` and `~/.codex/sessions`) · Usage (tokens/cost by model and day) ·
-Settings (edit `crew.json` of a project through a form with validation; global
+`~/.claude/projects` and `~/.codex/sessions`) · History (`#/history`, sessions up to 90 days back, below) · Office (`#/office`, experimental, below) ·
+Usage (tokens/cost by model and day) · Settings (edit `crew.json` of a project through a form with validation; global
 `config.json`). UI languages: en, zh-TW (own string tables). Project names can be
 masked for screen sharing. On every page a banner appears when `GET /api/update` reports a newer release:
 version, kind (fix / new features / major), release notes link, **Update now**, **Skip this version**
 (remembered in the browser per version) and, when the release carries the rehook marker, a re-approval hint
 for Codex. The banner shows progress, the copyable commands when nothing can be run, and the restart.
+
+Layout. Below 720 px the page scrolls and nothing is capped. From there up, lists and tables inside cards (needs, tasks,
+sessions, work, log, MRs, validation, handoffs, lessons, gates, hooks, events, subagents, the History day groups, the Usage
+model table, the Overview project list) have a capped height and scroll inside the card: a shadow shows where more content is
+hidden, the title carries the count, and the scroll area is focusable and named for the keyboard. Short cards keep their
+natural height; the session timeline takes the height of the window; scroll positions survive a refresh. `main` is fluid up to
+2400 px with side padding that grows with the screen, grids gain columns (4 at 1920 px, 5 at 2560 px and up), the session and
+history lists become a multi-column card grid from 1600 px, and table headers stay visible while scrolling.
 
 Session statistics and timeline. `GET /api/sessions` and the project page add `stats` to each row and `totals` to a
 parent (itself plus its subagents): duration, prompts, tool calls by name, subagents, errors, tokens per model and the cost
@@ -511,8 +531,11 @@ and one page of the timeline (`board/session-timeline.js`): the transcript is re
 offset taken from the previous answer's `cursor`), at most 8 MB per page, until `limit` (200) steps of the wanted
 `kinds` are found. Steps carry kind, time, tool name, duration (call to result when both are in the page) and links to
 the subagent session; prompt text and tool targets are included only when `board.show_text` is on, redacted like the
-live activity. Crewgate events of the session (from the project's event tail) are merged by time into the span the page
-covers.
+live activity. Crewgate events of the session are merged by time into the span the page covers: the project's events file is read backwards
+from its end (at most 4 MiB) for that time window, so events older than the board's recent event tail show too. A call opened on
+an older page gets its duration, failure flag and subagent link from a forward look-ahead past the page edge (at most 512 KiB;
+the answer's `ahead` is the byte count). The timeline page has a search box over the loaded steps (tool name, target, prompt
+snippet, event type, task id; all words must match; in private mode only names and kinds).
 
 History. `GET /api/history` (`board/history.js`) serves sessions older than the watcher's 24-hour window (and the newer ones, too: it lists everything
 inside `days`, 1-90, default 7). Discovery walks the known layouts of the Claude and Codex roots (Codex date folders out of range are not opened), entry by
@@ -529,6 +552,18 @@ viewer's `tz` (minutes east of UTC), `day_totals` sum the rows of the page. Row 
 remembers a bounded id to file map, and `GET /api/session/<id>` falls back to it (or, after a restart, to hashing the paths under the
 roots), so ids never name a path the caller chose. The page keeps pages in memory, fetches again a page whose rows are `partial`, and
 reloads the first page when you come back to it.
+
+Office. `#/office` (`board/public/office.js`, `office-model.js`, `office-sprites.js`; experimental) draws the Sessions rows as
+a pixel-art office on a canvas, from scratch with no assets: one room per project, an orchestrator at the middle desk of a pod
+with its subagents around it. `office-model.js` is pure logic (no DOM, no canvas) and decides, from a row's status and
+activity, which animation a session gets (thinking, tool, writing, waiting, idle, done; the tool decides the prop: document,
+magnifier, terminal with a progress bar, globe), where each session sits and what its tooltip may say. Lifecycle: a finished
+session walks out of the door; one idle for 90 s rests in the lounge (sofa, coffee machine, plant) and walks back when active.
+Errands (skipped under reduced motion): a finished subagent walks to its parent with a paper, a reviewer goes to the reviewed
+worker's screen, a refuter stands by the reviewer, an orchestrator hands a paper to a new subagent. The role shows in the look
+(headset and lanyard, glasses, crossed arms), the engine in the shirt colour, and each session gets a seeded hair, skin and
+accessory. The result of a command is not in the data the office receives, so there is no reaction to pass or fail. Private mode
+aliases the project name on the cork board; the list under the canvas stays keyboard-operable.
 
 ## 15. Testing and acceptance
 
