@@ -8,7 +8,7 @@ hangs (8 s; SessionEnd 1.2 s). Any internal error also gives `{}` and exit code 
 Rules every hook follows
 - Unregistered project: `{}`, nothing is written. Hooks never register a project.
 - Reads only stdin, git metadata of the working directory and crewgate files; writes only under
-  `CREWGATE_HOME` (default `~/.crewgate`). No network, no model calls.
+  `CREWGATE_HOME` (default `~/.crewgate`). No network, no model calls (the only outbound request in crewgate is the board's optional update check).
 - Stored text is redacted first, then truncated. Handoff bodies and file contents are never injected,
   only counts and ids. The SessionStart brief wraps file-derived data in `<crew-state untrusted="true">`.
 - The only deliberate refusal is PreToolUse `permissionDecision: "deny"` (JSON, exit 0) when

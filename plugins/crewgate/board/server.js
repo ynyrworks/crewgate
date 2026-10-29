@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { createApi } = require('./api');
+const { createUpdateRoutes } = require('./update-routes');
 const { normalizeLang } = require('../lib/core/i18n');
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -66,6 +67,7 @@ function createBoard(opts = {}) {
     watcherOpts.sessionEnds = require('./session-ends').createSessionEnds(() => projects.list().map((p) => paths.eventsFile(p.id)));
   }
   const api = createApi({ version, watcher: createWatcher(watcherOpts), usage: createUsage(watcherOpts) });
+  const updates = createUpdateRoutes({ version, pluginRoot: path.join(__dirname, '..'), ...(opts.updates || {}) });
   let boundPort = opts.port || 0;
   let indexHtml = null;
 
@@ -138,7 +140,10 @@ function createBoard(opts = {}) {
 
     if (url.pathname.startsWith('/api/')) {
       const query = Object.fromEntries(url.searchParams);
+      const isUpdate = url.pathname === '/api/update' || url.pathname.startsWith('/api/update/');
+      const internal = () => fail(res, 500, 'api.internal', 'Internal error');
       if (req.method === 'GET') {
+        if (isUpdate) return updates.handle({ method: 'GET', path: url.pathname, lang }).then((r) => sendJson(res, r.status, r.data), internal);
         const r = api.handle({ method: 'GET', path: url.pathname, query, lang });
         return sendJson(res, r.status, r.data);
       }
@@ -153,6 +158,7 @@ function createBoard(opts = {}) {
         if (err) return fail(res, 413, 'api.tooLarge', 'Request body too large');
         let body;
         try { body = text ? JSON.parse(text) : {}; } catch { return fail(res, 400, 'api.badJson', 'Invalid JSON'); }
+        if (isUpdate) return updates.handle({ method: 'POST', path: url.pathname, body, lang }).then((r) => sendJson(res, r.status, r.data), internal);
         const r = api.handle({ method: 'POST', path: url.pathname, query, body, lang });
         return sendJson(res, r.status, r.data);
       });
@@ -170,18 +176,20 @@ function createBoard(opts = {}) {
     server,
     token,
     api,
+    updates,
     port: () => boundPort,
     url: () => `http://127.0.0.1:${boundPort}/`,
     listen(port = opts.port || 0) {
       return new Promise((resolve, reject) => {
         const onErr = (e) => { server.removeListener('listening', onOk); reject(e); };
-        const onOk = () => { server.removeListener('error', onErr); boundPort = server.address().port; resolve(boundPort); };
+        const onOk = () => { server.removeListener('error', onErr); boundPort = server.address().port; updates.startAuto(); resolve(boundPort); };
         server.once('error', onErr);
         server.once('listening', onOk);
         server.listen(port, host);
       });
     },
     close() {
+      updates.stop();
       return new Promise((resolve) => { server.close(() => resolve()); if (server.closeAllConnections) server.closeAllConnections(); });
     },
   };

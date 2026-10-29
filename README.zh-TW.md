@@ -22,7 +22,7 @@
 crewgate 把這些都變成強制或自動記錄的機制：五段式任務書（缺段落 CLI 直接拒收）、改程式與讀大檔的提醒、
 由 hook 事件記錄狀態、三段式審查流程、尚未審查或仍在背景執行時的收尾提醒，以及只有你點頭才會升格成規則的經驗。
 
-沒有任何執行期相依套件，需要 Node.js 18 以上，Windows、macOS、Linux 都能用。完全不連網，hook 與看板也不會呼叫模型。
+沒有任何執行期相依套件，需要 Node.js 18 以上，Windows、macOS、Linux 都能用。唯一的對外連線是看板選用的更新檢查（一天向 GitHub 一次，見「隱私與安全」，可用 `updates.check` 關閉）；hook 與看板不會呼叫模型。
 
 ## 運作方式
 
@@ -131,7 +131,7 @@ claude --plugin-dir crewgate/plugins/crewgate
 
 所有指令、選項與檔案位置：[plugins/crewgate/skills/crew/references/commands.md](plugins/crewgate/skills/crew/references/commands.md)。
 指令群組：`init`、`doctor`、`project`、`task`、`review`、`handoff`、`lesson`、`need`、`work`、`log`、`mr`、
-`validate`、`board`、`import`。讀取類指令都支援 `--json`。
+`validate`、`board`、`update`、`import`。讀取類指令都支援 `--json`。
 
 ## 看板截圖
 
@@ -179,7 +179,15 @@ claude --plugin-dir crewgate/plugins/crewgate
 ## 隱私與安全
 
 - **只在本機。** 看板只綁定 `127.0.0.1`，會拒絕不符的 `Host` 標頭，不送 CORS 標頭，所有寫入都要帶每次啟動產生的
-  token 並使用 JSON 內容類型，並送出嚴格的 CSP。沒有遙測、沒有對外連線，hook 與看板也不會呼叫模型。
+  token 並使用 JSON 內容類型，並送出嚴格的 CSP。沒有遙測，hook 與看板也不會呼叫模型。
+- **唯一的對外連線，可關閉。** `updates.check` 開啟時（預設），由看板伺服器（不是瀏覽器）每天最多一次向
+  `api.github.com` 查詢最新的 crewgate 版本：單純的 GET，帶 `User-Agent: crewgate/<版本>`，沒有 cookie 或認證，
+  不含任何關於您或專案的資料，逾時 5 秒，結果快取在 `~/.crewgate/update-check.json`。把 `updates.check` 設為
+  `false` 就完全不發出網路請求。不支援 `HTTPS_PROXY`。有新版時看板頂端會出現橫幅（修正／新功能／大版本）、
+  版本說明連結、「立即更新」與「略過此版本」。立即更新只會執行固定指令（`claude plugin marketplace update crewgate`、
+  `claude plugin update crewgate@crewgate`、`codex plugin marketplace upgrade crewgate`），且只限已安裝的外掛；
+  開發用的 checkout 或沒有這些 CLI 的機器只會顯示可複製的指令。更新後看板會用新程式自動重新啟動。
+  終端機：`crew update check`、`crew update apply`。
 - **遮蔽。** 文字會先遮蔽再截斷才儲存：私鑰、Bearer／Basic 認證、`password=` 之類的鍵值、常見服務金鑰、JWT，
   以及除了本機迴路與文件保留網段以外的 IP 位址。
 - **資料放哪裡。** 執行期資料寫在 `~/.crewgate/`（可用 `CREWGATE_HOME` 改位置）。專案內的檔案
@@ -245,6 +253,14 @@ node scripts/gen-config-docs.js   # 修改設定結構之後
 規則：不得新增執行期相依套件、Node 18 以上、跨平台（不假設特定 shell）、測試只用暫存資料夾，絕不碰真實的
 `~/.crewgate` 或 `~/.claude`。儲存庫衛生測試會擋下多餘的 IP 位址、像憑證的字串與專案專屬名稱；
 文件請用 `192.0.2.x`，測試中需要其他位址時請在執行時才組出來。修正與測試請放在同一次變更。
+
+發行：看板的更新橫幅（與 `crew update check`）讀取本儲存庫最新的、已發佈的非預發行 GitHub release。若某版改了 hook 指令字串
+（`hooks/hooks.json`、`hooks/codex-hooks.json`），請在 release 說明中單獨一行加入下面這行，橫幅才會提醒 Codex 使用者重新核准 hooks
+（`/hooks`）：
+
+```
+<!-- crewgate:rehook -->
+```
 
 若有些名稱（公司名、信箱前綴）不得出現在儲存庫，請不要寫進任何受版控的檔案：把每行一個正規表示式放在未追蹤的
 `.git/info/hygiene-extra`（或設環境變數 `CREWGATE_HYGIENE_EXTRA`，以分號分隔），衛生測試會把它們加進內建規則。

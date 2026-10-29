@@ -153,5 +153,10 @@
   "wf.doctor.boardDown": "未執行（127.0.0.1:{port}）；可用 `crew board start` 啟動",
   "wf.doctor.boardOther": "127.0.0.1:{port} 上是別的服務在回應（{detail}）",
   "wf.doctor.allOk": "所有檢查都通過。",
-  "wf.doctor.problems": "有檢查未通過。"
+  "wf.doctor.problems": "有檢查未通過。",
+  "wf.doctor.name.update": "更新",
+  "wf.doctor.updateOff": "更新檢查已關閉（updates.check）",
+  "wf.doctor.updateUnknown": "{current}；尚未檢查最新版（看板每天檢查一次，或執行 `crew update check`）",
+  "wf.doctor.updateCurrent": "{current} 已是最新版",
+  "wf.doctor.updateNewer": "{current}；{latest} 可更新（執行 `crew update apply`）"
 }

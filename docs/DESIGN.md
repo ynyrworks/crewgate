@@ -26,7 +26,8 @@ Goals
   reviewer engine.
 
 Non-goals (first release)
-- No LLM calls from hooks or the board. No network access of any kind.
+- No LLM calls from hooks or the board. No network access, with one exception: the board's update check
+  (section 10), which is on by default and can be turned off.
 - No animated "office" view. A plain live-session list is enough.
 - Codex/Gemini as orchestrator (no Codex plugin rendering yet).
 
@@ -283,6 +284,25 @@ snippet). `once` stops matching when the snippet no longer exists in the file;
   `localhost:<port>` or `[::1]:<port>`. No CORS headers. State-changing requests require
   POST, `Content-Type: application/json`, no foreign `Origin`, and a per-process token
   embedded in the served page. Strict CSP, no inline script.
+- Update check (`lib/core/update-check.js`, config `updates.check`, default on): the only outbound request crewgate
+  makes. The board SERVER (never the browser; the CSP stays `connect-src 'self'`) sends one GET to
+  `https://api.github.com/repos/ynyrworks/crewgate/releases/latest` with `User-Agent: crewgate/<version>` and
+  `Accept: application/vnd.github+json`: no cookies, no credentials, no project or user data, 5 s timeout, at
+  most once per 24 h, answer or failure cached in `~/.crewgate/update-check.json` (failures back off 1 h, 2 h ... up
+  to 24 h). Drafts and pre-releases are ignored. `HTTPS_PROXY` is not supported. With `updates.check` false no
+  request is made at all, not even on a forced check. A release body that contains the line
+  `<!-- crewgate:rehook -->` sets `rehook` in `GET /api/update`; release authors add it when a hook command string
+  changes (Codex then asks the user to re-approve the hooks).
+- One-click update (`lib/core/update-apply.js`): `POST /api/update/apply` takes no parameters and needs the
+  same token/origin/JSON as every write. It runs only fixed commands, resolved through `lib/core/exec.js` (no
+  shell), stdin closed, 120 s each, output redacted and truncated: `claude plugin marketplace update crewgate`,
+  `claude plugin update crewgate@crewgate` (only if `claude plugin list` shows `crewgate@crewgate`) and
+  `codex plugin marketplace upgrade crewgate` (only if `~/.codex/config.toml` has
+  `[plugins."crewgate@crewgate"]`). A development checkout (not under `~/.claude/plugins` or
+  `~/.codex/plugins`) or a machine without either CLI runs nothing and gets the commands to copy. One update at a
+  time (lock file `~/.crewgate/update.lock`). Afterwards the board closes its port, starts
+  `node <updated root>/bin/crew.js board serve --port <same>` detached and exits only when that process owns
+  `board.json` and answers; otherwise it listens again and reports `crew board start`.
 - Redaction (`lib/core/redact.js`) runs before truncation everywhere text is stored:
   private keys, bearer/basic auth, `password=`/`token=`/`secret=` pairs, AWS/GitHub/
   GitLab/Slack/OpenAI/Anthropic-style keys, JWTs, IPv4/IPv6 addresses except
@@ -334,8 +354,9 @@ to override detection. Exit codes: 0 ok, 1 runtime error, 2 usage error.
   `crew mr set|list`, `crew validate set|list`
 - `crew board start|stop|status|serve [--port] [--no-open]`
 - `crew import agent-board <data dir> --from-project <id> [--force]`
+- `crew update check [--force]|apply` — the update notice and one-click update of section 10, for the terminal.
 - `crew doctor` — checks node version, config validity, registration, hook wiring,
-  board reachability.
+  board reachability, and the cached latest release (no request).
 
 ## 14. Board
 
@@ -346,7 +367,10 @@ working / running a tool / waiting for user / idle / done, read-only from
 `~/.claude/projects` and `~/.codex/sessions`) · Usage (tokens/cost by model and day) ·
 Settings (edit `crew.json` of a project through a form with validation; global
 `config.json`). UI languages: en, zh-TW (own string tables). Project names can be
-masked for screen sharing.
+masked for screen sharing. On every page a banner appears when `GET /api/update` reports a newer release:
+version, kind (fix / new features / major), release notes link, **Update now**, **Skip this version**
+(remembered in the browser per version) and, when the release carries the rehook marker, a re-approval hint
+for Codex. The banner shows progress, the copyable commands when nothing can be run, and the restart.
 
 ## 15. Testing and acceptance
 

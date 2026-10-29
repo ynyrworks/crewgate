@@ -76,3 +76,5 @@ Per user (override the folder with `CREWGATE_HOME`). Not part of any repository.
 | `board.session_idle_minutes` | integer; min 1; max 1440 | `30` | Minutes without activity after which a Sessions entry shows as idle. | 工作階段超過這段分鐘數沒有動靜就顯示為閒置。 |
 | `board.session_done_hours` | integer; min 1; max 720 | `6` | Hours without activity after which a Sessions entry shows as done. | 工作階段超過這段小時數沒有動靜就顯示為已結束。 |
 | `board.detect_closed_transcripts` | boolean | `false` | Treat a transcript that ends in a closing record (last-prompt) as a finished session. Off by default: the record is not verified to mean the session ended, so a live session waiting for you could be shown as done. | 把結尾為關閉記錄（last-prompt）的逐字稿視為已結束的工作階段。預設關閉：該記錄是否代表工作階段結束尚未驗證，開啟後等待您回應的使用中工作階段可能被顯示為已結束。 |
+| `updates` | object | `{"check":true}` | Update notices. | 更新通知。 |
+| `updates.check` | boolean | `true` | Let the board ask GitHub (api.github.com, at most once a day, nothing about you or your projects is sent) whether a newer crewgate release exists and show a notice. Turn off to make no network request at all. | 讓看板向 GitHub（api.github.com，一天最多一次，不會送出任何關於您或專案的資料）查詢是否有較新的 crewgate 版本並顯示通知。關閉後完全不發出網路請求。 |
