@@ -4,8 +4,8 @@ Call as `node "${CLAUDE_PLUGIN_ROOT}/bin/crew.js" ...`. Global options: `--json`
 `--lang en|zh-TW`. Exit codes: 0 ok, 1 runtime error, 2 usage error.
 
 ## Setup
-- `crew init [--lang en|zh-TW] [--force]`: config, three agent copies, `.crew/` files, registers the
-  project. Never overwrites without `--force` (then `*.bak-<timestamp>` copies; your config values are kept).
+- `crew init [--lang en|zh-TW] [--force] [--reset-review-files]`: config, three agent copies, `.crew/` files, registers the
+  project. Never overwrites without `--force` (then `*.bak-<timestamp>` copies; your config values are kept; `.crew/REVIEW.md` and `.crew/LESSONS.md` are never touched by `--force`, only `--reset-review-files` replaces them, with a backup).
 - `crew doctor`: Node version, config validity (with field paths), registration, hooks file, board.
 - `crew project add|list|rm`
 

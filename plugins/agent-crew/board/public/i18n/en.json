@@ -128,5 +128,6 @@
   "settings.noChanges": "No changes.",
   "settings.saved": "Saved.",
   "settings.failed": "Not saved. Fix the marked fields.",
-  "config.errors": "Configuration problems"
+  "config.errors": "Configuration problems",
+  "config.ignored": "Ignored settings"
 }

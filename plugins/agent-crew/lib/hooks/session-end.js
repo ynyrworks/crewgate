@@ -17,6 +17,9 @@ function run(payload) {
   const h = C.open(payload);
   if (!h) return null;
   const s = (h.sid && sess.read(h.sid)) || {};
+  // The session file is removed below, so a second SessionEnd for the same run finds none: nothing
+  // left to digest. A resumed session gets a new file (new start time) and so its own digest.
+  if (h.sid && !Object.keys(s).length) return null;
   const reason = C.snippet(payload.reason, 40) || 'other';
   const touched = Array.isArray(s.tasks) ? s.tasks.slice(0, 20) : [];
 
@@ -43,7 +46,7 @@ function run(payload) {
     flags,
   };
   try {
-    events.append(h.pid, { type: 'session.end', src: 'hook', session: h.sid, data: digest, key: h.sid || `end:${Date.now()}` });
+    events.append(h.pid, { type: 'session.end', src: 'hook', session: h.sid, data: digest, key: h.sid ? `${h.sid}:${s.started || ''}:${s.prompts || 0}:${s.tool_total || 0}` : `end:${Date.now()}` });
   } catch { /* ignore */ }
 
   if (flags.length && reason !== 'resume' && s.project) {

@@ -75,7 +75,7 @@ function put(root, rel, text, force, out) {
   out.push({ file: rel, action: exists ? 'overwritten' : 'created', ...(backup ? { backup } : {}) });
 }
 
-// init(root, { lang, force, fallbackLang }) -> { root, project, created, files: [{ file, action, backup? }], language }
+// init(root, { lang, force, resetReviewFiles, fallbackLang }) -> { root, project, created, files: [{ file, action, backup? }], language }
 function init(root, opts = {}) {
   const force = !!opts.force;
   const files = [];
@@ -94,8 +94,11 @@ function init(root, opts = {}) {
   put(root, cfgRel, `${JSON.stringify(base, null, 2)}\n`, force, files);
   const cfg = config.load(root).config;
   for (const name of AGENTS) put(root, path.join('.claude', 'agents', `${name}.md`), renderAgent(name, cfg), force, files);
-  put(root, path.join('.crew', 'REVIEW.md'), template('REVIEW.md'), force, files);
-  put(root, path.join('.crew', 'LESSONS.md'), template('LESSONS.md'), force, files);
+  // REVIEW.md and LESSONS.md hold the user's own rules and notes: --force leaves them alone,
+  // only --reset-review-files replaces them (the old copy is backed up first)
+  const reset = !!opts.resetReviewFiles;
+  put(root, path.join('.crew', 'REVIEW.md'), template('REVIEW.md'), reset, files);
+  put(root, path.join('.crew', 'LESSONS.md'), template('LESSONS.md'), reset, files);
   // the dismissed ledger holds user decisions: never replaced, not even with --force
   const ledger = path.join('.crew', 'dismissed.jsonl');
   if (fs.existsSync(path.join(root, ledger))) files.push({ file: ledger, action: 'kept' });

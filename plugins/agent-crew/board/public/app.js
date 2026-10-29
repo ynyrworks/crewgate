@@ -446,6 +446,7 @@
       h('div', { class: 'sticky' }, h('button', { class: 'primary', type: 'submit', text: t('save') }), status, summary));
     var intro = [];
     if (cfg.errors.length) intro.push(card(t('config.errors'), h('ul', { class: 'list' }, cfg.errors.map(function (e) { return h('li', { class: 'err', text: e.path + ': ' + e.message }); })), 'alert'));
+    if ((cfg.warnings || []).length) intro.push(card(t('config.ignored'), h('ul', { class: 'list' }, cfg.warnings.map(function (e) { return h('li', { class: 'muted', text: e.path + ': ' + e.message }); })), 'alert'));
     return h('div', null, h('h1', { text: t(projectId ? 'settings.project' : 'settings.global') }), h('p', { class: 'muted', text: t('settings.hint') }), intro, form);
   }
 

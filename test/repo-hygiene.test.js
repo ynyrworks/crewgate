@@ -18,6 +18,24 @@ const MAX_ALLOWED = 5; // exclusive upper bound: fewer than 5 opt-outs in the wh
 const NAMES = [j('che', 'oyu'), j('whatsmy', 'agentdoing'), j('my', 'office'), j('dev', 'board')]
   .map((n) => ({ name: 'forbidden name', re: new RegExp(n, 'i') }));
 
+// Names that must not ship (a company, an author's mail prefix, ...) are NOT written in this public
+// file. Each contributor can keep their own list, one regular expression per line, in the untracked
+// file <git dir>/info/hygiene-extra, or in the environment variable AGENT_CREW_HYGIENE_EXTRA
+// (separated by newlines or semicolons). Lines starting with # are comments; matching is case-insensitive.
+function extraPatterns() {
+  const lines = [];
+  const fromEnv = process.env.AGENT_CREW_HYGIENE_EXTRA;
+  if (fromEnv) lines.push(...fromEnv.split(/[\r\n;]+/));
+  try {
+    const r = spawnSync('git', ['rev-parse', '--git-path', 'info/hygiene-extra'], { cwd: ROOT, encoding: 'utf8' });
+    if (r.status === 0) {
+      const file = path.resolve(ROOT, r.stdout.trim());
+      if (fs.existsSync(file)) lines.push(...fs.readFileSync(file, 'utf8').split(/\r?\n/));
+    }
+  } catch { /* no git: no local list */ }
+  return lines.map((l) => l.trim()).filter((l) => l && !l.startsWith('#')).map((l) => ({ name: 'local forbidden pattern', re: new RegExp(l, 'i') }));
+}
+
 const KEY_BLOCK = { name: 'private key block', re: new RegExp(j('-----BEGIN [A-Z ]*', 'PRIVATE KEY-----')) };
 const TOKENS = [
   { name: 'GitHub token', re: new RegExp(j('gh', 'p_[A-Za-z0-9]{20,}')) },
@@ -46,6 +64,7 @@ function files() {
 }
 
 function scan() {
+  const EXTRA = extraPatterns();
   const hits = [];
   let allowed = 0;
   const all = files();
@@ -61,7 +80,7 @@ function scan() {
       if (!self && line.includes(MARKER)) { allowed++; return; }
       if (self) return; // the scanner itself carries no secrets; its patterns are obfuscated anyway
       const where = `${rel}:${i + 1}`;
-      for (const p of [...NAMES, KEY_BLOCK, ...TOKENS]) if (p.re.test(line)) hits.push(`${where}: ${p.name}`);
+      for (const p of [...NAMES, ...EXTRA, KEY_BLOCK, ...TOKENS]) if (p.re.test(line)) hits.push(`${where}: ${p.name}`);
       for (const m of line.matchAll(IP_RE)) {
         const o = m.slice(1, 5).map(Number);
         if (!ipAllowed(o)) hits.push(`${where}: IPv4 address ${m[0]}`);
@@ -80,6 +99,20 @@ test('no forbidden names, stray IP addresses, keys or tokens in the repository',
 test('the allow-list stays tiny', () => {
   const { allowed } = scan();
   assert.ok(allowed < MAX_ALLOWED, `${allowed} lines use the ${MARKER} marker; the cap is ${MAX_ALLOWED - 1}`);
+});
+
+test('extra patterns come from AGENT_CREW_HYGIENE_EXTRA and are optional', () => {
+  const before = process.env.AGENT_CREW_HYGIENE_EXTRA;
+  try {
+    delete process.env.AGENT_CREW_HYGIENE_EXTRA;
+    const base = extraPatterns().length;
+    process.env.AGENT_CREW_HYGIENE_EXTRA = '# comment\nsecret-co;other-name';
+    const got = extraPatterns();
+    assert.equal(got.length, base + 2);
+    assert.ok(got.some((p) => p.re.test('Secret-Co Ltd')));
+  } finally {
+    if (before === undefined) delete process.env.AGENT_CREW_HYGIENE_EXTRA; else process.env.AGENT_CREW_HYGIENE_EXTRA = before;
+  }
 });
 
 test('the scanner itself catches what it should', () => {

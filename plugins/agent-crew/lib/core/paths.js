@@ -54,7 +54,11 @@ function handoffFile(id, state, handoffId) {
 // Project-side (inside the repo) files.
 function projectConfigFile(root) { return path.join(root, '.claude', 'crew.json'); }
 
+// Is a path.relative() result outside its base directory? A file named "..x" inside it is not.
+function isOutside(rel) { return rel === '..' || rel.startsWith('..' + path.sep) || path.isAbsolute(rel); }
+
 module.exports = {
+  isOutside,
   ID_RE, TASK_ID_RE, SAFE_ID_RE, STORE_NAMES, HANDOFF_STATES,
   home, configFile, projectsFile, projectDir, dataFile, eventsFile, tasksDir, taskDir,
   handoffDir, handoffFile, projectConfigFile, runtimeDir, sessionsDir,

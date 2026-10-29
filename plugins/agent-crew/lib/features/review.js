@@ -6,8 +6,10 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const json = require('../core/json');
+const { redact } = require('../core/redact');
 const { CrewError } = require('../core/errors');
 const common = require('./common');
+const paths = require('../core/paths');
 
 const SEVERITIES = ['blocker', 'major', 'minor', 'nit'];
 const VERIFIED_BY = ['repro', 'test', 'code-trace', 'inference'];
@@ -75,6 +77,63 @@ function fingerprint(f) {
   return crypto.createHash('sha256').update(raw).digest('hex');
 }
 
+// The ledger is committed to git, so it never stores snippet text. For `once` entries it keeps a
+// sha256 of the whitespace-normalised snippet (first SNIPPET_CAP characters) and that text's byte
+// length. "Is the snippet still there?" = does any window of that many bytes of the normalised
+// file hash to the same value. Cost: one sha256 per byte offset, so files over MAX_SCAN_BYTES
+// (normalised) are not scanned and a `once` entry then simply stops matching (fails open).
+const SNIPPET_CAP = 500;
+const MAX_SCAN_BYTES = 512 * 1024;
+const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
+
+function snippetDigest(snippet) {
+  const text = Array.from(normSnippet(snippet)).slice(0, SNIPPET_CAP).join('');
+  const buf = Buffer.from(text, 'utf8');
+  if (!buf.length) return null;
+  return { snippet_hash: sha(buf), snippet_bytes: buf.length };
+}
+
+function windowPresent(fileText, digest) {
+  const buf = Buffer.from(normSnippet(fileText), 'utf8');
+  const m = digest.snippet_bytes;
+  if (!(m > 0) || buf.length < m || buf.length > MAX_SCAN_BYTES) return false;
+  for (let i = 0; i + m <= buf.length; i++) {
+    if (buf[i] === 0x20) continue; // a normalised snippet never starts with a space
+    if (sha(buf.subarray(i, i + m)) === digest.snippet_hash) return true;
+  }
+  return false;
+}
+
+// Called before anything about a finding is written under the task dir: fingerprint and snippet
+// digest are taken from the raw text, then the free-text fields are redacted. With `force` the
+// derived fields are recomputed (submit, engine output); otherwise existing ones are kept so a
+// second pass over an already redacted finding does not change its fingerprint.
+function sanitizeFinding(f, force) {
+  if (!f || typeof f !== 'object' || Array.isArray(f)) return f;
+  const out = { ...f };
+  if (typeof f.snippet === 'string' && f.snippet.trim() && typeof f.file === 'string') {
+    if (force || typeof out.fingerprint !== 'string') out.fingerprint = fingerprint(f);
+    const d = snippetDigest(f.snippet);
+    if (d && (force || typeof out.snippet_hash !== 'string')) Object.assign(out, d);
+  }
+  for (const k of ['snippet', 'claim', 'suggestion']) if (typeof out[k] === 'string') out[k] = redact(out[k]);
+  if (Array.isArray(out.evidence)) out.evidence = out.evidence.map((e) => (typeof e === 'string' ? redact(e) : e));
+  return out;
+}
+
+function sanitizeFindings(list, force) { return list.map((f) => sanitizeFinding(f, force)); }
+
+function sanitizeRefutation(r) {
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return r;
+  const out = { ...r };
+  if (typeof out.evidence === 'string') out.evidence = redact(out.evidence);
+  else if (Array.isArray(out.evidence)) out.evidence = out.evidence.map((e) => (typeof e === 'string' ? redact(e) : e));
+  for (const k of ['claim', 'reason', 'suggestion']) if (typeof out[k] === 'string') out[k] = redact(out[k]);
+  return out;
+}
+
+function fingerprintOf(f) { return typeof f.fingerprint === 'string' && f.fingerprint ? f.fingerprint : fingerprint(f); }
+
 function ledgerFile(root) { return path.join(root, '.crew', 'dismissed.jsonl'); }
 
 function readLedger(root) {
@@ -97,20 +156,27 @@ function appendLedger(root, entry) {
   let cur = '';
   try { cur = fs.readFileSync(file, 'utf8'); } catch { cur = ''; }
   if (cur && !cur.endsWith('\n')) cur += '\n';
-  json.saveRaw(file, `${cur}${JSON.stringify(entry)}\n`);
+  const { snippet, ...safe } = entry; // never write snippet text
+  json.saveRaw(file, `${cur}${JSON.stringify(safe)}\n`);
 }
 
-// Does the (whitespace-normalised) snippet still occur in the file? The file must stay inside baseDir.
-function snippetPresent(baseDirs, f) {
-  const want = normSnippet(f.snippet);
-  if (!want) return false;
+// Does the snippet still occur in the file? The file must stay inside the base dir.
+// Uses the digest (ledger entry first, then the finding); an old entry or finding without a digest
+// falls back to the snippet text. `entry` is optional.
+function snippetPresent(baseDirs, f, entry) {
+  let digest = null;
+  for (const src of [entry, f]) {
+    if (src && typeof src.snippet_hash === 'string' && src.snippet_bytes > 0) { digest = src; break; }
+  }
+  const want = digest ? '' : normSnippet(f.snippet || (entry && entry.snippet));
+  if (!digest && !want) return false;
   for (const dir of baseDirs) {
     if (!dir) continue;
     const abs = path.resolve(dir, normFile(f.file));
-    const rel = path.relative(path.resolve(dir), abs);
-    if (rel.startsWith('..') || path.isAbsolute(rel)) continue;
+    if (paths.isOutside(path.relative(path.resolve(dir), abs))) continue;
     try {
-      if (normSnippet(fs.readFileSync(abs, 'utf8')).includes(want)) return true;
+      const text = fs.readFileSync(abs, 'utf8');
+      if (digest ? windowPresent(text, digest) : normSnippet(text).includes(want)) return true;
     } catch { /* try the next base */ }
   }
   return false;
@@ -118,11 +184,11 @@ function snippetPresent(baseDirs, f) {
 
 // -> the ledger entry that suppresses this finding, or null. `once` only while the snippet still exists.
 function matchLedger(ledger, f, baseDirs) {
-  const fp = fingerprint(f);
+  const fp = fingerprintOf(f);
   for (const e of ledger) {
     if (e.fingerprint !== fp) continue;
     if (e.scope === 'always') return e;
-    if (snippetPresent(baseDirs, f)) return e;
+    if (snippetPresent(baseDirs, f, e)) return e;
   }
   return null;
 }
@@ -265,6 +331,6 @@ function refuterInstructions({ task, briefPath, reviewPath, diffCmd, keptPath, r
 
 module.exports = {
   SEVERITIES, VERIFIED_BY, VERDICTS, MAX_DIFF_BYTES, findingsDir, latestRound, roundFile, readArray,
-  validateFinding, normSnippet, fingerprint, ledgerFile, readLedger, appendLedger, snippetPresent,
+  validateFinding, normSnippet, fingerprint, fingerprintOf, snippetDigest, sanitizeFinding, sanitizeFindings, sanitizeRefutation, ledgerFile, readLedger, appendLedger, snippetPresent,
   SCHEMA_TEXT, matchLedger, filterFindings, applyRefutations, extractJsonArray, reviewerInstructions, refuterInstructions,
 };

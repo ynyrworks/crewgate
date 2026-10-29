@@ -16,13 +16,9 @@ Committed with the project. Created by `crew init`.
 | `language` | string; one of `en`, `zh-TW` | `"en"` | Language of CLI output and generated files. | CLI 輸出與產生檔案的語言。 |
 | `roles` | object | `{"orchestrator":{"engine":"claude","model":"inherit"},"worker":{"engine":"claude","model":"sonnet","agent":"crew-worker"},"reviewer":{"engine":"claude","model":"sonnet","agent":"crew-reviewer"},"refuter":{"engine":"claude","model":"sonnet","agent":"crew-refuter"}}` | Role map; add your own roles next to the built-in ones. | 角色對照表；可在內建角色之外自行新增。 |
 | `roles.*` | object |  | One role. | 單一角色。 |
-| `roles.*.engine` | string |  | "claude" or a key of engines. | "claude" 或 engines 內的名稱。 |
+| `roles.*.engine` | string |  | "claude" or the name of an engine defined in the global config (engines are never read from this file). | "claude" 或全域設定中定義的引擎名稱（引擎定義不會從此檔讀取）。 |
 | `roles.*.model` | string |  | inherit, opus, sonnet, haiku or a full model id. | inherit、opus、sonnet、haiku 或完整模型 ID。 |
 | `roles.*.agent` | string |  | Agent name used for this role. | 此角色使用的 agent 名稱。 |
-| `engines` | object | `{"codex":{"command":"codex","args":["exec","-s","read-only","--skip-git-repo-check","-"]}}` | External engines (for example a Codex CLI reviewer). | 外部引擎（例如 Codex CLI 審查員）。 |
-| `engines.*` | object |  | One engine. | 單一引擎。 |
-| `engines.*.command` | string |  | Executable to run. | 要執行的程式。 |
-| `engines.*.args` | array of string |  | Arguments; the prompt is passed on stdin. | 參數；提示內容由標準輸入傳入。 |
 | `gates` | object | `{"push":"ask","open_pr":"ask","merge":"ask","remote_hosts":"ask","large_task":"ask","install_or_download":"ask"}` | Approval gates. | 核准關卡。 |
 | `gates.push` | string; one of `auto`, `ask`, `never` | `"ask"` | What to do before this action: auto (just do it), ask (ask the user in chat first) or never. | 執行此動作前的處理方式：auto（直接做）、ask（先在對話中問使用者）、never（禁止）。 |
 | `gates.open_pr` | string; one of `auto`, `ask`, `never` | `"ask"` | What to do before this action: auto (just do it), ask (ask the user in chat first) or never. | 執行此動作前的處理方式：auto（直接做）、ask（先在對話中問使用者）、never（禁止）。 |
@@ -53,7 +49,7 @@ Committed with the project. Created by `crew init`.
 | `lessons` | object | `{"promote_after_days":3,"rules_cap":15,"rules_file":"CLAUDE.md"}` | Lessons and promoted rules. | 經驗與升格規則。 |
 | `lessons.promote_after_days` | integer; min 1; max 365 | `3` | Distinct days a lesson key must be seen before it is suggested. | 同一經驗出現在幾個不同日子後才建議升格。 |
 | `lessons.rules_cap` | integer; min 1; max 200 | `15` | Most promoted rules kept. | 升格規則數量上限。 |
-| `lessons.rules_file` | string | `"CLAUDE.md"` | File that holds the promoted-rules block. | 存放升格規則區塊的檔案。 |
+| `lessons.rules_file` | string | `"CLAUDE.md"` | File that holds the promoted-rules block. Must be inside the project folder. | 存放升格規則區塊的檔案，必須位於專案資料夾內。 |
 
 ## Global config: `~/.agent-crew/config.json`
 
@@ -71,5 +67,9 @@ Per user (override the folder with `AGENT_CREW_HOME`). Not part of any repositor
 | `prices.*.output` | number; min 0 |  | Output price. | 輸出單價。 |
 | `prices.*.cache_write` | number; min 0 |  | Cache write price. | 快取寫入單價。 |
 | `prices.*.cache_read` | number; min 0 |  | Cache read price. | 快取讀取單價。 |
+| `engines` | object | `{"codex":{"command":"codex","args":["exec","-s","read-only","--skip-git-repo-check","-"]}}` | External review engines (for example a Codex CLI reviewer). Defined only here, never in a project: a project can only name an engine in roles.*.engine. | 外部審查引擎（例如 Codex CLI）。只能定義在這裡，專案設定無法定義；專案只能在 roles.*.engine 以名稱引用。 |
+| `engines.*` | object |  | One engine. | 單一引擎。 |
+| `engines.*.command` | string |  | Executable to run (resolved through PATH; on Windows .cmd and .bat files work too). | 要執行的程式（依 PATH 尋找；Windows 也支援 .cmd 與 .bat）。 |
+| `engines.*.args` | array of string |  | Arguments; the prompt is passed on stdin. | 參數；提示內容由標準輸入傳入。 |
 | `board` | object | `{"show_text":false}` | Board display options. | 看板顯示選項。 |
 | `board.show_text` | boolean | `false` | Show a short redacted snippet of the last assistant message in the Sessions list. | 在工作階段清單顯示最後一則助理訊息的簡短（已遮罩）片段。 |

@@ -3,6 +3,7 @@
 // Project config (<repo>/.claude/crew.json) and global config (~/.agent-crew/config.json).
 // SCHEMA / GLOBAL_SCHEMA drive validation and the board's Settings form.
 const fs = require('fs');
+const path = require('path');
 const paths = require('./paths');
 const json = require('./json');
 const project = require('./project');
@@ -17,9 +18,6 @@ const DEFAULTS = Object.freeze({
     worker: { engine: 'claude', model: 'sonnet', agent: 'crew-worker' },
     reviewer: { engine: 'claude', model: 'sonnet', agent: 'crew-reviewer' },
     refuter: { engine: 'claude', model: 'sonnet', agent: 'crew-refuter' },
-  },
-  engines: {
-    codex: { command: 'codex', args: ['exec', '-s', 'read-only', '--skip-git-repo-check', '-'] },
   },
   gates: {
     push: 'ask', open_pr: 'ask', merge: 'ask', remote_hosts: 'ask', large_task: 'ask', install_or_download: 'ask',
@@ -53,6 +51,9 @@ const GLOBAL_DEFAULTS = Object.freeze({
   usage_days: 14,
   prices: {},
   board: { show_text: false },
+  engines: {
+    codex: { command: 'codex', args: ['exec', '-s', 'read-only', '--skip-git-repo-check', '-'] },
+  },
 });
 
 const GATE = ['auto', 'ask', 'never'];
@@ -73,13 +74,9 @@ const SCHEMA = [
   f('language', 'string', d('Language of CLI output and generated files.', 'CLI 輸出與產生檔案的語言。'), { enum: ['en', 'zh-TW'] }),
   f('roles', 'object', d('Role map; add your own roles next to the built-in ones.', '角色對照表；可在內建角色之外自行新增。')),
   f('roles.*', 'object', d('One role.', '單一角色。')),
-  f('roles.*.engine', 'string', d('"claude" or a key of engines.', '"claude" 或 engines 內的名稱。')),
+  f('roles.*.engine', 'string', d('"claude" or the name of an engine defined in the global config (engines are never read from this file).', '"claude" 或全域設定中定義的引擎名稱（引擎定義不會從此檔讀取）。')),
   f('roles.*.model', 'string', d('inherit, opus, sonnet, haiku or a full model id.', 'inherit、opus、sonnet、haiku 或完整模型 ID。')),
   f('roles.*.agent', 'string', d('Agent name used for this role.', '此角色使用的 agent 名稱。')),
-  f('engines', 'object', d('External engines (for example a Codex CLI reviewer).', '外部引擎（例如 Codex CLI 審查員）。')),
-  f('engines.*', 'object', d('One engine.', '單一引擎。')),
-  f('engines.*.command', 'string', d('Executable to run.', '要執行的程式。')),
-  f('engines.*.args', 'array', d('Arguments; the prompt is passed on stdin.', '參數；提示內容由標準輸入傳入。'), { itemType: 'string' }),
   f('gates', 'object', d('Approval gates.', '核准關卡。')),
   ...['push', 'open_pr', 'merge', 'remote_hosts', 'large_task', 'install_or_download']
     .map((k) => f(`gates.${k}`, 'string', GATE_DESC, { enum: GATE })),
@@ -106,7 +103,7 @@ const SCHEMA = [
   f('lessons', 'object', d('Lessons and promoted rules.', '經驗與升格規則。')),
   f('lessons.promote_after_days', 'integer', d('Distinct days a lesson key must be seen before it is suggested.', '同一經驗出現在幾個不同日子後才建議升格。'), { min: 1, max: 365 }),
   f('lessons.rules_cap', 'integer', d('Most promoted rules kept.', '升格規則數量上限。'), { min: 1, max: 200 }),
-  f('lessons.rules_file', 'string', d('File that holds the promoted-rules block.', '存放升格規則區塊的檔案。')),
+  f('lessons.rules_file', 'string', d('File that holds the promoted-rules block. Must be inside the project folder.', '存放升格規則區塊的檔案，必須位於專案資料夾內。')),
 ];
 
 const GLOBAL_SCHEMA = [
@@ -120,6 +117,10 @@ const GLOBAL_SCHEMA = [
   f('prices.*.output', 'number', d('Output price.', '輸出單價。'), { min: 0 }),
   f('prices.*.cache_write', 'number', d('Cache write price.', '快取寫入單價。'), { min: 0 }),
   f('prices.*.cache_read', 'number', d('Cache read price.', '快取讀取單價。'), { min: 0 }),
+  f('engines', 'object', d('External review engines (for example a Codex CLI reviewer). Defined only here, never in a project: a project can only name an engine in roles.*.engine.', '外部審查引擎（例如 Codex CLI）。只能定義在這裡，專案設定無法定義；專案只能在 roles.*.engine 以名稱引用。')),
+  f('engines.*', 'object', d('One engine.', '單一引擎。')),
+  f('engines.*.command', 'string', d('Executable to run (resolved through PATH; on Windows .cmd and .bat files work too).', '要執行的程式（依 PATH 尋找；Windows 也支援 .cmd 與 .bat）。')),
+  f('engines.*.args', 'array', d('Arguments; the prompt is passed on stdin.', '參數；提示內容由標準輸入傳入。'), { itemType: 'string' }),
   f('board', 'object', d('Board display options.', '看板顯示選項。')),
   f('board.show_text', 'boolean', d('Show a short redacted snippet of the last assistant message in the Sessions list.', '在工作階段清單顯示最後一則助理訊息的簡短（已遮罩）片段。')),
 ];
@@ -152,7 +153,10 @@ function setPath(obj, p, value) {
 function deepMerge(base, over) {
   if (!isObj(base) || !isObj(over)) return clone(over === undefined ? base : over);
   const out = clone(base);
-  for (const [k, v] of Object.entries(over)) out[k] = k in out && isObj(out[k]) && isObj(v) ? deepMerge(out[k], v) : clone(v);
+  for (const [k, v] of Object.entries(over)) {
+    if (k === '__proto__') continue; // an own "__proto__" key from JSON.parse must not become the prototype
+    out[k] = Object.prototype.hasOwnProperty.call(out, k) && isObj(out[k]) && isObj(v) ? deepMerge(out[k], v) : clone(v);
+  }
   return out;
 }
 
@@ -212,10 +216,15 @@ for (const e of GLOBAL_SCHEMA) e.default = getPath(GLOBAL_DEFAULTS, e.path);
 
 // ---------------------------------------------------------------- project config
 // validate(obj) -> [{ path, message, key, vars }]; unknown keys are allowed.
-function validate(obj) {
+// Engine definitions come from the global config only; `root` (optional) anchors lessons.rules_file.
+function validate(obj, root) {
   const errors = checkAgainst(obj, SCHEMA);
+  const bad = (p, key, vars) => errors.push({ path: p, key, vars, message: require('./i18n').t('en', key, { path: p, ...vars }) });
   if (isObj(obj)) {
-    const engines = { ...DEFAULTS.engines, ...(isObj(obj.engines) ? obj.engines : {}) };
+    const engines = globalEngines();
+    for (const { path: p, value } of expand(obj, 'lessons.rules_file')) {
+      if (typeof value === 'string' && value !== '' && !insideRoot(root, value)) bad(p, 'config.err.rulesFile', { value });
+    }
     for (const { path: p, value } of expand(obj, 'roles.*.engine')) {
       if (typeof value === 'string' && value !== 'claude' && !(value in engines)) {
         errors.push({ path: p, key: 'config.err.engine', vars: { value }, message: require('./i18n').t('en', 'config.err.engine', { path: p, value }) });
@@ -225,13 +234,24 @@ function validate(obj) {
   return errors;
 }
 
+// Is `file` (relative, or absolute) inside the project root? Without a root only a lexical check runs.
+function insideRoot(root, file) {
+  const base = path.resolve(root || process.cwd());
+  return !paths.isOutside(path.relative(base, path.resolve(base, file)));
+}
+
+function globalEngines() {
+  const e = loadGlobal().config.engines;
+  return isObj(e) ? e : {};
+}
+
 function configFile(root) { return paths.projectConfigFile(root); }
 
 // load(root) -> { config, errors, file, exists }. Never throws: a missing, unreadable or invalid
 // file gives defaults (invalid fields fall back to their default); `errors` names file and field.
 function load(root) {
   const file = configFile(root);
-  const res = { config: clone(DEFAULTS), errors: [], file, exists: false };
+  const res = { config: clone(DEFAULTS), errors: [], warnings: [], file, exists: false };
   let raw;
   try {
     raw = fs.readFileSync(file, 'utf8');
@@ -247,9 +267,18 @@ function load(root) {
     res.errors.push({ file, path: '', key: 'config.err.parse', vars: { detail: e.message }, message: `${file}: invalid JSON (${e.message})` });
     return res;
   }
-  const errors = validate(user).map((e) => ({ ...e, file }));
+  const errors = validate(user, root).map((e) => ({ ...e, file }));
   res.errors = errors;
   if (!isObj(user)) return res;
+  // Engine definitions (an executable to run) are only trusted from the global config: a cloned
+  // repository must not be able to make `crew review run` start a program of its choosing.
+  let ignoredEngines = null;
+  if ('engines' in user) {
+    ignoredEngines = isObj(user.engines) ? Object.keys(user.engines) : [];
+    res.warnings.push({ file, path: 'engines', key: 'config.warn.engines', vars: { names: ignoredEngines.join(', ') }, message: require('./i18n').t('en', 'config.warn.engines', { names: ignoredEngines.join(', ') }) });
+    user = { ...user };
+    delete user.engines;
+  }
   const merged = deepMerge(DEFAULTS, user);
   for (const e of errors) {
     const top = e.path.replace(/\[\d+\]$/, '');
@@ -264,7 +293,10 @@ function load(root) {
 // A corrupt existing file is moved aside first. Throws CrewError config.invalid (err.errors) on bad input.
 // opts.src is the event source ('cli' by default; the board passes 'board').
 function save(root, obj, opts = {}) {
-  const errors = validate(obj);
+  const errors = validate(obj, root);
+  if (isObj(obj) && 'engines' in obj) {
+    errors.push({ path: 'engines', key: 'config.err.engines', vars: {}, message: require('./i18n').t('en', 'config.err.engines', { path: 'engines' }) });
+  }
   if (errors.length) {
     const err = new CrewError('config.invalid', { count: errors.length, first: `${errors[0].path}: ${errors[0].message}` });
     err.errors = errors;
@@ -330,5 +362,5 @@ function saveGlobal(obj, opts = {}) {
 
 module.exports = {
   DEFAULTS, GLOBAL_DEFAULTS, SCHEMA, GLOBAL_SCHEMA,
-  validate, validateGlobal, load, save, loadGlobal, saveGlobal, configFile, deepMerge,
+  globalEngines, validate, validateGlobal, load, save, loadGlobal, saveGlobal, configFile, deepMerge,
 };

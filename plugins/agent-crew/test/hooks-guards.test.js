@@ -156,3 +156,11 @@ test('Bash PostToolUse in an unregistered repo does nothing', { skip: !hasGit() 
   assert.equal(r.out, '{}');
   assert.equal(H.evs(f, 'git.push').length, 0);
 });
+
+test('edit guard: a file named "..evil.js" inside the project is guarded, a real escape is not', () => {
+  const f = H.fixture({ config: { limits: { orchestrator_edit: 'block' } } });
+  const inside = H.runHook('pre-tool-use', edit(f, path.join(f.repo, '..evil.js')), { cwd: f.repo });
+  assert.equal(inside.json.hookSpecificOutput.permissionDecision, 'deny', 'a "..x" file name is not "outside the project"');
+  const outside = H.runHook('pre-tool-use', edit(f, path.join(f.repo, '..', 'x.js')), { cwd: f.repo });
+  assert.equal(outside.out, '{}');
+});

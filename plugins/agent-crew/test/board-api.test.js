@@ -256,3 +256,37 @@ test('usage endpoint reads days and prices from the global config', async () => 
 test('HOME stays inside the temp dir', () => {
   assert.ok(HOME.startsWith(fs.realpathSync(require('os').tmpdir())));
 });
+
+test('reviewStats: one finding in one round counts as rounds=1, final=1 (kept/refutations files are not rounds)', () => {
+  const { reviewStats } = require('../board/api');
+  const id = 't-20260101-aaaa';
+  const dir = path.join(paths.taskDir(proj.id, id), 'findings');
+  fs.mkdirSync(dir, { recursive: true });
+  const finding = { id: 'f1', category: 'correctness', verdict: 'upheld' };
+  fs.writeFileSync(path.join(dir, '1.raw.json'), JSON.stringify([finding]));
+  fs.writeFileSync(path.join(dir, '1.kept.json'), JSON.stringify([finding]));
+  fs.writeFileSync(path.join(dir, '1.refutations.json'), JSON.stringify([{ id: 'f1', verdict: 'upheld' }]));
+  fs.writeFileSync(path.join(dir, '1.json'), JSON.stringify([finding]));
+  const s = reviewStats(proj.id, id);
+  assert.equal(s.rounds, 1);
+  assert.equal(s.final, 1);
+  assert.equal(s.raw, 1);
+  fs.rmSync(paths.taskDir(proj.id, id), { recursive: true, force: true });
+});
+
+test('settings: a project-level engines block is reported as ignored, never as a field', async () => {
+  const file = path.join(repo, '.claude', 'crew.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const before = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
+  fs.writeFileSync(file, JSON.stringify({ version: 1, engines: { evil: { command: 'x', args: [] } } }));
+  try {
+    const r = await get(`/api/project/${proj.id}/config`);
+    assert.equal(r.status, 200);
+    assert.equal(r.json.warnings.length, 1);
+    assert.match(r.json.warnings[0].message, /ignored/);
+    assert.equal(r.json.errors.length, 0);
+    assert.ok(!(await get('/api/schema')).json.project.some((e) => e.path.startsWith('engines')));
+  } finally {
+    if (before === null) fs.rmSync(file, { force: true }); else fs.writeFileSync(file, before);
+  }
+});

@@ -120,9 +120,6 @@ All fields are optional; defaults below. The board's Settings page edits this fi
     "reviewer": { "engine": "claude", "model": "sonnet", "agent": "crew-reviewer" },
     "refuter":  { "engine": "claude", "model": "sonnet", "agent": "crew-refuter" }
   },
-  "engines": {
-    "codex": { "command": "codex", "args": ["exec", "-s", "read-only", "--skip-git-repo-check", "-"] }
-  },
   "gates": {
     "push": "ask", "open_pr": "ask", "merge": "ask",
     "remote_hosts": "ask", "large_task": "ask", "install_or_download": "ask"
@@ -151,7 +148,8 @@ All fields are optional; defaults below. The board's Settings page edits this fi
 ```
 
 - `roles` is an open map: projects may add roles (e.g. `docs-writer`). `engine` is
-  `claude` or a key of `engines`. `model` is `inherit`, `opus`, `sonnet`, `haiku` or a
+  `claude` or the name of an engine defined in the **global** config (`engines` is read from
+  `~/.agent-crew/config.json` only; a project-level `engines` block is ignored with a warning). `model` is `inherit`, `opus`, `sonnet`, `haiku` or a
   full model id.
 - `gates` values: `auto` (just do it), `ask` (ask the user in chat first), `never`.
 - `orchestrator_edit`: `off` | `warn` | `block` (see §8).
@@ -234,7 +232,7 @@ finish in < 200 ms typical; unregistered project → `{}`.
 | SessionStart | Inject a fenced brief ≤ 4,000 bytes: role contract one-liner, open tasks by state, count + ids of open handoffs (never their bodies), count of needs waiting for the user, path to promoted rules. Content from files is fenced and marked untrusted. Record `session.start`. |
 | PreToolUse (Agent/Task tool, main session) | If prompt contains `crew-task: <id>`, record `task.dispatched` (with tool_use_id, subagent type, model, background flag). Warn when the number of in-flight tasks would exceed `max_parallel_workers`. |
 | PostToolUse (Agent/Task tool) | Foreground: record `task.returned` if the worker did not already report. Background launch: nothing (wait for SubagentStop). |
-| SubagentStart / SubagentStop | Record `subagent.start/stop`; on stop of a task-linked worker, add context: "task <id> returned — review it: `crew task show <id>`". |
+| SubagentStart / SubagentStop | Record `subagent.start/stop`; on stop of a task-linked worker, show the user a `systemMessage` (not `additionalContext`, which would keep the subagent running): "task <id> returned — review it: `crew task show <id>`". |
 | PreToolUse (Edit/Write/MultiEdit/NotebookEdit, main session, main worktree) | If the target is not matched by `orchestrator_edit_allow`: `warn` → non-blocking reminder to delegate + `orchestrator.warned`; `block` → deny with reason. Never applies inside subagents or linked worktrees. |
 | PreToolUse (Read, main session) | If the file has more lines than `orchestrator_read_warn_lines` and no `limit` was given, add a reminder to read the report/diff stat first and use line ranges. Never blocks. |
 | PostToolUse (Bash) | Detect `git push`, `git merge`, `gh pr create`, `glab mr create` in the command; record `git.push` / `git.merge`. |
@@ -314,7 +312,7 @@ prints the body fenced as untrusted data.
 `crew <group> <action> [options]`, `--json` on every read command, `--project <path|id>`
 to override detection. Exit codes: 0 ok, 1 runtime error, 2 usage error.
 
-- `crew init [--lang en|zh-TW] [--force]` — write `.claude/crew.json`, render
+- `crew init [--lang en|zh-TW] [--force] [--reset-review-files]` — write `.claude/crew.json`, render
   `.claude/agents/crew-*.md`, create `.crew/REVIEW.md`, `.crew/LESSONS.md`, register
   project. Never overwrites without `--force` (then backs up).
 - `crew project add|list|rm`

@@ -6,6 +6,7 @@ const http = require('http');
 const config = require('../core/config');
 const project = require('../core/project');
 const common = require('../features/common');
+const execx = require('../core/exec');
 
 // GET http://127.0.0.1:<port>/api/health -> { state: 'running'|'down'|'other', detail }
 function probeBoard(port, timeoutMs = 1500) {
@@ -46,12 +47,21 @@ async function run(argv, ctx) {
     if (!loaded.exists) add('config', 'warn', ctx.t('wf.doctor.noConfig', { file: loaded.file }));
     else if (loaded.errors.length) {
       add('config', 'fail', loaded.errors.map((e) => `${path.relative(dir, e.file) || e.file}: ${e.path || '(file)'} - ${e.message}`).join('; '));
+    } else if (loaded.warnings.length) {
+      add('config', 'warn', loaded.warnings.map((w) => w.message).join('; '));
     } else add('config', 'ok', loaded.file);
     if (loaded.exists && !loaded.errors.length) cfg = { ...cfg, port: loaded.config.board.port, boardEnabled: loaded.config.board.enabled };
     add('registration', proj ? 'ok' : 'warn', proj ? `${proj.id} (${proj.name})` : ctx.t('wf.doctor.notRegistered'));
     const expected = ['.claude/agents/crew-worker.md', '.claude/agents/crew-reviewer.md', '.claude/agents/crew-refuter.md', '.crew/REVIEW.md', '.crew/LESSONS.md'];
     const missing = expected.filter((f) => !fs.existsSync(path.join(dir, ...f.split('/'))));
     add('files', missing.length ? 'warn' : 'ok', missing.length ? ctx.t('wf.doctor.filesMissing', { files: missing.join(', ') }) : ctx.t('wf.doctor.filesOk'));
+  }
+
+  const engines = config.globalEngines();
+  for (const [name, eng] of Object.entries(engines)) {
+    const command = eng && typeof eng.command === 'string' ? eng.command : '';
+    const file = execx.resolveCommand(command, { cwd: ctx.cwd });
+    add('engine', file ? 'ok' : 'warn', ctx.t(file ? 'wf.doctor.engineOk' : 'wf.doctor.engineMissing', { name, command, file }));
   }
 
   const hooksFile = path.join(common.PLUGIN_ROOT, 'hooks', 'hooks.json');

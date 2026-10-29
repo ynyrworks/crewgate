@@ -8,6 +8,7 @@ const events = require('../core/events');
 const { clean, redact } = require('../core/redact');
 const { CrewError } = require('../core/errors');
 const common = require('./common');
+const paths = require('../core/paths');
 
 const START = '<!-- agent-crew:rules:start -->';
 const END = '<!-- agent-crew:rules:end -->';
@@ -16,6 +17,7 @@ const KEY_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const LINE_RE = /^- (\d{4}-\d{2}-\d{2}) \[([a-z-]+)\] ([a-z0-9][a-z0-9-]*): (.*)$/;
 const RULE_RE = /^- (.*) \(source: ([a-z0-9][a-z0-9-]*), (\d{4}-\d{2}-\d{2})[–-](\d{4}-\d{2}-\d{2})\)\s*$/;
 const DASH = '–';
+const RULE_MAX = 300;
 
 const lessonsFile = (root) => path.join(root, '.crew', 'LESSONS.md');
 const HEADER = '# Lessons\n\nOne line per lesson: `- YYYY-MM-DD [kind] key: text`. Managed by `crew lesson`.\n\n';
@@ -102,7 +104,32 @@ function parseRules(inner) {
   return rules;
 }
 
-function rulesPath(root, cfg) { return path.resolve(root, cfg.lessons.rules_file || 'CLAUDE.md'); }
+// The rules file must stay inside the project (the config validator checks this too; this is the last line of defence).
+function rulesPath(root, cfg) {
+  const base = path.resolve(root);
+  const file = path.resolve(base, cfg.lessons.rules_file || 'CLAUDE.md');
+  if (paths.isOutside(path.relative(base, file))) throw new CrewError('wf.lesson.rulesOutside', { file: String(cfg.lessons.rules_file) });
+  return file;
+}
+
+// Every line of the block, rule lines or not (user notes inside the block are kept as they are).
+function blockLines(inner) {
+  const lines = inner.split(/\r?\n/);
+  if (lines.length && lines[0] === '') lines.shift();
+  if (lines.length && lines[lines.length - 1] === '') lines.pop();
+  return lines;
+}
+
+// The text of a rule is one plain line: no line breaks, no block markers, bounded length.
+function checkRuleText(raw) {
+  const s = String(raw || '');
+  if (/[\r\n]/.test(s.trim())) throw new CrewError('wf.lesson.ruleNewline');
+  if (s.includes(START) || s.includes(END)) throw new CrewError('wf.lesson.ruleMarker');
+  const text = s.replace(/\s+/g, ' ').trim();
+  if (!text) throw new CrewError('wf.lesson.noRule');
+  if (text.length > RULE_MAX) throw new CrewError('wf.lesson.ruleTooLong', { max: RULE_MAX, n: text.length });
+  return text;
+}
 
 function readText(file) { try { return fs.readFileSync(file, 'utf8'); } catch { return ''; } }
 
@@ -111,10 +138,10 @@ function readRules(root, cfg) {
 }
 
 // Rewrites only the text between the markers (adds the block at the end when there is none).
-function writeBlock(file, text, rules) {
+function writeBlock(file, text, lines) {
   const eol = eolOf(text);
   const sp = splitBlock(text);
-  const inner = `${eol}${rules.map((r) => r.line).join(eol)}${rules.length ? eol : ''}`;
+  const inner = `${eol}${lines.join(eol)}${lines.length ? eol : ''}`;
   if (sp.found) return json.saveRaw(file, sp.before + inner + sp.after);
   const lead = text && !text.endsWith('\n') ? eol : '';
   const gap = text ? eol : '';
@@ -146,11 +173,12 @@ function promote(root, projectId, cfg, key, rule, opts = {}) {
   const stats = summarize(readEntries(root));
   const st = stats.find((s) => s.key === key && s.count > 0);
   if (!st) throw new CrewError('wf.lesson.unknownKey', { key });
-  const text = String(rule || '').replace(/\s+/g, ' ').trim();
-  if (!text) throw new CrewError('wf.lesson.noRule');
+  const text = checkRuleText(rule);
   const file = rulesPath(root, cfg);
   const cur = readText(file);
-  const rules = parseRules(splitBlock(cur).inner);
+  const inner = splitBlock(cur).inner;
+  const lines = blockLines(inner);
+  const rules = parseRules(inner);
   if (rules.some((r) => r.key === key)) throw new CrewError('wf.lesson.alreadyPromoted', { key });
   const cap = cfg.lessons.rules_cap;
   if (rules.length >= cap) {
@@ -158,8 +186,10 @@ function promote(root, projectId, cfg, key, rule, opts = {}) {
     throw new CrewError('wf.lesson.capReached', { cap, key: old.key || '-', rule: old.rule.slice(0, 80) });
   }
   const safe = redact(text);
-  rules.push({ line: `- ${safe} (source: ${key}, ${st.first}${DASH}${st.last})`, rule: safe, key, first: st.first, last: st.last });
-  writeBlock(file, cur, rules);
+  const line = `- ${safe} (source: ${key}, ${st.first}${DASH}${st.last})`;
+  rules.push({ line, rule: safe, key, first: st.first, last: st.last });
+  lines.push(line);
+  writeBlock(file, cur, lines);
   if (projectId) events.append(projectId, { type: 'lesson.promoted', src: opts.src || 'cli', data: { key, rule: safe }, key: `${key}:${Date.now()}` });
   return { key, rule: safe, file, count: rules.length };
 }
@@ -167,11 +197,15 @@ function promote(root, projectId, cfg, key, rule, opts = {}) {
 function retire(root, projectId, cfg, key, opts = {}) {
   const file = rulesPath(root, cfg);
   const cur = readText(file);
-  const rules = parseRules(splitBlock(cur).inner);
+  const inner = splitBlock(cur).inner;
+  const lines = blockLines(inner);
+  const rules = parseRules(inner);
   const i = rules.findIndex((r) => r.key === key);
   if (i < 0) throw new CrewError('wf.lesson.notPromoted', { key });
   const [gone] = rules.splice(i, 1);
-  writeBlock(file, cur, rules);
+  const at = lines.findIndex((l) => l.trimEnd() === gone.line);
+  if (at >= 0) lines.splice(at, 1);
+  writeBlock(file, cur, lines);
   // a retired marker keeps `suggest` from proposing the same key again until it recurs
   appendLine(root, `- ${common.today()} [retired] ${key}: retired from rules`);
   if (projectId) events.append(projectId, { type: 'lesson.retired', src: opts.src || 'cli', data: { key }, key: `${key}:${Date.now()}` });

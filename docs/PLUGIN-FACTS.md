@@ -56,7 +56,15 @@ Its `tool_input` contains `prompt`, `subagent_type`, `description`, optional `mo
 - PreToolUse decision: `hookSpecificOutput.permissionDecision` = allow|deny|ask|defer +
   `permissionDecisionReason`.
 - Exit 2 = blocking error (stderr is the reason; JSON ignored). Other non-zero = non-blocking error notice.
-- Stop: `decision:"block"` continues the turn — agent-crew never does this (reminders only).
+- Stop / SubagentStop: `decision:"block"` + `reason` continues the turn — agent-crew never does this.
+  `hookSpecificOutput.additionalContext` is also accepted on these two events, but "the conversation
+  continues so Claude can act on it" (same loop protections: `stop_hook_active`, 8-continuation cap).
+  A mere reminder therefore uses top-level `systemMessage` (shown to the user, never continues a turn).
+  Events that take `hookSpecificOutput.additionalContext`: SessionStart, SubagentStart, UserPromptSubmit,
+  UserPromptExpansion, PreToolUse, PostToolUse, PostToolUseFailure, PostToolBatch, Stop, SubagentStop,
+  PostModelSwitch. Our uses: SessionStart, PreToolUse, PostToolUse (context) and Stop, SubagentStop
+  (`systemMessage` only).
+  Source: https://code.claude.com/docs/en/hooks.md ("Stop decision control", checked 2026-10-29).
 
 ## Agents (`agents/*.md`)
 Frontmatter: `name`, `description` (required), `tools`, `disallowedTools`, `model`,

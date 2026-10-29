@@ -168,16 +168,21 @@ _Screenshots will be added here: Overview, Project (tasks and review stats), Ses
 
 ## Using Codex or another CLI as the reviewer
 
-The reviewer role can run outside Claude. The config ships an engine named `codex` (`codex exec -s read-only
---skip-git-repo-check -`). Set `roles.reviewer.engine` to `codex`, or run it once:
+The reviewer role can run outside Claude. The global config (`~/.agent-crew/config.json`) ships an engine named
+`codex` (`codex exec -s read-only --skip-git-repo-check -`). Set `roles.reviewer.engine` to `codex` in the project,
+or run it once:
 
 ```
 crew review run <task> --engine codex
 ```
 
 agent-crew builds a prompt (brief, review rules, diff), passes it on stdin, extracts the JSON array of findings
-from stdout and continues with the same filter and refute stages. Add your own engine under `engines` with a
-`command` and `args`; the prompt is always sent on stdin. Codex is supported as a reviewer only, not as the
+from stdout and continues with the same filter and refute stages. Add your own engine under `engines` in the
+**global** config with a `command` and `args`; the prompt is always sent on stdin. The command is looked up on
+`PATH` (on Windows also `.cmd`/`.bat`, started without a shell). A project's `.claude/crew.json` can only *name*
+an engine (`roles.*.engine`): an `engines` block in a project file is ignored with a warning, because a cloned
+repository must not choose which program `crew review run` starts. `crew doctor` shows whether each engine
+resolves. Codex is supported as a reviewer only, not as the
 orchestrator.
 
 ## Limitations
@@ -204,6 +209,11 @@ Rules: zero runtime dependencies, Node 18+, cross-platform (no shell assumptions
 never the real `~/.agent-crew` or `~/.claude`. The repo-hygiene test rejects stray IP addresses, credential-like
 strings and project-specific names; use `192.0.2.x` in docs and build any other address at runtime in tests.
 Please keep a fix and its test in the same change.
+
+Maintainers who must keep certain names out of the repository (a company, an e-mail prefix) should not write
+them into any tracked file. Put one regular expression per line in the untracked file
+`.git/info/hygiene-extra` (or set `AGENT_CREW_HYGIENE_EXTRA`, separated by semicolons); the hygiene test adds
+them to its built-in patterns.
 
 ## License
 
