@@ -1,14 +1,18 @@
 'use strict';
 
-// Index of "session.end" events (written by the SessionEnd hook) across registered projects:
-// session id -> time of the latest end. Each project's events.jsonl is read incrementally and only
-// when its size or mtime changed, so asking on every board refresh stays cheap.
+// Index of crewgate events across registered projects, read incrementally from each project's
+// events.jsonl and only when its size or mtime changed, so asking on every board refresh stays cheap.
+//   session.end      -> session id -> time of the latest end (SessionEnd hook)
+//   task.dispatched  -> sessions that dispatched tasks (the orchestrators)
+//   subagent.start/stop -> agent id -> { task, type, session } (links a subagent transcript to a task)
 const fs = require('fs');
 
 // listFiles() -> array of events.jsonl paths (registered projects only).
 function createSessionEnds(listFiles) {
   const files = new Map();   // file -> { size, mtimeMs, offset }
   const ends = new Map();    // session id -> ms of the latest session.end
+  const agents = new Map();  // agent id -> { task, type, session }
+  const dispatchers = new Set();   // session ids that dispatched a task
 
   function consume(file, state, size) {
     let fd;
@@ -22,12 +26,24 @@ function createSessionEnds(listFiles) {
       if (cut < 0) return;   // no complete line yet
       state.offset += Buffer.byteLength(text.slice(0, cut + 1));
       for (const line of text.slice(0, cut).split('\n')) {
-        if (!line.includes('"session.end"')) continue;
+        if (!/"(?:session.end|task.dispatched|subagent.(?:start|stop))"/.test(line)) continue;
         try {
           const e = JSON.parse(line);
-          const ms = Date.parse(e && e.ts);
-          if (e && e.type === 'session.end' && typeof e.session === 'string' && e.session && Number.isFinite(ms)) {
-            if (!(ends.get(e.session) >= ms)) ends.set(e.session, ms);
+          if (!e || typeof e.type !== 'string') continue;
+          const ms = Date.parse(e.ts);
+          const sid = typeof e.session === 'string' && e.session ? e.session : null;
+          if (e.type === 'session.end' && sid && Number.isFinite(ms)) {
+            if (!(ends.get(sid) >= ms)) ends.set(sid, ms);
+          } else if (e.type === 'task.dispatched' && sid) {
+            dispatchers.add(sid);
+          } else if ((e.type === 'subagent.start' || e.type === 'subagent.stop') && typeof e.agent === 'string' && e.agent) {
+            const prev = agents.get(e.agent) || { task: null, type: null, session: null };
+            const d = e.data && typeof e.data === 'object' ? e.data : {};
+            agents.set(e.agent, {
+              task: (typeof e.task === 'string' && e.task) || prev.task,
+              type: (typeof d.agent_type === 'string' && d.agent_type) || prev.type,
+              session: sid || prev.session,
+            });
           }
         } catch { /* skip a bad line */ }
       }
@@ -51,7 +67,12 @@ function createSessionEnds(listFiles) {
     }
   }
 
-  return { refresh, get: (sessionId) => (ends.has(sessionId) ? ends.get(sessionId) : null) };
+  return {
+    refresh,
+    get: (sessionId) => (ends.has(sessionId) ? ends.get(sessionId) : null),
+    agent: (agentId) => agents.get(agentId) || null,
+    dispatched: (sessionId) => dispatchers.has(sessionId),
+  };
 }
 
 module.exports = { createSessionEnds };

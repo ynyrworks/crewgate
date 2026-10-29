@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+Sessions view: who is doing what right now.
+
+- Each session shows its current activity (thinking, running a tool with a short redacted target, writing, waiting for you, idle, done), derived from the tail of the transcript. The tool name is always shown; the target (relative file path, first command words, subagent type, pattern; at most 60 characters) only when `board.show_text` is on.
+- Role (orchestrator, worker, reviewer, refuter, other) and crewgate task (id and title) from the project's `events.jsonl`; the API rows gain `activity`, `role`, `task`, `parent`, `branch`, `detached` and `worktree`.
+- Subagents are nested under their parent session (collapsible, with a running count). Waiting-for-you sessions sort first and are highlighted; status chips carry a symbol as well as a colour.
+- Last prompt, last reply and session title as redacted snippets of at most 160 characters, only with `board.show_text`. The API field `text` is now `last_reply`.
+- Git branch and linked-worktree name read from `.git/HEAD` (cached by mtime, no git process).
+- Filters by project, state and engine, remembered in the browser. The top-bar switch is now "Private mode": it hides snippets, tool targets, folders, branches, task titles and project names in this browser; it can only hide more than the server sends.
+- Codex rollouts show status, last tool, model and (when present) prompt and reply.
+- `docs/ROADMAP.md`.
+
 ## 0.9.0 — 2026-10-29
 
 First public release. The project was developed as agent-crew and is renamed to crewgate.

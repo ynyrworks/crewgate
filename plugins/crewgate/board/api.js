@@ -201,19 +201,38 @@ function createApi(opts = {}) {
     return id ? list.find((p) => p.id === id) || null : null;
   }
 
+  // Title of a crewgate task for the sessions list (cached for a few seconds).
+  const titleCache = new Map();   // "project:task" -> { at, title }
+  function taskTitle(projectId, taskId) {
+    const key = `${projectId}:${taskId}`;
+    const hit = titleCache.get(key);
+    const now = Date.now();
+    if (hit && now - hit.at < 10000) return hit.title;
+    let title = null;
+    try { const tk = tasks.load(projectId, taskId); title = tk && typeof tk.title === 'string' ? tk.title : null; } catch { /* unknown task */ }
+    titleCache.set(key, { at: now, title });
+    if (titleCache.size > 1000) titleCache.delete(titleCache.keys().next().value);
+    return title;
+  }
+
   function sessionRows() {
     const b = globalCfg().board || {};
-    return watcher.sessions({
+    const rows = watcher.sessions({
       showText: showText(),
       resolveProject,
       detectClosed: b.detect_closed_transcripts === true,
       idleMs: Number.isInteger(b.session_idle_minutes) ? b.session_idle_minutes * 60 * 1000 : undefined,
       doneMs: Number.isInteger(b.session_done_hours) ? b.session_done_hours * 60 * 60 * 1000 : undefined,
     });
+    for (const r of rows) {
+      if (r.task && r.project) r.task = { id: r.task.id, title: taskTitle(r.project, r.task.id) };
+      else if (r.task) r.task = { id: r.task.id, title: null };
+    }
+    return rows;
   }
 
   function publicSession(s) {
-    const { cwd, ...rest } = s;   // the full path never leaves the server
+    const { cwd, session, ...rest } = s;   // the full path and the raw session id never leave the server
     return rest;
   }
 

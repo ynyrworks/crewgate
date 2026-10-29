@@ -149,6 +149,10 @@ Groups: `init`, `doctor`, `project`, `task`, `review`, `handoff`, `lesson`, `nee
 
 _Screenshots will be added here: Overview, Project (tasks and review stats), Sessions, Usage, Settings._
 
+## Roadmap
+
+What is next, what comes later and what is 1.0: [docs/ROADMAP.md](docs/ROADMAP.md).
+
 ## Privacy and safety
 
 - **Local only.** The board binds `127.0.0.1`, rejects foreign `Host` headers, sets no CORS headers, requires a

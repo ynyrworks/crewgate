@@ -73,12 +73,12 @@ Endpoints (all JSON; reads are GET, every write is POST with `Content-Type: appl
 | `GET /api/meta`, `/api/schema` | defaults, and `config.SCHEMA` / `GLOBAL_SCHEMA` for the Settings form |
 | `GET /api/overview` | every registered project: tasks by state, open needs, live subagents, last activity |
 | `GET /api/project/<id>` | tasks (history, returns, review stats), sessions, store data, handoffs, lessons, events |
-| `GET /api/sessions`, `/api/usage[?days=N]` | live session list (no message text unless `show_text` is true); token/cost report |
+| `GET /api/sessions`, `/api/usage[?days=N]` | live session list with activity, role, task, parent link, branch and worktree (no message text, tool targets or title unless `show_text` is true); token/cost report |
 | `GET\|POST /api/config`, `/api/project/<id>/config` | read / save settings; body `{ config: { ...changed fields } }`; invalid input is a 400 with `errors: [{ path, message }]` |
 | `POST /api/project/<id>/need`, `need/done`, `work`, `work/rm`, `log` | board store writes (events carry `src: "board"`) |
 
-Global config key `board.show_text` (boolean, default false; shows a short redacted snippet of the last
-assistant message in the Sessions list). Settings saves record `config.changed` with `src: "board"`.
+Global config key `board.show_text` (boolean, default false; shows short redacted snippets, the session title
+and the target of the current tool call in the Sessions list). Settings saves record `config.changed` with `src: "board"`.
 
 ## Workflow groups (workflow step)
 

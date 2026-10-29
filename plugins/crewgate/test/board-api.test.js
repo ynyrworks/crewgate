@@ -240,8 +240,8 @@ test('sessions endpoint hides paths and text by default and links sessions to pr
   await post('/api/config', { config: { board: { show_text: true } } });
   const t = await get('/api/sessions');
   assert.equal(t.json.show_text, true);
-  assert.match(t.json.sessions[0].text, /PRIVATE REPLY/);
-  assert.ok(!t.text.includes('PRIVATE PROMPT'));
+  assert.match(t.json.sessions[0].last_reply, /PRIVATE REPLY/);
+  assert.match(t.json.sessions[0].last_prompt, /PRIVATE PROMPT/);
   await post('/api/config', { config: { board: { show_text: false } } });
 });
 

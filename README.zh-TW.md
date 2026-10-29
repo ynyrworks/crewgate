@@ -137,6 +137,10 @@ claude --plugin-dir crewgate/plugins/crewgate
 
 _截圖之後會補在這裡：總覽、專案（任務與審查統計）、工作階段、用量、設定。_
 
+## 路線圖
+
+接下來、之後要做的事，以及 1.0 的條件：[docs/ROADMAP.md](docs/ROADMAP.md)（英文）。
+
 ## 隱私與安全
 
 - **只在本機。** 看板只綁定 `127.0.0.1`，會拒絕不符的 `Host` 標頭，不送 CORS 標頭，所有寫入都要帶每次啟動產生的

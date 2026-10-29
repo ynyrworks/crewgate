@@ -97,3 +97,37 @@ legend { font-weight: 600; padding: 0 6px; }
   .field { grid-template-columns: 1fr; }
   .tools { margin-left: 0; }
 }
+/* sessions view */
+:root { --warn-bg: #fff4d6; --on-warn: #ffffff; }
+@media (prefers-color-scheme: dark) { :root { --warn-bg: #2d2511; --on-warn: #1a1304; } }
+.switch { cursor: pointer; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0 0 12px; }
+.filters .fl { display: inline-flex; align-items: center; gap: 6px; }
+.stree { list-style: none; margin: 0; padding: 0; }
+.stree.sub { margin: 8px 0 0 14px; padding-left: 12px; border-left: 2px solid var(--border); }
+.sess { padding: 8px 10px; border: 1px solid var(--border); border-left-width: 4px; border-radius: 8px; margin: 0 0 8px; background: var(--surface); overflow-wrap: anywhere; }
+.sess.is-sub { background: var(--bg); }
+.sess.is-waiting { border-color: var(--warn); background: var(--warn-bg); }
+.s-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.s-act { font-weight: 600; }
+.s-time { margin-left: auto; white-space: nowrap; }
+.s-meta, .s-where, .s-task, .s-title { margin-top: 2px; font-size: 12px; }
+.s-where { color: var(--text-2); font-family: ui-monospace, Consolas, monospace; }
+.s-title { color: var(--text-2); font-style: italic; }
+.s-snip { margin-top: 4px; font-size: 13px; color: var(--text-2); }
+.task-id { font-family: ui-monospace, Consolas, monospace; font-weight: 600; }
+button.toggle { border: 0; background: none; padding: 0 4px; min-width: 24px; min-height: 24px; font-size: 16px; line-height: 1; }
+.chip .glyph { display: inline-block; min-width: 1em; margin-right: 3px; text-align: center; }
+.role { display: inline-block; padding: 0 7px; border-radius: 4px; border: 1px solid var(--border); border-left-width: 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .02em; color: var(--text); }
+.r-orchestrator { border-left-color: var(--opus); }
+.r-worker { border-left-color: var(--sonnet); }
+.r-reviewer { border-left-color: var(--haiku); }
+.r-refuter { border-left-color: var(--openai); }
+.s-tool.chip { border-style: dashed; }
+.chip.s-waiting { background: var(--warn); border-color: var(--warn); color: var(--on-warn); }
+.s-done.chip, .s-idle.chip { border-style: dotted; }
+@media (max-width: 480px) {
+  .stree.sub { margin-left: 6px; padding-left: 8px; }
+  .s-time { margin-left: 0; width: 100%; }
+}
+.is-waiting .muted { color: var(--text-2); }
