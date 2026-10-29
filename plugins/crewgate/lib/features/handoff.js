@@ -1,7 +1,9 @@
 'use strict';
 
-// Cross-session handoffs (DESIGN section 11). open/ -> accepted/ is an atomic rename: whoever
-// renames first owns the handoff, a second accept fails cleanly.
+// Cross-session handoffs (DESIGN section 11). Whoever creates open/<id>.claim exclusively (flag "wx",
+// EEXIST for everyone else, on every platform) owns the handoff and then moves open/ -> accepted|cancelled/.
+// A plain rename is not enough: on Windows two processes can both succeed in renaming the same file.
+// A claim left behind by a crashed winner is broken after STALE_CLAIM_MS if the open file still exists.
 const fs = require('fs');
 const crypto = require('crypto');
 const paths = require('../core/paths');
@@ -12,6 +14,7 @@ const { CrewError } = require('../core/errors');
 
 const MAX_BODY = 64 * 1024;
 const STATES = ['open', 'accepted', 'cancelled'];
+const STALE_CLAIM_MS = 30 * 1000;
 
 function newId(pid) {
   const d = new Date();
@@ -66,28 +69,53 @@ function list(pid, { all = false } = {}) {
   return out.sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : a.id < b.id ? -1 : 1));
 }
 
+function claimFile(pid, id) { return paths.handoffFile(pid, 'open', id).replace(/.json$/, '.claim'); }
+
+// Takes the claim -> true, or false when somebody else holds it (a stale one is broken first).
+function takeClaim(file, openFile) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try { fs.closeSync(fs.openSync(file, 'wx')); return true; } catch (e) {
+      if (e.code === 'ENOENT') return false; // no open/ folder: nothing to claim
+      if (e.code !== 'EEXIST' && e.code !== 'EPERM' && e.code !== 'EACCES') throw e;
+      let st;
+      try { st = fs.statSync(file); } catch { continue; } // released meanwhile: try again
+      if (Date.now() - st.mtimeMs < STALE_CLAIM_MS || !fs.existsSync(openFile)) return false;
+      try { fs.unlinkSync(file); } catch { /* somebody else broke it */ }
+    }
+  }
+  return false;
+}
+
 function move(pid, id, to, opts) {
   const from = paths.handoffFile(pid, 'open', id);
   const dest = paths.handoffFile(pid, to, id);
-  fs.mkdirSync(paths.handoffDir(pid, to), { recursive: true });
+  const claim = claimFile(pid, id);
+  const notOpen = () => {
+    const cur = STATES.find((s) => s !== 'open' && readOne(pid, s, id));
+    if (cur) return new CrewError('wf.handoff.notOpen', { id, state: cur });
+    if (fs.existsSync(from)) return new CrewError('wf.handoff.alreadyClaimed', { id });
+    return new CrewError('wf.handoff.notFound', { id });
+  };
+  if (!takeClaim(claim, from)) throw notOpen();
   try {
-    fs.renameSync(from, dest);
-  } catch (e) {
-    if (e.code === 'ENOENT') {
-      const cur = STATES.find((s) => s !== 'open' && readOne(pid, s, id));
-      if (cur) throw new CrewError('wf.handoff.notOpen', { id, state: cur });
-      throw new CrewError('wf.handoff.notFound', { id });
+    fs.mkdirSync(paths.handoffDir(pid, to), { recursive: true });
+    try {
+      fs.renameSync(from, dest);
+    } catch (e) {
+      if (e.code === 'ENOENT') throw notOpen();
+      throw e;
     }
-    throw e;
+    let h = readOne(pid, to, id) || { id };
+    h = { ...h, state: to, [`${to}_at`]: new Date().toISOString() };
+    json.save(dest, h);
+    events.append(pid, {
+      type: `handoff.${to}`, src: opts.src || 'cli', session: opts.session, task: h.task || undefined,
+      data: { id }, key: `${id}:${to}`,
+    });
+    return h;
+  } finally {
+    try { fs.unlinkSync(claim); } catch { /* already gone */ }
   }
-  let h = readOne(pid, to, id) || { id };
-  h = { ...h, state: to, [`${to}_at`]: new Date().toISOString() };
-  json.save(dest, h);
-  events.append(pid, {
-    type: `handoff.${to}`, src: opts.src || 'cli', session: opts.session, task: h.task || undefined,
-    data: { id }, key: `${id}:${to}`,
-  });
-  return h;
 }
 
 const accept = (pid, id, opts = {}) => move(pid, id, 'accepted', opts);

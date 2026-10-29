@@ -83,6 +83,7 @@
   "wf.handoff.tooBig": "交接內容超過 {max} 位元組",
   "wf.handoff.idExhausted": "無法產生可用的交接編號",
   "wf.handoff.notFound": "找不到交接：{id}",
+  "wf.handoff.alreadyClaimed": "交接 {id} 正被另一個工作階段接手中",
   "wf.handoff.notOpen": "交接 {id} 不是待接手狀態（目前是 {state}）",
   "wf.handoff.created": "已建立交接 {id}。",
   "wf.handoff.empty": "沒有交接。",

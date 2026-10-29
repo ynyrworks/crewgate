@@ -95,15 +95,50 @@ test('a second accept fails cleanly and so does accepting a cancelled handoff', 
   assert.equal(run(repo, 'handoff', 'bogus').code, 2);
 });
 
-test('two sessions accepting at the same time: exactly one wins', async () => {
+test('two sessions accepting at the same time: exactly one wins (20 rounds)', async () => {
   const repo = u.initRepo();
-  const hd = create(repo);
-  const results = await Promise.all([u.crewAsync(['handoff', 'accept', hd.id], repo), u.crewAsync(['handoff', 'accept', hd.id], repo)]);
-  const codes = results.map((r) => r.code).sort();
-  assert.deepEqual(codes, [0, 1]);
   const pid = project.findByCwd(repo).id;
-  assert.equal(events.read(pid, { types: 'handoff.accepted' }).length, 1);
-  assert.ok(fs.existsSync(paths.handoffFile(pid, 'accepted', hd.id)));
+  for (let i = 0; i < 20; i++) {
+    const hd = create(repo, { title: `round ${i}` });
+    const results = await Promise.all([u.crewAsync(['handoff', 'accept', hd.id], repo), u.crewAsync(['handoff', 'accept', hd.id], repo)]);
+    assert.deepEqual(results.map((r) => r.code).sort(), [0, 1], `round ${i}: ${JSON.stringify(results)}`);
+    assert.equal(events.read(pid, { types: 'handoff.accepted' }).filter((e) => e.data.id === hd.id).length, 1, `round ${i}`);
+    assert.ok(fs.existsSync(paths.handoffFile(pid, 'accepted', hd.id)));
+    assert.ok(!fs.existsSync(paths.handoffFile(pid, 'open', hd.id)));
+    assert.ok(!fs.existsSync(paths.handoffFile(pid, 'open', hd.id).replace(/.json$/, '.claim')), 'claim is released');
+  }
+});
+
+test('accept racing cancel: exactly one wins and only its event exists', async () => {
+  const repo = u.initRepo();
+  const pid = project.findByCwd(repo).id;
+  for (let i = 0; i < 10; i++) {
+    const hd = create(repo, { title: `race ${i}` });
+    const results = await Promise.all([u.crewAsync(['handoff', 'accept', hd.id], repo), u.crewAsync(['handoff', 'cancel', hd.id], repo)]);
+    assert.deepEqual(results.map((r) => r.code).sort(), [0, 1], `round ${i}: ${JSON.stringify(results)}`);
+    const acc = events.read(pid, { types: 'handoff.accepted' }).filter((e) => e.data.id === hd.id).length;
+    const can = events.read(pid, { types: 'handoff.cancelled' }).filter((e) => e.data.id === hd.id).length;
+    assert.equal(acc + can, 1, `round ${i}`);
+    assert.equal(fs.existsSync(paths.handoffFile(pid, 'accepted', hd.id)), acc === 1);
+    assert.equal(fs.existsSync(paths.handoffFile(pid, 'cancelled', hd.id)), can === 1);
+  }
+});
+
+test('a fresh claim blocks accept; a stale claim of a crashed winner is broken', () => {
+  const repo = u.initRepo();
+  const pid = project.findByCwd(repo).id;
+  const hd = create(repo);
+  const claim = paths.handoffFile(pid, 'open', hd.id).replace(/.json$/, '.claim');
+  fs.writeFileSync(claim, '');
+  const blocked = run(repo, 'handoff', 'accept', hd.id);
+  assert.equal(blocked.code, 1);
+  assert.match(blocked.err, /being claimed/);
+  assert.ok(fs.existsSync(paths.handoffFile(pid, 'open', hd.id)), 'file untouched');
+  assert.equal(events.read(pid, { types: 'handoff.accepted' }).length, 0);
+  const old = new Date(Date.now() - 120000);
+  fs.utimesSync(claim, old, old);
+  assert.equal(run(repo, 'handoff', 'accept', hd.id).code, 0);
+  assert.ok(!fs.existsSync(claim));
 });
 
 test('handoff list shows only open ones by default, oldest first, and an empty message', () => {

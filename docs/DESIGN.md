@@ -288,8 +288,7 @@ snippet). `once` stops matching when the snippet no longer exists in the file;
 ## 11. Handoffs (cross-session)
 
 `crew handoff create --title ".." --body-file f.md [--task <id>]` → `open/<id>.json`.
-`crew handoff list`, `crew handoff show <id>`, `crew handoff accept <id>` (atomic
-`rename` from `open/` to `accepted/`; a second accept fails cleanly),
+`crew handoff list`, `crew handoff show <id>`, `crew handoff accept <id>` (claims `open/<id>.claim` with an exclusive create, then moves `open/` to `accepted/`; the loser fails cleanly. A claim older than 30 s whose open file still exists is treated as left by a crashed session and broken),
 `crew handoff cancel <id>`. SessionStart only announces counts and ids. Accepting
 prints the body fenced as untrusted data.
 

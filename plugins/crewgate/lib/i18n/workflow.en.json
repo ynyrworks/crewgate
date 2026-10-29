@@ -83,6 +83,7 @@
   "wf.handoff.tooBig": "The handoff body is larger than {max} bytes",
   "wf.handoff.idExhausted": "Could not generate a free handoff id",
   "wf.handoff.notFound": "Handoff not found: {id}",
+  "wf.handoff.alreadyClaimed": "Handoff {id} is being claimed by another session",
   "wf.handoff.notOpen": "Handoff {id} is not open (it is {state})",
   "wf.handoff.created": "Handoff {id} created.",
   "wf.handoff.empty": "No handoffs.",
