@@ -4,7 +4,6 @@
 // (cd / pushd / git -C), which gates it falls under, and whether this session holds an approval.
 const path = require('path');
 const C = require('./common');
-const sess = require('./session');
 const gates = require('../core/gates');
 
 // Cheap pre-filter so ordinary Bash calls never pay for project resolution.
@@ -68,10 +67,6 @@ function unapproved(h, wanted) {
   let cfg;
   try { cfg = h.cfg(); } catch { return out; }
   const opts = { requireUserTurn: gates.requiresUserTurn(cfg) };
-  if (opts.requireUserTurn) {
-    const s = h.sid ? sess.read(h.sid) : null;
-    opts.prompts = s && Array.isArray(s.prompt_ts) ? s.prompt_ts : [];
-  }
   for (const [gate, w] of wanted) {
     if (gates.modeOf(cfg, gate) !== 'ask') continue;
     let approved = true;

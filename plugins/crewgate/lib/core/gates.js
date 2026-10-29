@@ -52,7 +52,18 @@ function ask(projectId, cfg, input, opts = {}) {
   return { id, gate, mode, answered: reply };
 }
 
-// answer(projectId, gateId, 'yes'|'no', note, opts) -> { id, gate, answer }
+// Did the user speak between the ask and now? Judged once, when the answer is recorded: the answering session
+// must be the session that asked (equality; a gate asked and answered with no known session cannot be judged)
+// and `prompts` (ms, UserPromptSubmit times of that session) must hold a time between the ask and now.
+function userTurnVerdict(asked, session, prompts, nowMs) {
+  if (!asked.session || !session || asked.session !== session) return false;
+  const from = Date.parse(asked.ts);
+  return Array.isArray(prompts) && prompts.some((t) => t >= from && t <= nowMs);
+}
+
+// answer(projectId, gateId, 'yes'|'no', note, opts) -> { id, gate, answer, user_turn }
+// opts: src, session, prompts. The ask is found by its id (the whole log, no time cutoff).
+// data.user_turn (boolean) and data.ask_session are stored on the gate.answered event.
 function answer(projectId, gateId, reply, note, opts = {}) {
   if (reply !== 'yes' && reply !== 'no') throw new UsageError('args.badChoice', { name: 'answer', choices: 'yes, no' });
   const all = events.read(projectId, { types: ['gate.asked', 'gate.answered'] });
@@ -60,43 +71,25 @@ function answer(projectId, gateId, reply, note, opts = {}) {
   if (!asked) throw new CrewError('gate.notFound', { id: String(gateId) });
   const done = all.find((e) => e.type === 'gate.answered' && e.data && e.data.id === gateId);
   if (done) throw new CrewError('gate.alreadyAnswered', { id: gateId, answer: done.data.answer });
+  const userTurn = userTurnVerdict(asked, opts.session, opts.prompts, Date.now());
   events.append(projectId, {
     type: 'gate.answered', src: opts.src || 'cli', session: opts.session, task: asked.task || undefined, key: `${gateId}:answered`,
-    data: { id: gateId, gate: asked.data.gate, answer: reply, auto: false, note: note || '' },
+    data: { id: gateId, gate: asked.data.gate, answer: reply, auto: false, note: note || '', user_turn: userTurn, ask_session: asked.session || '' },
   });
-  const prompts = opts.prompts;
-  return {
-    id: gateId, gate: asked.data.gate, answer: reply,
-    user_turn: reply === 'yes' ? userTurnBetween(prompts, Date.parse(asked.ts), Date.now()) : null,
-  };
-}
-
-// Did the user send a message between two moments? `prompts` are the UserPromptSubmit times (ms) of the
-// session, kept by the UserPromptSubmit hook (no text). null = cannot tell (no list).
-function userTurnBetween(prompts, fromMs, toMs) {
-  if (!Array.isArray(prompts)) return null;
-  return prompts.some((t) => t >= fromMs && t <= toMs);
+  return { id: gateId, gate: asked.data.gate, answer: reply, user_turn: userTurn };
 }
 
 // Is there an approval for `gate` that this session can lean on? A gate.answered "yes" of the last 30
 // minutes counts when it belongs to this session, or to no session (the CLI cannot tell the session).
-// With opts.requireUserTurn (config gates.require_user_turn, default true) a hand-recorded yes also needs a
-// user message of the session (opts.prompts, ms) between its "gate ask" and itself; the automatic yes of an
-// `auto` gate does not. Without opts the old rule applies.
+// With opts.requireUserTurn (config gates.require_user_turn, default true) a hand-recorded yes also needs the
+// verdict `data.user_turn === true` that answer() stored when it was recorded; the automatic yes of an `auto`
+// gate does not, and an older event without the field counts as unknown, so it is not valid.
 function hasApproval(projectId, gate, session, now = Date.now(), opts = {}) {
   const since = now - ANSWER_WINDOW_MS;
   const need = opts.requireUserTurn === true;
-  const all = events.read(projectId, { types: need ? ['gate.asked', 'gate.answered'] : 'gate.answered', since: need ? since - ANSWER_WINDOW_MS : since });
-  const asked = new Map();
-  if (need) for (const e of all) if (e.type === 'gate.asked' && e.data) asked.set(e.data.id, Date.parse(e.ts));
-  return all.some((e) => {
-    if (e.type !== 'gate.answered' || !e.data || e.data.gate !== gate || e.data.answer !== 'yes') return false;
-    if (Date.parse(e.ts) < since) return false;
-    if (e.session && session && e.session !== session) return false;
-    if (!need || e.data.auto) return true;
-    const from = asked.get(e.data.id);
-    return from !== undefined && userTurnBetween(opts.prompts, from, Date.parse(e.ts)) === true;
-  });
+  return events.read(projectId, { types: 'gate.answered', since }).some((e) => e.data && e.data.gate === gate && e.data.answer === 'yes'
+    && (!e.session || !session || e.session === session)
+    && (!need || e.data.auto === true || e.data.user_turn === true));
 }
 
 // Which gate a detected git/PR command falls under (event types come from hooks/gitcmd.js).
@@ -126,4 +119,4 @@ function history(projectId, limit = 30) {
   return [...rows.values(), ...missing].sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0)).slice(0, limit);
 }
 
-module.exports = { GATES, ANSWER_WINDOW_MS, modeOf, enforceOf, requiresUserTurn, userTurnBetween, ask, answer, hasApproval, gateOf, history };
+module.exports = { GATES, ANSWER_WINDOW_MS, modeOf, enforceOf, requiresUserTurn, userTurnVerdict, ask, answer, hasApproval, gateOf, history };

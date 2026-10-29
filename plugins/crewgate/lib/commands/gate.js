@@ -31,9 +31,9 @@ function run(argv, ctx) {
     // The user-turn rule needs the session's prompt times (kept by the UserPromptSubmit hook).
     const cfg = ctx.config().config;
     const s = opts.session ? sess.read(opts.session) : null;
-    const r = gates.answer(proj.id, a.id, a.answer, a.note, { ...opts, prompts: s ? (Array.isArray(s.prompt_ts) ? s.prompt_ts : []) : undefined });
+    const r = gates.answer(proj.id, a.id, a.answer, a.note, { ...opts, prompts: s && Array.isArray(s.prompt_ts) ? s.prompt_ts : [] });
     const lines = [ctx.t('gate.answered', { id: r.id, gate: r.gate, answer: r.answer })];
-    if (r.user_turn === false && gates.requiresUserTurn(cfg)) lines.push(ctx.t('gate.noUserTurn', { id: r.id }));
+    if (r.answer === 'yes' && r.user_turn === false && gates.requiresUserTurn(cfg)) lines.push(ctx.t('gate.noUserTurn', { id: r.id }));
     ctx.emit(r, lines);
   }
   return 0;

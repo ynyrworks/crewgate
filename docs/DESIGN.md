@@ -319,16 +319,30 @@ answered with `{}`: whether Codex honours `ask` / `deny` from PreToolUse is not 
 (docs/PLUGIN-FACTS.md), so Codex sessions stay on `remind`. `crew doctor` says so.
 
 **User-turn rule (`gates.require_user_turn`, default `true`).** An approval made by hand counts only if a *user message*
-of the same session arrived between its `gate.asked` and its `gate.answered yes`. `UserPromptSubmit` appends the time (ms,
-never the text) to `prompt_ts` in the session file (newest 20); the check compares the ask time, the prompt times and
-the answer time. The automatic yes of an `auto` gate needs no user message. `crew gate answer ... yes` prints a warning
-when the session file shows no user message since the ask (it stays quiet when `CLAUDE_SESSION_ID` is unset, because it
-cannot tell). With `false` the old rule applies (any yes of the last 30 minutes). The rule applies in all three modes.
+of the session that asked arrived between its `gate.asked` and its `gate.answered yes`. The rule is judged **once, when
+the answer is recorded** (`crew gate answer`), and the verdict is stored on the `gate.answered` event as
+`data.user_turn` (boolean) with `data.ask_session`; later checks (`hasApproval`, the hooks) read only that verdict, the
+30-minute answer window and the session match. At answer time: the ask is found by its gate id (the whole log, no time
+cutoff); the answering session (`CLAUDE_SESSION_ID`) must be the session that asked (plain equality; a parent / subagent
+link is not followed, and an ask or answer with no known session cannot be judged, so the verdict is `false`); and the
+session's `prompt_ts` (the `UserPromptSubmit` hook appends the time in ms, never the text, newest 20) must hold a time
+between the ask and the answer. The answer is recorded right after your reply, so the 20-entry list is only read while
+it is fresh. The automatic yes of an `auto` gate needs no verdict. `crew gate answer ... yes` prints a warning when the
+verdict is `false`. A `gate.answered` written before this field existed has no verdict (unknown) and is **not valid**
+while `require_user_turn` is `true`. With `false` the old rule applies (any yes of the last 30 minutes). The rule
+applies in all three modes. Consequence: `CLAUDE_SESSION_ID` must reach the `crew` command; if the client does not
+export it, no hand-made approval validates until you set `require_user_turn: false` (unverified for each client).
 
 What it prevents: the model asking and answering "yes" itself inside one turn (`gate ask` and `gate answer yes` in a row)
-without you having replied. What it does not prevent: the model answering "yes" after you replied about something else
-(any message counts, the text is not read); a false `--note`; the model editing `~/.crewgate`. It is a speed bump
-against careless self-approval, not authentication.
+without you having replied, and another session validating an ask. What it does not prevent: the model answering "yes"
+after you replied about something else (any message counts, the text is not read); a false `--note`; the model editing
+`~/.crewgate`. It is a speed bump against careless self-approval, not authentication.
+
+**Cost.** PreToolUse(Bash) runs for every Bash call. `scripts/crew-hook.js` therefore reads stdin and tests the command
+with `lib/hooks/prefilter.js` (no `require`s) before it starts the worker thread or loads any other module; a command
+without push / merge / create answers `{}` at about the cost of a bare `node` start. Only git-like commands load the
+handler and resolve the project (full resolution of the current directory and of `cd` / `git -C` targets, like
+PostToolUse).
 
 **Detection limits** (all modes): only the command text of the Bash tool is read. A script that pushes (`./deploy.sh`,
 `make release`), a shell alias or function, a command assembled from variables (`$GIT push`), `eval`, and a push by

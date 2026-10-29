@@ -28,12 +28,8 @@ function fixture(enforce, extra = {}) {
   return f;
 }
 
-// ask -> user message -> answer yes: a valid approval
-function approve(f, gate = 'push') {
-  const id = gates.ask(f.pid, {}, { gate }).id;
-  prompt(f);
-  gates.answer(f.pid, id, 'yes', 'ok');
-}
+// ask -> user message -> answer yes (same session): a valid approval
+const approve = (f, gate = 'push') => H.approve(f, { gate });
 
 test('remind (default or explicit): PreToolUse stays silent, PostToolUse records gate.missing as before', () => {
   for (const cfg of [null, 'remind']) {
@@ -167,8 +163,7 @@ test('hooks.json registers PreToolUse for Bash; the Codex table does not', () =>
 test('user-turn rule: an answer with no user message since the ask does not count (all modes)', () => {
   for (const mode of ['remind', 'confirm', 'block']) {
     const f = fixture(mode);
-    const id = gates.ask(f.pid, {}, { gate: 'push' }).id;
-    gates.answer(f.pid, id, 'yes', 'self-approved'); // no prompt in between
+    H.approve(f, { userMessage: false }); // ask and answer with no user message in between
     if (mode === 'remind') {
       post(f, 'git push', 'n1');
       assert.equal(missing(f.pid).length, 1, mode);
@@ -181,12 +176,9 @@ test('user-turn rule: an answer with no user message since the ask does not coun
 test('user-turn rule: a prompt before the ask does not help; one between ask and answer does', () => {
   const f = fixture('block');
   prompt(f);
-  const a = gates.ask(f.pid, {}, { gate: 'push' }).id;
-  gates.answer(f.pid, a, 'yes', '');
+  H.approve(f, { userMessage: false });
   assert.equal(decision(pre(f, 'git push', 'w1')), 'deny');
-  const b = gates.ask(f.pid, {}, { gate: 'push' }).id;
-  prompt(f);
-  gates.answer(f.pid, b, 'yes', '');
+  H.approve(f);
   assert.equal(pre(f, 'git push', 'w2').out, '{}');
 });
 
@@ -205,17 +197,89 @@ test('user-turn rule: the automatic yes of an auto gate needs no user message', 
   assert.equal(pre(f, 'git push', 'y1').out, '{}');
 });
 
-test('user-turn rule: hasApproval unit behaviour', () => {
+test('user-turn rule: the verdict is stored on gate.answered and hasApproval reads only that', () => {
   const f = H.fixture();
-  const t0 = Date.now();
-  const id = gates.ask(f.pid, {}, { gate: 'merge' }).id;
-  const between = Date.now();
-  gates.answer(f.pid, id, 'yes', '');
-  const now = Date.now() + 5;
-  assert.equal(gates.hasApproval(f.pid, 'merge', 's', now), true, 'old rule without opts');
-  assert.equal(gates.hasApproval(f.pid, 'merge', 's', now, { requireUserTurn: true, prompts: [] }), false);
-  assert.equal(gates.hasApproval(f.pid, 'merge', 's', now, { requireUserTurn: true, prompts: [t0 - 60000] }), false);
-  assert.equal(gates.hasApproval(f.pid, 'merge', 's', now, { requireUserTurn: true, prompts: [between] }), true);
+  H.start(f);
+  H.approve(f, { gate: 'merge', userMessage: false });
+  const bad = events.read(f.pid, { types: 'gate.answered' }).pop();
+  assert.equal(bad.data.user_turn, false);
+  assert.equal(bad.data.ask_session, f.sid);
+  assert.equal(gates.hasApproval(f.pid, 'merge', f.sid, Date.now(), { requireUserTurn: true }), false);
+  assert.equal(gates.hasApproval(f.pid, 'merge', f.sid), true, 'old rule without opts');
+  H.approve(f, { gate: 'merge' });
+  assert.equal(events.read(f.pid, { types: 'gate.answered' }).pop().data.user_turn, true);
+  assert.equal(gates.hasApproval(f.pid, 'merge', f.sid, Date.now(), { requireUserTurn: true }), true);
+});
+
+test('user-turn rule: an answer from another session than the ask does not count', () => {
+  const f = fixture('block');
+  const id = gates.ask(f.pid, {}, { gate: 'push' }, { session: 'sess-other' }).id;
+  prompt(f);
+  gates.answer(f.pid, id, 'yes', '', { session: f.sid, prompts: sess.read(f.sid).prompt_ts });
+  assert.equal(events.read(f.pid, { types: 'gate.answered' })[0].data.user_turn, false);
+  assert.equal(decision(pre(f, 'git push', 'ss1')), 'deny');
+  // an ask with no session cannot be judged either
+  const id2 = gates.ask(f.pid, {}, { gate: 'push' }).id;
+  prompt(f);
+  gates.answer(f.pid, id2, 'yes', '', { session: f.sid, prompts: sess.read(f.sid).prompt_ts });
+  assert.equal(decision(pre(f, 'git push', 'ss2')), 'deny');
+});
+
+test('user-turn rule: many later prompts do not evict the evidence', () => {
+  const f = fixture('block');
+  H.approve(f);
+  assert.equal(pre(f, 'git push', 'ev0').out, '{}');
+  for (let i = 0; i < 25; i++) prompt(f);
+  assert.equal(pre(f, 'git push', 'ev1').out, '{}');
+});
+
+test('user-turn rule: the ask is found by id however old it is', () => {
+  const f = H.fixture();
+  const old = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
+  const line = { v: 1, ts: old, id: 'abcdef0123456789', type: 'gate.asked', src: 'cli', session: 'sx', task: '', agent: '', data: { id: 'g-old001', gate: 'push', mode: 'ask', detail: '' } };
+  const file = require('../lib/core/paths').eventsFile(f.pid);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.appendFileSync(file, `${JSON.stringify(line)}\n`);
+  const r = gates.answer(f.pid, 'g-old001', 'yes', '', { session: 'sx', prompts: [Date.now() - 60000] });
+  assert.equal(r.user_turn, true);
+  assert.equal(gates.userTurnVerdict({ session: 'sx', ts: old }, 'sx', [Date.parse(old) - 1], Date.now()), false, 'a prompt before the ask');
+});
+
+test('user-turn rule: an old gate.answered without the verdict is not valid when required, valid when not', () => {
+  const f = fixture('block');
+  events.append(f.pid, { type: 'gate.answered', src: 'cli', session: f.sid, data: { id: 'g-legacy', gate: 'push', answer: 'yes', auto: false, note: '' }, key: 'g-legacy:answered' });
+  assert.equal(decision(pre(f, 'git push', 'lg1')), 'deny');
+  const g = fixture('block', { require_user_turn: false });
+  events.append(g.pid, { type: 'gate.answered', src: 'cli', session: g.sid, data: { id: 'g-legacy', gate: 'push', answer: 'yes', auto: false, note: '' }, key: 'g-legacy:answered' });
+  assert.equal(pre(g, 'git push', 'lg2').out, '{}');
+});
+
+test('PreToolUse resolves the project from the current cwd, not from the session file', () => {
+  const f = fixture('remind'); // the session started in repo A (remind)
+  const b = makeRepo();
+  H.writeConfig(b, { gates: { enforce: 'block' } });
+  project.add(b, { name: 'repo-b' });
+  const r = H.runHook('pre-tool-use', H.base(f, { cwd: b, tool_name: 'Bash', tool_use_id: 'cw1', tool_input: { command: 'git push' } }), { cwd: b });
+  assert.equal(decision(r), 'deny');
+});
+
+// ---------------------------------------------------------------- Bash fast path
+test('PreToolUse Bash fast path: a non-git command is answered before any lib module is loaded', () => {
+  const dir = require('./helpers').tmpDir('crew-preload-');
+  const out = path.join(dir, 'seen.json');
+  const preload = path.join(dir, 'preload.js');
+  fs.writeFileSync(preload, `const Module = require('module'); const seen = new Set(); const orig = Module._load;
+Module._load = function (req, parent) { const r = orig.apply(this, arguments); try { seen.add(Module._resolveFilename(req, parent)); } catch (e) {} return r; };
+process.on('exit', () => require('fs').writeFileSync(process.env.SEEN_FILE + require('worker_threads').threadId, JSON.stringify([...seen])));`);
+  const f = H.fixture();
+  const env = { NODE_OPTIONS: `--require=${fwd(preload)}`, SEEN_FILE: out };
+  const libs = () => fs.readdirSync(dir).filter((n) => n.startsWith('seen.json')).flatMap((n) => JSON.parse(fs.readFileSync(path.join(dir, n), 'utf8'))).map(fwd).filter((x) => /\/plugins\/crewgate\/lib\//.test(x));
+  const r = H.runHook('pre-tool-use', bash(f, 'ls -la', 'fp1'), { cwd: f.repo, env });
+  assert.equal(r.out, '{}');
+  assert.deepEqual(libs().map((x) => path.basename(x)).sort(), ['prefilter.js', 'timeouts.js']);
+  // a git-like command does load the handler (the probe works)
+  H.runHook('pre-tool-use', bash(f, 'git push', 'fp2'), { cwd: f.repo, env });
+  assert.ok(libs().length > 5);
 });
 
 test('prompt times are kept without text', () => {
@@ -230,14 +294,15 @@ test('prompt times are kept without text', () => {
 test('crew gate answer warns when no user message happened since the ask', () => {
   const f = fixture('confirm');
   const env = { CLAUDE_SESSION_ID: f.sid };
-  const ask = gates.ask(f.pid, {}, { gate: 'push' });
+  const ask = gates.ask(f.pid, {}, { gate: 'push' }, { session: f.sid });
   const r1 = crew(['gate', 'answer', ask.id, 'yes'], f.repo, env);
   assert.equal(r1.code, 0, r1.err);
   assert.match(r1.out, /will not count/);
-  const ask2 = gates.ask(f.pid, {}, { gate: 'push' });
+  const ask2 = gates.ask(f.pid, {}, { gate: 'push' }, { session: f.sid });
   prompt(f);
   const r2 = crew(['gate', 'answer', ask2.id, 'yes'], f.repo, env);
   assert.doesNotMatch(r2.out, /will not count/);
+  assert.equal(events.read(f.pid, { types: 'gate.answered' }).pop().data.user_turn, true);
 });
 
 test('crew gate answer does not warn when require_user_turn is false', () => {

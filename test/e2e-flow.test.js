@@ -132,10 +132,10 @@ test('full delegated flow: dispatch, report, review, send-back, accept, merge', 
   // ---- accept, merge
   const accepted = wf.crewJson(['task', 'accept', id, '--note', 'dedupe verified'], repo);
   assert.equal(accepted.code, 0, accepted.err);
-  const gate = wf.crewJson(['gate', 'ask', 'merge', '--task', id, '--detail', 'merge todo-due'], repo);
-  assert.equal(gate.code, 0, gate.err);
+  const sessEnv = { CLAUDE_SESSION_ID: SID };
+  const gate = JSON.parse(h.crew(['--json', 'gate', 'ask', 'merge', '--task', id, '--detail', 'merge todo-due'], repo, sessEnv).out);
   hook('user-prompt-submit', base({ hook_event_name: 'UserPromptSubmit', prompt: 'yes, merge it' })); // the user's reply
-  assert.equal(h.crew(['gate', 'answer', gate.data.id, 'yes', '--note', 'user said yes'], repo).code, 0);
+  assert.equal(h.crew(['gate', 'answer', gate.id, 'yes', '--note', 'user said yes'], repo, sessEnv).code, 0);
   h.git(repo, 'merge', '-q', '--no-ff', '-m', 'merge todo-due', BRANCH);
   hook('post-tool-use', base({
     hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_use_id: 'toolu_merge',

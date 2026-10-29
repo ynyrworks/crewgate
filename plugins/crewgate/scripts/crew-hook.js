@@ -12,6 +12,7 @@ const EVENTS = ['session-start', 'user-prompt-submit', 'pre-tool-use', 'post-too
   'subagent-stop', 'stop', 'pre-compact', 'session-end'];
 const MAX_STDIN = 64 * 1024 * 1024;
 const { guardMs } = require('../lib/hooks/timeouts');
+const { bashNoop } = require('../lib/hooks/prefilter');
 
 function normEvent(x) {
   const s = String(x || '').replace(/([a-z])([A-Z])/g, '$1-$2').replace(/_/g, '-').toLowerCase();
@@ -51,6 +52,14 @@ function main() {
     if (started) return;
     started = true;
     if (over) return fail('error', 'stdin larger than the limit');
+    // Fast path: PreToolUse for a Bash command that is not a push / merge / PR has nothing to do. Answer here,
+    // before the worker thread and the rest of crewgate are loaded (every Bash call passes through this hook).
+    if (event === 'pre-tool-use') {
+      try {
+        const text = Buffer.concat(chunks).toString('utf8');
+        if (bashNoop(JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text))) return finish('{}');
+      } catch { /* not JSON or unusual: take the normal path */ }
+    }
     try {
       worker = new Worker(__filename, { workerData: { event, input: Buffer.concat(chunks).toString('utf8') } });
       worker.on('message', (m) => finish(m));

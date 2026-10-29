@@ -145,7 +145,9 @@ function onBash(payload) {
   if (!G.GIT_WORDS.test(command.slice(0, 20000))) return null;
   const found = gitcmd.detect(command).filter((f) => gates.gateOf(f));
   if (!found.length) return null;
-  const h = C.open(payload, { fastOnly: true });
+  // Same resolution as PostToolUse: the session file only short-cuts when cwd is inside its project, so a shell
+  // that moved to another registered repository is resolved from its own cwd.
+  const h = C.open(payload);
   if (!h && !found.some((f) => f.cd.length)) return null;
   const handleFor = G.makeHandleFor(payload, h);
   const byProject = new Map();

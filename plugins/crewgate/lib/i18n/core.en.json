@@ -117,5 +117,5 @@
   "gate.asked": "Gate {gate} asked: {id}. Ask the user in chat, then run: gate answer {id} yes|no",
   "gate.askedAuto": "Gate {gate} is auto: approved ({id}).",
   "gate.answered": "Gate {gate} ({id}): {answer}",
-  "gate.noUserTurn": "Warning: no user message was seen in this session since gate {id} was asked, so this answer will not count as an approval (gates.require_user_turn). Ask the user in chat, wait for the reply, then answer again with a new gate ask."
+  "gate.noUserTurn": "Warning: this answer will not count as an approval (gates.require_user_turn): either no user message was seen in this session since gate {id} was asked, or this session is not the one that asked (CLAUDE_SESSION_ID unknown or different). Ask the user in chat, wait for the reply, then answer with a new gate ask."
 }
