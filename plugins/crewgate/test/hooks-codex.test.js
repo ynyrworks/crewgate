@@ -98,3 +98,60 @@ test('.codex-plugin/plugin.json agrees with the Claude manifest and points at ex
     assert.ok(fs.existsSync(path.join(root, p)), p);
   }
 });
+
+// ---- real Codex 0.160 payload shapes (text is synthetic). PreToolUse/PostToolUse of collaborationspawn_agent
+// carry an opaque (encrypted) `message`, so the dispatch is recorded at SubagentStart from the subagent's rollout file.
+const OPAQUE = `gAAAAAB${'x'.repeat(190)}`;
+const realSpawn = (f, extra) => H.base(f, {
+  turn_id: 't1', transcript_path: path.join(f.repo, 'rollout-parent.jsonl'), hook_event_name: 'PreToolUse', model: 'm', permission_mode: 'default',
+  tool_name: 'collaborationspawn_agent', tool_use_id: 'call-1', tool_input: { task_name: 'crew_task', message: OPAQUE }, ...extra,
+});
+
+function rollout(f, agentId, lines) {
+  const dir = path.join(f.repo, '..', `codex-sessions-${agentId}`);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'rollout-parent.jsonl'), '{}\n');
+  fs.writeFileSync(path.join(dir, `rollout-2026-10-29T16-00-00-${agentId}.jsonl`), lines.map((l) => JSON.stringify({ type: 'message', text: l })).join('\n') + '\n');
+  return path.join(dir, 'rollout-parent.jsonl');
+}
+
+test('real codex shapes: opaque spawn message is ignored, SubagentStart links the task from the subagent rollout (last marker wins)', () => {
+  const f = H.fixture();
+  const old = H.newTask(f, 'Earlier task');
+  const t = H.newTask(f, 'The task');
+  H.start(f);
+  const pre = H.runHook('pre-tool-use', realSpawn(f), { cwd: f.repo });
+  assert.equal(pre.code, 0);
+  assert.equal(tasks.load(f.pid, t.id).state, 'created', 'nothing to read in an opaque message');
+  const agentId = '01a186b0-5a69-78c2-85fc-0312b75245e2';
+  const tp = rollout(f, agentId, [`first prompt mentions crew-task: ${old.id} long ago`, `crew-task: ${t.id}\n\nReply ok.`, 'developer instructions']);
+  H.runHook('post-tool-use', realSpawn(f, { hook_event_name: 'PostToolUse', tool_response: '{"task_name":"/root/crew_task"}' }), { cwd: f.repo });
+  H.runHook('subagent-start', H.base(f, {
+    turn_id: 't1', transcript_path: tp, hook_event_name: 'SubagentStart', model: 'm', permission_mode: 'default', agent_id: agentId, agent_type: 'default',
+  }), { cwd: f.repo });
+  assert.equal(tasks.load(f.pid, t.id).state, 'dispatched');
+  assert.equal(tasks.load(f.pid, old.id).state, 'created', 'a marker in forked history is not the dispatch');
+  const d = H.evs(f, 'task.dispatched');
+  assert.equal(d.length, 1);
+  assert.equal(d[0].task, t.id);
+  assert.equal(d[0].data.engine, 'codex');
+  const s = H.evs(f, 'subagent.start');
+  assert.equal(s[0].task, t.id);
+  assert.equal(s[0].data.linked, true);
+  // SubagentStop finishes the task through the stored link
+  H.runHook('subagent-stop', H.base(f, {
+    transcript_path: tp, hook_event_name: 'SubagentStop', agent_id: agentId, agent_type: 'default', stop_hook_active: false,
+    agent_transcript_path: path.join(path.dirname(tp), `rollout-2026-10-29T16-00-00-${agentId}.jsonl`), last_assistant_message: 'ok',
+  }), { cwd: f.repo });
+  assert.equal(tasks.load(f.pid, t.id).state, 'returned');
+});
+
+test('real codex shapes: a subagent without a marker stays unlinked', () => {
+  const f = H.fixture();
+  H.start(f);
+  const agentId = '01a186b0-aaaa-78c2-85fc-0312b75245e2';
+  const tp = rollout(f, agentId, ['just do something']);
+  H.runHook('subagent-start', H.base(f, { transcript_path: tp, agent_id: agentId, agent_type: 'default' }), { cwd: f.repo });
+  assert.equal(H.evs(f, 'subagent.start')[0].data.linked, false);
+  assert.equal(H.evs(f, 'task.dispatched').length, 0);
+});

@@ -106,6 +106,8 @@ https://learn.chatgpt.com/docs/agent-configuration/subagents · https://learn.ch
   (default 1, at most 3). The shell tool is `Bash` with `tool_input.command`.
 - Handler fields: `command` (one string; no `args` array is documented), `commandWindows`, `timeout` (seconds),
   `statusMessage`, `async`. Matchers are regular expressions on the tool name (or agent type, reason, source).
+- **The spawn `message` in PreToolUse/PostToolUse is opaque** (an encrypted-looking base64 string, about 200 characters), so a `crew-task:` marker cannot be read there. `task_name` is chosen by the model (observed `crew_task`), `tool_response` is `{"task_name":"/root/<task_name>"}`. SubagentStart has only `agent_id` and `agent_type` (`default`), but the subagent's own rollout file `<dir of transcript_path>/rollout-<timestamp>-<agent_id>.jsonl` already exists and holds the message (and possibly forked parent history); SubagentStop adds `agent_transcript_path` pointing at it.
+- Project-level `.codex/hooks.json` loads only when the project is trusted (`[projects."<path>"] trust_level = "trusted"`; for a one-off `codex exec` use `-c "projects={ '<path>' = { trust_level = 'trusted' } }"`) in addition to hook trust (`--dangerously-bypass-hook-trust`).
 - Plugin hooks get `PLUGIN_ROOT` and `CLAUDE_PLUGIN_ROOT` (and the `_DATA` twins) in their environment.
 
 ## Plugins, skills, agents

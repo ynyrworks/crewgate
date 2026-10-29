@@ -390,7 +390,7 @@ the sandbox:
 **Codex as the orchestrator.** The plugin folder serves both CLIs. `.codex-plugin/plugin.json` names the skills folder
 and `hooks/codex-hooks.json` (Codex has no `args` array, so commands are single strings with `commandWindows`; the
 Claude file keeps the exec form). Hook code treats `collaborationspawn_agent` like `Agent`: marker in `tool_input.message`,
-type from `task_name`, always a background launch. `crew init --engine codex` (or an existing `.codex/`) renders
+type from `task_name`, always a background launch. Real Codex sends an opaque spawn message, so the dispatch is normally recorded at SubagentStart instead: the marker is read from the new subagent's rollout file (the last `crew-task:` marker in its last 512 KB, because forked parent history may contain older ones), the task goes `created -> dispatched` (`task.dispatched`, `engine: codex`, `via: subagent-start`) and the agent id is bound for SubagentStop. `crew init --engine codex` (or an existing `.codex/`) renders
 `.codex/agents/crew-reviewer.toml` and `crew-refuter.toml` from the same templates and adds a marked block to
 `AGENTS.md` (never touches text outside the markers). There is no Codex worker agent: subagents share the parent's
 sandbox, so workers always go through `crew task run`. Requirements: the user trusts the hooks once in `/hooks` (again

@@ -6,6 +6,7 @@ Codex support (experimental).
 
 - `crew task run <id> --engine codex [--timeout S] [--model M]`: runs the Codex CLI (global engine `codex`) as a worker in the task's worktree with stdin closed, `--sandbox workspace-write`, `--output-schema` and `-o`. crewgate then commits as the repository user with a `Co-Authored-By: Codex` trailer, files report and packet and returns the task. Bad output, timeout, a non-zero exit or no changes commit nothing, record `task.failed` and a need and keep the task dispatched.
 - Codex as orchestrator: `.codex-plugin/plugin.json`, `hooks/codex-hooks.json` (one-string commands, `commandWindows`); hooks understand `collaborationspawn_agent`; `crew init --engine codex` writes `.codex/agents/crew-reviewer.toml`, `crew-refuter.toml` and a marked block in `AGENTS.md`; the skill has a "Running in Codex" section.
+- Codex hides the spawn message from hooks, so the dispatch is recorded at SubagentStart from the subagent's rollout file.
 - Docs: Codex section in both READMEs, DESIGN section 16, measured Codex facts in PLUGIN-FACTS.
 
 Sessions view: who is doing what right now.
