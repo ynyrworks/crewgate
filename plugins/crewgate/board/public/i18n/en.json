@@ -199,6 +199,8 @@
   "stats.linePrompts1": "{count} prompt",
   "stats.lineTools": "{count} tool calls",
   "stats.lineTools1": "{count} tool call",
+  "cap.items": "{count} items",
+  "cap.items1": "{count} item",
   "stats.lineTokens": "{count} tokens",
   "sessions.back": "All sessions",
   "sessions.parent": "Parent session",

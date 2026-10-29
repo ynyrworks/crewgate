@@ -97,10 +97,20 @@
 
   function badge(kind, label) { return h('span', { class: 'badge s-' + kind, text: label === undefined ? t('state.' + kind) : label }); }
   function empty(key) { return h('p', { class: 'empty', text: t(key) }); }
-  function card(title, body, extra) { return h('section', { class: 'card' + (extra ? ' ' + extra : '') }, h('h2', { text: title }), body); }
-  function table(head, rows, numCols) {
+  // count: optional number shown next to the title ("12 items")
+  function card(title, body, extra, count) {
+    return h('section', { class: 'card' + (extra ? ' ' + extra : '') },
+      h('h2', null, title, count === undefined || count === null ? null : h('span', { class: 'count muted', text: ' · ' + plural('cap.items', count) })), body);
+  }
+  // A list or table with a capped height that scrolls inside the card. The page keeps its length; the area is
+  // focusable and named so a keyboard user can scroll it. mod: 'tall' (main content of a card page) or 'main' (the page itself).
+  function cap(label, child, mod) {
+    return h('div', { class: 'cap' + (mod ? ' ' + mod : ''), tabindex: '0', role: 'region', 'aria-label': label, 'data-cap': label }, child);
+  }
+  function table(head, rows, numCols, capLabel, mod) {
     numCols = numCols || [];
-    return h('div', { class: 'scroll' }, h('table', null,
+    var attrs = capLabel ? { class: 'scroll cap' + (mod ? ' ' + mod : ''), tabindex: '0', role: 'region', 'aria-label': capLabel, 'data-cap': capLabel } : { class: 'scroll' };
+    return h('div', attrs, h('table', null,
       h('thead', null, h('tr', null, head.map(function (c, i) { return h('th', { scope: 'col', class: numCols.indexOf(i) >= 0 ? 'num' : '', text: c }); }))),
       h('tbody', null, rows)));
   }
@@ -366,7 +376,7 @@
   function overviewPage(d) {
     var root = h('div', null, h('h1', { text: t('nav.overview') }));
     if (!d.projects.length) return root.appendChild(h('div', { class: 'card' }, empty('overview.none'), h('code', { text: 'crew project add' }))), root;
-    var list = h('div', { class: 'card', role: 'table', 'aria-label': t('nav.overview') });
+    var list = h('div', { class: 'card cap main', role: 'table', tabindex: '0', 'aria-label': t('nav.overview'), 'data-cap': t('nav.overview') });
     list.appendChild(h('div', { class: 'proj head', role: 'row' }, ['project', 'overview.tasks', 'overview.needs', 'overview.subagents', 'overview.sessions', 'overview.last'].map(function (k) { return h('span', { role: 'columnheader', text: t(k) }); })));
     d.projects.forEach(function (p) {
       var chips = TASK_ORDER.filter(function (s) { return p.tasks[s]; }).map(function (s) { return badge(s, t('state.' + s) + ' ' + p.tasks[s]); });
@@ -424,13 +434,13 @@
     // needs
     var needBody = h('div', null);
     if (d.needs.open.length) {
-      needBody.appendChild(h('ul', { class: 'list' }, d.needs.open.map(function (n) {
+      needBody.appendChild(cap(t('project.needs'), h('ul', { class: 'list' }, d.needs.open.map(function (n) {
         return h('li', null, '#' + n.id + ' ' + n.text + ' ', h('button', { class: 'link', text: t('need.done'), onclick: function () { post('/api/project/' + id + '/need/done', { id: n.id }); } }));
-      })));
+      }))));
     } else needBody.appendChild(empty('need.none'));
     needBody.appendChild(formRow([h('input', { type: 'text', name: 'text', required: true, 'aria-label': t('need.add'), placeholder: t('need.add'), size: 30 })], t('add'),
       function (f) { post('/api/project/' + id + '/need', { text: f.elements.text.value }, function () { f.reset(); }); }));
-    root.appendChild(card(t('project.needs'), needBody, d.needs.open.length ? 'alert' : ''));
+    root.appendChild(card(t('project.needs'), needBody, d.needs.open.length ? 'alert' : '', d.needs.open.length));
 
     // tasks
     var rows = d.tasks.slice().sort(function (a, b) { return TASK_ORDER.indexOf(a.state) - TASK_ORDER.indexOf(b.state); }).map(function (tk) {
@@ -441,38 +451,38 @@
         td(badge(tk.state)), td(String(tk.returns), true), td(tk.role || ''), td(reviewText(tk.review)), td(ago(tk.updated)));
     });
     root.appendChild(card(t('project.tasks'), d.tasks.length
-      ? table([t('task.title'), t('task.state'), t('task.returns'), t('task.role'), t('task.review'), t('task.updated')], rows, [2]) : empty('task.none')));
+      ? table([t('task.title'), t('task.state'), t('task.returns'), t('task.role'), t('task.review'), t('task.updated')], rows, [2], t('project.tasks'), 'tall') : empty('task.none'), '', d.tasks.length));
 
     var grid = h('div', { class: 'grid' });
     // live sessions
-    grid.appendChild(card(t('project.sessions'), d.sessions.length ? sessionTree(d.sessions, false, null) : empty('sessions.none')));
+    grid.appendChild(card(t('project.sessions'), d.sessions.length ? cap(t('project.sessions'), sessionTree(d.sessions, false, null)) : empty('sessions.none'), '', d.sessions.length));
     // work
     var workBody = h('div', null);
     if (!d.work.length) workBody.appendChild(empty('work.none'));
     d.work.forEach(function (s) {
       workBody.appendChild(h('h3', { text: s.name }));
-      workBody.appendChild(h('ul', { class: 'list' }, s.items.map(function (it) {
+      workBody.appendChild(cap(s.name, h('ul', { class: 'list' }, s.items.map(function (it) {
         return h('li', null, badge(it.state), ' ' + it.title + (it.note ? ' – ' + it.note : '') + ' ',
           h('button', { class: 'link', text: t('remove'), onclick: function () { post('/api/project/' + id + '/work/rm', { stream: s.name, title: it.title }); } }));
-      })));
+      }))));
     });
     workBody.appendChild(formRow([
       h('input', { type: 'text', name: 'stream', required: true, placeholder: t('work.stream'), 'aria-label': t('work.stream'), size: 10 }),
       h('input', { type: 'text', name: 'title', required: true, placeholder: t('work.item'), 'aria-label': t('work.item'), size: 16 }),
       h('select', { name: 'state', 'aria-label': t('task.state') }, ['todo', 'doing', 'done', 'waiting', 'parked'].map(function (s) { return h('option', { value: s, text: t('state.' + s) }); })),
     ], t('add'), function (f) { post('/api/project/' + id + '/work', { stream: f.elements.stream.value, title: f.elements.title.value, state: f.elements.state.value }, function () { f.reset(); }); }));
-    grid.appendChild(card(t('project.work'), workBody));
+    grid.appendChild(card(t('project.work'), workBody, '', d.work.reduce(function (n, s) { return n + s.items.length; }, 0)));
     // log
-    var logBody = h('div', null, d.log.length ? h('ul', { class: 'list' }, d.log.slice(0, 15).map(function (l) { return h('li', null, h('span', { class: 'muted', text: ago(l.time) + ' · ' + l.who + ' · ' }), l.text); })) : empty('log.none'));
+    var logBody = h('div', null, d.log.length ? cap(t('project.log'), h('ul', { class: 'list' }, d.log.slice(0, 15).map(function (l) { return h('li', null, h('span', { class: 'muted', text: ago(l.time) + ' · ' + l.who + ' · ' }), l.text); }))) : empty('log.none'));
     logBody.appendChild(formRow([h('input', { type: 'text', name: 'text', required: true, placeholder: t('log.add'), 'aria-label': t('log.add'), size: 30 })], t('add'),
       function (f) { post('/api/project/' + id + '/log', { who: 'board', text: f.elements.text.value }, function () { f.reset(); }); }));
-    grid.appendChild(card(t('project.log'), logBody));
+    grid.appendChild(card(t('project.log'), logBody, '', Math.min(d.log.length, 15)));
     // merge requests and validation
     grid.appendChild(card(t('project.mrs'), d.mrs.length
-      ? table(['!', t('task.title'), 'CI', t('mr.merged')], d.mrs.map(function (m) { return h('tr', null, td('!' + m.iid), td(m.title), td(m.ci ? badge(m.ci, m.ci) : ''), td(m.merged ? t('yes') : t('no'))); })) : empty('mr.none')));
+      ? table(['!', t('task.title'), 'CI', t('mr.merged')], d.mrs.map(function (m) { return h('tr', null, td('!' + m.iid), td(m.title), td(m.ci ? badge(m.ci, m.ci) : ''), td(m.merged ? t('yes') : t('no'))); }), [], t('project.mrs')) : empty('mr.none'), '', d.mrs.length));
     var vrows = [];
     Object.keys(d.validation).forEach(function (k) { (d.validation[k] || []).forEach(function (r) { vrows.push(h('tr', null, td(k), td(r.date), td(r.host), td(r.result))); }); });
-    grid.appendChild(card(t('project.validation'), vrows.length ? table([t('validation.id'), t('validation.date'), t('validation.host'), t('validation.result')], vrows) : empty('validation.none')));
+    grid.appendChild(card(t('project.validation'), vrows.length ? table([t('validation.id'), t('validation.date'), t('validation.host'), t('validation.result')], vrows, [], t('project.validation')) : empty('validation.none'), '', vrows.length));
     // handoffs
     var hitems = [];
     ['open', 'accepted', 'cancelled'].forEach(function (st) {
@@ -480,7 +490,7 @@
         hitems.push(h('li', null, badge(st === 'open' ? 'waiting' : st, t('handoff.' + st)), ' ' + (x.title || x.id) + (x.task ? ' · ' + x.task : '')));
       });
     });
-    grid.appendChild(card(t('project.handoffs'), hitems.length ? h('ul', { class: 'list' }, hitems) : empty('handoff.none')));
+    grid.appendChild(card(t('project.handoffs'), hitems.length ? cap(t('project.handoffs'), h('ul', { class: 'list' }, hitems)) : empty('handoff.none'), '', hitems.length));
     // lessons
     var L = d.lessons;
     var lb = h('div', null);
@@ -489,25 +499,25 @@
       lb.appendChild(h('p', { class: 'muted', text: t('lessons.summary', { total: L.total, keys: L.keys.length, candidates: L.candidates }) }));
       lb.appendChild(table([t('lessons.key'), t('lessons.count'), t('lessons.days'), t('lessons.last'), ''], L.keys.slice(0, 12).map(function (k) {
         return h('tr', null, td(k.key), td(String(k.count), true), td(String(k.days), true), td(k.last), td(k.candidate ? badge('waiting', t('lessons.candidate')) : ''));
-      }), [1, 2]));
+      }), [1, 2], t('project.lessons')));
     }
-    grid.appendChild(card(t('project.lessons'), lb));
+    grid.appendChild(card(t('project.lessons'), lb, '', L.exists ? L.total : null));
     root.appendChild(grid);
     // approval gates and hook wiring
     var gateRows = (d.gates || []).slice(0, 15).map(function (g) {
       var st = g.missing ? badge('failed', t('gate.missing')) : g.answer ? badge(g.answer === 'yes' ? 'done' : 'failed', t(g.answer === 'yes' ? 'gate.yes' : 'gate.no') + (g.auto ? ' (' + t('gate.auto') + ')' : '')) : badge('waiting', t('gate.asked'));
       return h('tr', null, td(ago(g.ts)), td(g.gate || ''), td(g.task || ''), td(st), td(g.missing ? g.detail : (g.note || g.detail || '')));
     });
-    grid.appendChild(card(t('project.gates'), gateRows.length ? table([t('gate.when'), t('gate.gate'), t('gate.task'), t('gate.state'), t('gate.detail')], gateRows) : empty('gate.none')));
+    grid.appendChild(card(t('project.gates'), gateRows.length ? table([t('gate.when'), t('gate.gate'), t('gate.task'), t('gate.state'), t('gate.detail')], gateRows, [], t('project.gates')) : empty('gate.none'), '', gateRows.length));
     var hs = d.hook_seen || { rows: [], missing: [] };
     var hbody = h('div', null);
     if (hs.missing.length) hbody.appendChild(h('p', { class: 'err', text: t('hooks.missing', { events: hs.missing.join(', ') }) }));
-    hbody.appendChild(table([t('hooks.event'), t('hooks.last')], hs.rows.map(function (r) { return h('tr', null, td(r.event), td(r.last ? ago(r.last) : t('hooks.never'))); })));
+    hbody.appendChild(table([t('hooks.event'), t('hooks.last')], hs.rows.map(function (r) { return h('tr', null, td(r.event), td(r.last ? ago(r.last) : t('hooks.never'))); }), [], t('project.hooks')));
     grid.appendChild(card(t('project.hooks'), hbody, hs.missing.length ? 'alert' : ''));
     // events
     root.appendChild(card(t('project.events'), d.events.length
-      ? h('div', { class: 'scroll' }, h('ul', { class: 'list' }, d.events.slice(0, 25).map(function (e) { return h('li', null, h('span', { class: 'muted', text: ago(e.ts) + ' · ' }), h('code', { text: e.type }), e.task ? ' ' + e.task : '', eventNote(e, d.show_text)); })))
-      : empty('events.none')));
+      ? cap(t('project.events'), h('ul', { class: 'list' }, d.events.slice(0, 25).map(function (e) { return h('li', null, h('span', { class: 'muted', text: ago(e.ts) + ' · ' }), h('code', { text: e.type }), e.task ? ' ' + e.task : '', eventNote(e, d.show_text)); })), 'tall')
+      : empty('events.none'), '', Math.min(d.events.length, 25)));
     return root;
   }
 
@@ -622,7 +632,7 @@
     }));
     var note = S.mask ? t('sessions.textPrivate') : d.show_text ? t('sessions.textOn') : t('sessions.textOff');
     return h('div', null, h('h1', { text: t('nav.sessions') }), kp, d.sessions.length ? filterBar(d.sessions) : null,
-      h('div', { class: 'card' }, d.sessions.length ? sessionTree(d.sessions, true, S.sf) : empty('sessions.none')),
+      h('div', { class: 'card wide' }, d.sessions.length ? cap(t('nav.sessions'), sessionTree(d.sessions, true, S.sf), 'main') : empty('sessions.none')),
       h('p', { class: 'muted', text: note }));
   }
 
@@ -786,7 +796,7 @@
     if (s.task) root.appendChild(h('div', { class: 's-task' }, h('span', { class: 'task-id', text: s.task.id }), v.taskTitle ? ' ' + v.taskTitle : ''));
     var sc = statsCard(d);
     var kids = d.children || [];
-    var kidBody = kids.length ? h('ul', { class: 'stree' }, kids.map(function (k) {
+    var kidBody = kids.length ? cap(t('sessions.subagents'), h('ul', { class: 'stree' }, kids.map(function (k) {
       var kv = SM.visible(k, S.mask);
       var li = h('li', { class: 'sess is-sub' },
         h('div', { class: 's-head' }, chip(SM.displayStatus(k)), k.role ? h('span', { class: 'role r-' + k.role, text: t('role.' + (ROLES.indexOf(k.role) >= 0 ? k.role : 'other')) }) : null,
@@ -796,8 +806,8 @@
       if (line) li.appendChild(line);
       if (kv.taskTitle) li.appendChild(h('div', { class: 's-task' }, kv.taskTitle));
       return li;
-    })) : null;
-    root.appendChild(h('div', { class: 'grid' }, sc, kidBody ? card(t('sessions.subagents'), kidBody) : null));
+    }))) : null;
+    root.appendChild(h('div', { class: 'grid' }, sc, kidBody ? card(t('sessions.subagents'), kidBody, '', kids.length) : null));
 
     // activity timeline
     var tl = DET.tl;
@@ -816,7 +826,7 @@
       ? h('button', { type: 'button', class: 'older', 'data-fid': 'older', disabled: DET.loading, onclick: loadOlder, text: DET.loading ? t('sessions.loading') : t('sessions.loadOlder') })
       : h('p', { class: 'muted', text: t('sessions.startReached') });
     // search: only the steps loaded so far; gaps are measured on the whole list, then rows are filtered
-    var listBox = h('div', { class: 'tl-box' });
+    var listBox = h('div', { class: 'tl-box cap main', tabindex: '0', role: 'region', 'aria-label': t('sessions.timeline'), 'data-cap': t('sessions.timeline') });
     var countEl = h('p', { class: 'muted tl-count', role: 'status', 'aria-live': 'polite' });
     function drawList() {
       var rows = SM.withGaps(tl.events).filter(function (r) { return SM.stepMatches(r.ev, DET.q, S.mask); });
@@ -834,7 +844,7 @@
     });
     drawList();
     var note = S.mask ? t('sessions.textPrivate') : d.show_text ? t('sessions.textOn') : t('sessions.tlTextOff');
-    root.appendChild(h('section', { class: 'card' }, h('h2', { text: t('sessions.timeline') }), h('p', { class: 'muted', text: note }), bar, search, countEl, more, listBox));
+    root.appendChild(h('section', { class: 'card' }, h('h2', null, t('sessions.timeline'), tl.events.length ? h('span', { class: 'count muted', text: ' · ' + plural('cap.items', tl.events.length) }) : null), h('p', { class: 'muted', text: note }), bar, search, countEl, more, listBox));
     return root;
   }
 
@@ -968,7 +978,7 @@
     var groups = SM.historyGroups(HIST.pages);
     if (!groups.length) root.appendChild(h('div', { class: 'card' }, empty('history.none')));
     groups.forEach(function (g) {
-      root.appendChild(h('section', { class: 'card' }, h('h2', { text: dayLabel(g.day) }), dayLine(g.totals), h('ul', { class: 'stree' }, g.rows.map(historyItem))));
+      root.appendChild(h('section', { class: 'card wide' }, h('h2', null, dayLabel(g.day), h('span', { class: 'count muted', text: ' · ' + plural('cap.items', g.rows.length) })), dayLine(g.totals), cap(dayLabel(g.day), h('ul', { class: 'stree' }, g.rows.map(historyItem)), 'tall')));
     });
     var last = HIST.pages[HIST.pages.length - 1];
     if (last) {
@@ -1012,9 +1022,9 @@
       return h('tr', null, td(m.model), td(m.engine), td(num(m.input), true), td(num(m.output), true), td(num(m.cache_write), true), td(num(m.cache_read), true), td(num(m.messages), true), td(money(m.cost), true));
     });
     root.appendChild(card(t('usage.models'), d.models.length
-      ? table([t('usage.model'), t('sessions.engine'), t('usage.input'), t('usage.output'), t('usage.cacheWrite'), t('usage.cacheRead'), t('usage.messages'), t('usage.cost')], rows, [2, 3, 4, 5, 6, 7]) : empty('usage.none')));
+      ? table([t('usage.model'), t('sessions.engine'), t('usage.input'), t('usage.output'), t('usage.cacheWrite'), t('usage.cacheRead'), t('usage.messages'), t('usage.cost')], rows, [2, 3, 4, 5, 6, 7], t('usage.models'), 'tall') : empty('usage.none'), '', d.models.length));
     root.appendChild(h('details', { class: 'card' }, h('summary', { text: t('usage.table') }),
-      table([t('usage.day'), t('usage.tokens')], d.daily.map(function (x) { return h('tr', null, td(x.day), td(num(x.total), true)); }), [1])));
+      table([t('usage.day'), t('usage.tokens')], d.daily.map(function (x) { return h('tr', null, td(x.day), td(num(x.total), true)); }), [1], t('usage.table'))));
     return root;
   }
 
@@ -1152,10 +1162,15 @@
     // never replace the page under a field the user is typing into
     if (S.last === sig) return;
     if (act && main.contains(act) && /^(INPUT|TEXTAREA|SELECT)$/.test(act.tagName) && act.value && S.lastRoute === S.routeKey) return;
+    var keep = {};
+    if (S.lastRoute === S.routeKey) {
+      [].forEach.call(main.querySelectorAll('[data-cap]'), function (el) { if (el.scrollTop) keep[el.getAttribute('data-cap')] = el.scrollTop; });
+    }
     S.last = sig;
     S.lastRoute = S.routeKey;
     main.textContent = '';
     main.appendChild(node);
+    [].forEach.call(main.querySelectorAll('[data-cap]'), function (el) { var y = keep[el.getAttribute('data-cap')]; if (y) el.scrollTop = y; });
   }
 
   function refresh(force) {
