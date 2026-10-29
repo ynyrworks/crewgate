@@ -32,6 +32,7 @@
   var evPrev = null;         // detectEvents state
   var events = [];           // errands waiting for a free character
   var blinks = {};           // id -> { seed, k, next, until }
+  var drawn = {};            // ids that have a desk since the last full rebuild (and "+id" for a pod's spare desk)
   var loungeSeats = {};      // room key -> [id|null] per lounge spot
 
   function now() { return window.performance && performance.now ? performance.now() : Date.now(); }
@@ -182,19 +183,28 @@
     return cache[key];
   }
   var TAGS = { orchestrator: 'LEAD', worker: 'WORK', reviewer: 'REVIEW', refuter: 'REFUTE', other: 'AGENT' };
+  function drawTextSmall(g, str, x, y, color) {
+    g.fillStyle = color;
+    for (var i = 0; i < str.length; i++) {
+      var gl = SP.glyphSmall(str.charAt(i));
+      if (!gl) continue;
+      for (var r = 0; r < gl.length; r++) for (var c = 0; c < 3; c++) if (gl[r].charAt(c) === '#') g.fillRect(x + i * 4 + c, y + r, 1, 1);
+    }
+  }
+  // a small plate in the role colour (3 x 5 pixel letters), a light top row and a darker bottom edge
   function tagCanvas(role) {
     var key = theme() + ':tag:' + role;
     if (!cache[key]) {
       var text = TAGS[role] || TAGS.other;
       var cols = SP.ROLE_COLORS[theme()][role] || { r: SP.PALETTES[theme()].G, R: SP.PALETTES[theme()].D };
-      var w = SP.textWidth(text) + 5;
-      var o = canvasOf(w, 9);
+      var w = SP.textWidthSmall(text) + 4;
+      var o = canvasOf(w, 7);
       var g = o.g;
       if (g) {
-        fill(g, cols.R, 1, 0, w - 2, 9); fill(g, cols.R, 0, 1, w, 7);
-        fill(g, cols.r, 1, 1, w - 2, 7); fill(g, cols.r, 0, 2, w, 5);
-        fill(g, '#ffffff', 2, 1, w - 4, 1, 0.35);
-        drawText(g, text, 2, 1, SP.PALETTES[theme()].o);
+        fill(g, cols.R, 0, 1, w, 6); fill(g, cols.R, 1, 0, w - 2, 7);
+        fill(g, cols.r, 1, 1, w - 2, 5);
+        fill(g, '#ffffff', 1, 1, w - 2, 1, 0.35);
+        drawTextSmall(g, text, 2, 1, SP.PALETTES[theme()].o);
       }
       cache[key] = o.c;
     }
@@ -413,42 +423,42 @@
     }
     return cache[key];
   }
-  // modes: off | glow | busy (code) | run (terminal with progress bar) | read | search | web
+  // modes: off | glow | busy (code) | run (terminal with progress bar) | read | search | web   (the screen is CELL.screen: 12 x 7)
   function drawScreen(g, sx, sy, mode, t, seed, beat) {
     var pal = SP.PALETTES[theme()];
     var i;
     if (mode === 'off') {
-      fill(g, pal.c, sx, sy, 14, 9); fill(g, pal.D, sx + 1, sy + 1, 3, 1, 0.8); fill(g, pal.G, sx + 10, sy + 6, 3, 2, 0.35);
+      fill(g, pal.c, sx, sy, 12, 7); fill(g, pal.D, sx + 1, sy + 1, 3, 1, 0.8); fill(g, pal.G, sx + 8, sy + 5, 3, 1, 0.35);
     } else if (mode === 'glow') {
-      fill(g, pal.I, sx, sy, 14, 9);
-      [[8, 2], [6, 4], [9, 6]].forEach(function (p) { fill(g, pal.Q, sx + 2, sy + p[1], p[0], 1, 0.7); });
+      fill(g, pal.I, sx, sy, 12, 7);
+      [[7, 1], [5, 3], [8, 5]].forEach(function (p) { fill(g, pal.Q, sx + 2, sy + p[1], p[0], 1, 0.7); });
     } else if (mode === 'busy') {
-      fill(g, pal.c, sx, sy, 14, 9);
+      fill(g, pal.c, sx, sy, 12, 7);
       var pat = codePattern(seed);
       var scroll = Math.floor(t / 420);
-      for (i = 0; i < 4; i++) {
+      for (i = 0; i < 3; i++) {
         var x = sx + 1;
-        pat[(i + scroll) % pat.length].forEach(function (tk) { x += tk[0]; fill(g, pal[CODE_COLORS[tk[2]]], x, sy + 1 + i * 2, Math.min(tk[1], sx + 13 - x), 1); x += tk[1]; });
+        pat[(i + scroll) % pat.length].forEach(function (tk) { x += tk[0]; fill(g, pal[CODE_COLORS[tk[2]]], x, sy + 1 + i * 2, Math.max(0, Math.min(tk[1], sx + 11 - x)), 1); x += tk[1]; });
       }
-      fill(g, pal.w, sx + 1 + ((scroll * 3 + seed) % 9), sy + 7, 1, 1, beat ? 1 : 0.25);
+      fill(g, pal.w, sx + 1 + ((scroll * 3 + seed) % 8), sy + 6, 1, 1, beat ? 1 : 0.25);
     } else if (mode === 'run') {
-      fill(g, pal.c, sx, sy, 14, 9);
+      fill(g, pal.c, sx, sy, 12, 7);
       var sc = Math.floor(t / 700);
-      for (i = 0; i < 3; i++) fill(g, pal.l, sx + 1, sy + 1 + i * 2, 3 + (((i + sc) * 5 + seed) % 8), 1, i === 2 ? 1 : 0.7);
-      fill(g, pal.D, sx + 1, sy + 7, 12, 1); fill(g, pal.l, sx + 1, sy + 7, Math.max(1, Math.floor(12 * ((t / 3500) % 1))), 1);
+      for (i = 0; i < 2; i++) fill(g, pal.l, sx + 1, sy + 1 + i * 2, 3 + (((i + sc) * 5 + seed) % 7), 1, i === 1 ? 1 : 0.7);
+      fill(g, pal.D, sx + 1, sy + 5, 10, 1); fill(g, pal.l, sx + 1, sy + 5, Math.max(1, Math.floor(10 * ((t / 3500) % 1))), 1);
     } else if (mode === 'read') {
-      fill(g, pal.w, sx, sy, 14, 9);
+      fill(g, pal.w, sx, sy, 12, 7);
       var sr = Math.floor(t / 650);
-      for (i = 0; i < 4; i++) fill(g, i % 2 ? pal.G : pal.D, sx + 1, sy + 1 + i * 2, 7 + ((i + sr) * 3 % 6), 1);
+      for (i = 0; i < 3; i++) fill(g, i % 2 ? pal.G : pal.D, sx + 1, sy + 1 + i * 2, 6 + ((i + sr) * 3 % 5), 1);
     } else if (mode === 'search') {
-      fill(g, pal.C, sx, sy, 14, 9);
-      var ss = Math.floor(t / 500) % 3;
-      for (i = 0; i < 3; i++) { fill(g, i === ss ? pal.k : pal.G, sx + 1, sy + 1 + i * 3, 2, 2); fill(g, pal.I, sx + 4, sy + 1 + i * 3, 7 - i, 1); fill(g, pal.Q, sx + 4, sy + 2 + i * 3, 5, 1); }
+      fill(g, pal.C, sx, sy, 12, 7);
+      var ss = Math.floor(t / 500) % 2;
+      for (i = 0; i < 2; i++) { fill(g, i === ss ? pal.k : pal.G, sx + 1, sy + 1 + i * 3, 2, 2); fill(g, pal.I, sx + 4, sy + 1 + i * 3, 7 - i, 1); fill(g, pal.Q, sx + 4, sy + 2 + i * 3, 5, 1); }
     } else if (mode === 'web') {
-      fill(g, pal.I, sx, sy, 14, 9);
-      g.fillStyle = pal.Q; ellFill(g, sx + 7, sy + 4, 4, 4);
-      fill(g, pal.C, sx + 4, sy + 4, 6, 1, 0.8); fill(g, pal.C, sx + 7, sy, 1, 9, 0.8);
-      fill(g, pal.l, sx + 5 + (Math.floor(t / 600) % 3), sy + 2, 2, 2);
+      fill(g, pal.I, sx, sy, 12, 7);
+      g.fillStyle = pal.Q; ellFill(g, sx + 6, sy + 3, 3, 3);
+      fill(g, pal.C, sx + 3, sy + 3, 6, 1, 0.8); fill(g, pal.C, sx + 6, sy, 1, 7, 0.8);
+      fill(g, pal.l, sx + 4 + (Math.floor(t / 600) % 3), sy + 2, 2, 1);
     }
   }
 
@@ -764,7 +774,7 @@
       }
       if (seated && an.pose !== 'away' && an.coffee && calm) { g.fillStyle = pal.w; g.globalAlpha = 0.6; g.fillRect(d.x + CELL.mugX + 2, d.y + CELL.mugY - 2, 1, 2); g.globalAlpha = 1; }
       // name tag on the desk front: on hover, always for the orchestrator
-      if (seated && (hot || it.look.role === 'orchestrator')) g.drawImage(tagCanvas(it.look.role), Math.round(d.x + CELL.w / 2 - tagCanvas(it.look.role).width / 2), d.y + CELL.deskY + 9);
+      if (seated && (hot || it.look.role === 'orchestrator')) g.drawImage(tagCanvas(it.look.role), d.x + CELL.deskX + 3, d.y + CELL.deskY + 10);
     } });
   }
 
@@ -931,7 +941,12 @@
     var det = M.detectEvents(evPrev, rows);
     evPrev = det.next;
     if (!reduced()) events = events.concat(det.events).slice(-12);
-    layoutState = M.assign(layoutState, rows);
+    // a full rebuild (first view, back from another page) starts from nothing and packs the room; a refresh keeps every desk where it is
+    var compact = !current || !current.alive();
+    if (compact) { layoutState = null; drawn = {}; }
+    var placeOf = function (r) { return M.placeFor(r, Date.now()); };
+    M.markDrawn(drawn, rows, placeOf);
+    layoutState = M.assign(layoutState, M.visibleRows(rows, placeOf, drawn));
     var scene = new Scene(rows, ctx);
     current = scene;
     scene.build();
@@ -1024,7 +1039,9 @@
     this.plan = M.planFor(width);
     this.plan.dpr = dpr();
     var k = Math.max(1, Math.round(this.plan.scale * this.plan.dpr));
-    var lay = M.layout(layoutState, { maxCols: this.plan.maxCols });
+    var seated = {};
+    this.rows.forEach(function (r) { if (M.placeFor(r, Date.now()) === 'desk') seated[r.id] = true; });
+    var lay = M.layout(layoutState, { maxCols: this.plan.maxCols, drawn: drawn, seated: seated });
     this.lay = lay;
     this.roomsEl.textContent = '';
     this.rcs = [];
@@ -1185,8 +1202,12 @@
     var self = this;
     var c = this.ctx;
     this.listEl.textContent = '';
-    this.lay.rooms.forEach(function (room) {
-      room.desks.forEach(function (desk) {
+    var shown = {};
+    var order = [];
+    this.lay.rooms.forEach(function (room) { room.desks.forEach(function (desk) { if (desk.id && self.items[desk.id] && !shown[desk.id]) { shown[desk.id] = true; order.push({ id: desk.id }); } }); });
+    this.rows.forEach(function (r) { if (!shown[r.id]) order.push({ id: r.id }); });   // sessions without a desk (finished) stay in the list
+    [order].forEach(function (room) {
+      room.forEach(function (desk) {
         var it = desk.id && self.items[desk.id];
         if (!it) return;
         var d = it.desc;
@@ -1221,7 +1242,7 @@
       var main = document.getElementById('main');
       var w = Math.min((main && main.clientWidth) || 800, 1400) - 32;
       var plan = M.planFor(w);
-      if (!current.plan || plan.scale !== current.plan.scale || plan.maxCols !== current.plan.maxCols || current.plan.dpr !== dpr()) current.build();   // zoom changes devicePixelRatio too
+      if (!current.plan || plan.scale !== current.plan.scale || plan.maxCols !== current.plan.maxCols || current.plan.dpr !== dpr()) { layoutState = null; drawn = {}; layoutState = M.assign(null, M.visibleRows(current.rows, function (r) { return M.placeFor(r, Date.now()); }, M.markDrawn(drawn, current.rows, function (r) { return M.placeFor(r, Date.now()); }))); current.build(); }   // zoom changes devicePixelRatio too
     }, 200);
   });
   document.addEventListener('visibilitychange', kick);

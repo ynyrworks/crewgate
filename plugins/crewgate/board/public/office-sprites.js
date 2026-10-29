@@ -453,11 +453,11 @@
     ell(g, 10, 6, 7, 6, shaded('Q', 'I', 'C'));
     rect(g, 6, 12, 9, 3, 'I'); rect(g, 6, 12, 9, 1, 'Q');
   });
-  // monitor: bezel with a rim tone, a 14 x 9 screen at (3, 3), neck and foot
-  var monitor = make(20, 19, function (g) {
-    rect(g, 1, 1, 18, 13, 'D'); rect(g, 1, 1, 18, 1, 'G'); rect(g, 1, 1, 1, 13, 'G'); rect(g, 18, 2, 1, 12, 'c');
-    rect(g, 3, 3, 14, 9, 'c'); rect(g, 3, 12, 14, 1, 'c');
-    rect(g, 8, 14, 4, 2, 'D'); rect(g, 8, 14, 1, 2, 'G'); rect(g, 5, 16, 10, 2, 'D'); rect(g, 5, 16, 10, 1, 'G');
+  // monitor: bezel with a rim tone, a 12 x 7 screen at (3, 3), neck and foot (small next to the people, so faces read bigger)
+  var monitor = make(18, 16, function (g) {
+    rect(g, 1, 1, 16, 10, 'D'); rect(g, 1, 1, 16, 1, 'G'); rect(g, 1, 1, 1, 10, 'G'); rect(g, 16, 2, 1, 9, 'c');
+    rect(g, 3, 3, 12, 7, 'c');
+    rect(g, 7, 11, 4, 2, 'D'); rect(g, 7, 11, 1, 2, 'G'); rect(g, 4, 13, 10, 2, 'D'); rect(g, 4, 13, 10, 1, 'G');
   });
   var keyboard = make(16, 5, function (g) {
     rect(g, 1, 1, 14, 3, 'g'); rect(g, 1, 3, 14, 1, 'G');
@@ -577,9 +577,9 @@
 
   // Where things sit inside a 48 x 72 desk cell (renderer and tests share these).
   var CELL = {
-    w: 48, h: 72, charX: 18, charY: 28, deskX: 3, deskY: 53, monX: 3, monY: 38, kbX: 21, kbY: 56, handsX: 22, handsY: 54,
+    w: 48, h: 72, charX: 18, charY: 28, deskX: 3, deskY: 53, monX: 3, monY: 41, kbX: 21, kbY: 56, handsX: 22, handsY: 54,
     mugX: 37, mugY: 54, lampX: 37, lampY: 42, chairX: 20, chairY: 44, bubbleX: 16, bubbleY: 0, shadowX: 1, shadowY: 67,
-    screen: { x: 3, y: 3, w: 14, h: 9 }
+    screen: { x: 3, y: 3, w: 12, h: 7 }
   };
   // The lounge corner (offsets inside the lounge strip of a room; office-model.js places the seats with the same numbers).
   var LOUNGE = { sofaX: 2, sofaBackY: 8, sofaFrontY: 26, coffeeX: 70, coffeeY: 14, plantX: 98, plantY: 12 };
@@ -610,6 +610,18 @@
     '…': ['.....', '.....', '.....', '.....', '.....', '.....', '#.#.#'],
     ' ': ['.....', '.....', '.....', '.....', '.....', '.....', '.....']
   };
+  // 3 x 5 pixels, letters only: small name plates
+  var FONT_SMALL = {
+    A: ['.#.', '#.#', '###', '#.#', '#.#'], B: ['##.', '#.#', '##.', '#.#', '##.'], C: ['.##', '#..', '#..', '#..', '.##'], D: ['##.', '#.#', '#.#', '#.#', '##.'],
+    E: ['###', '#..', '##.', '#..', '###'], F: ['###', '#..', '##.', '#..', '#..'], G: ['.##', '#..', '#.#', '#.#', '.##'], H: ['#.#', '#.#', '###', '#.#', '#.#'],
+    I: ['###', '.#.', '.#.', '.#.', '###'], J: ['..#', '..#', '..#', '#.#', '.#.'], K: ['#.#', '#.#', '##.', '#.#', '#.#'], L: ['#..', '#..', '#..', '#..', '###'],
+    M: ['#.#', '###', '###', '#.#', '#.#'], N: ['##.', '#.#', '#.#', '#.#', '#.#'], O: ['.#.', '#.#', '#.#', '#.#', '.#.'], P: ['##.', '#.#', '##.', '#..', '#..'],
+    Q: ['.#.', '#.#', '#.#', '##.', '.##'], R: ['##.', '#.#', '##.', '#.#', '#.#'], S: ['.##', '#..', '.#.', '..#', '##.'], T: ['###', '.#.', '.#.', '.#.', '.#.'],
+    U: ['#.#', '#.#', '#.#', '#.#', '###'], V: ['#.#', '#.#', '#.#', '#.#', '.#.'], W: ['#.#', '#.#', '###', '###', '#.#'], X: ['#.#', '#.#', '.#.', '#.#', '#.#'],
+    Y: ['#.#', '#.#', '.#.', '.#.', '.#.'], Z: ['###', '..#', '.#.', '#..', '###']
+  };
+  function glyphSmall(ch) { return FONT_SMALL[String(ch).toUpperCase()] || null; }
+  function textWidthSmall(s) { return s.length ? s.length * 4 - 1 : 0; }
   var FONT_W = 5;
   var FONT_H = 7;
   // glyph(ch) -> 7 strings of 5 chars ('#' = ink). Unknown characters give null (the renderer skips them).
@@ -637,6 +649,6 @@
     LEGEND: LEGEND, PALETTES: PALETTES, PALETTE32: PALETTE32, SCENE: SCENE, ENGINES: ENGINES, ROLE_COLORS: ROLE_COLORS, HAIR: HAIR, SKIN: SKIN,
     STYLES: STYLES, ROLE_NAMES: ROLE_NAMES, FRAME_NAMES: FRAME_NAMES, CHAR_W: CW, CHAR_H: CH, HEAD_ROWS: HEAD_ROWS, ANIM: ANIM, blinkGap: blinkGap,
     character: character, SPRITES: SPRITES, CELL: CELL, LOUNGE: LOUNGE, ACCESSORIES: ACCESSORIES, size: size, toIndices: toIndices, all: all,
-    FONT: FONT, FONT_W: FONT_W, FONT_H: FONT_H, glyph: glyph, textWidth: textWidth, mixHex: mixHex
+    FONT: FONT, FONT_W: FONT_W, FONT_H: FONT_H, glyph: glyph, textWidth: textWidth, glyphSmall: glyphSmall, textWidthSmall: textWidthSmall, FONT_SMALL: FONT_SMALL, mixHex: mixHex
   };
 }));

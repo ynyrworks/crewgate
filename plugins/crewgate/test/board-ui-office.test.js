@@ -500,3 +500,87 @@ test('office page strings describe the v3 office', () => {
   assert.match(table('zh-TW')['office.states'], /門/);
   assert.match(table('zh-TW')['office.states'], /沙發/);
 });
+
+test('layout: pods collapse when nobody sits there, spare desk only with seated people, no jumping on refresh', () => {
+  const T0 = Date.parse('2026-01-01T12:00:00Z');
+  const place = (r) => OM.placeFor(r, T0);
+  const old = new Date(T0 - OM.LOUNGE_AFTER_MS * 2).toISOString();
+  const cur = new Date(T0).toISOString();
+  const mk = (id, status, extra = {}) => row({ id, status, project: 'p1', lastActivity: cur, ...extra });
+  const kid = (id, parent, status, extra = {}) => mk(id, status, { parent, subagent: true, ...extra });
+  const rows = [
+    mk('P', 'working', { role: 'orchestrator' }), kid('a', 'P', 'working'), kid('b', 'P', 'done'), kid('c', 'P', 'done'),
+    mk('Q', 'done'),                                    // nobody there at all: finished
+    mk('R', 'idle', { lastActivity: old }),             // resting in the lounge: keeps one desk to return to, no spare
+    mk('S', 'working'),
+  ];
+  const build = (rs, drawn, st) => {
+    OM.markDrawn(drawn, rs, place);
+    const state = OM.assign(st || null, OM.visibleRows(rs, place, drawn));
+    const seated = {};
+    rs.forEach((r) => { if (place(r) === 'desk') seated[r.id] = true; });
+    return { state, lay: OM.layout(state, { maxCols: 4, drawn, seated }) };
+  };
+  const drawn = {};
+  const b = build(rows, drawn);
+  const room = b.lay.rooms[0];
+  const ids = room.desks.filter((d) => d.id).map((d) => d.id).sort();
+  assert.deepEqual(ids, ['P', 'R', 'S', 'a'], 'finished sessions get no desk');
+  assert.equal(room.desks.filter((d) => d.free).length, 2, 'spare desks only in pods with seated people (P and S), none for the lounge resident');
+  assert.equal(room.pods.length, 3, 'the finished pod Q is not drawn');
+  assert.equal(room.pods.find((p) => p.w === OM.CELL_W).h, OM.CELL_H, 'the lounge resident has a one-desk pod');
+  assert.ok(room.desks.length <= 6);
+  // a refresh in which b is still done and a goes done: nobody moves, a keeps its (empty) desk
+  const before = b.lay.pos;
+  const rows2 = rows.map((r) => (r.id === 'a' ? { ...r, status: 'done' } : r));
+  const b2 = build(rows2, drawn, b.state);
+  for (const id of ['P', 'a', 'R', 'S']) assert.deepEqual([b2.lay.pos[id].x, b2.lay.pos[id].y], [before[id].x, before[id].y], id);
+  // a full rebuild (nothing drawn yet) compacts: a is gone now and the pod shrinks to its orchestrator and a spare
+  const fresh = build(rows2, {});
+  assert.equal(fresh.lay.pos.a, undefined);
+  assert.ok(fresh.lay.rooms[0].desks.length < room.desks.length);
+  // a finished session that comes back active gets a desk again
+  const back = build(rows2.map((r) => (r.id === 'Q' ? { ...r, status: 'working' } : r)), drawn, b2.state);
+  assert.ok(back.lay.pos.Q);
+  // everything finished: no desks, but the room (lounge, door) is still there
+  const allDone = rows.map((r) => ({ ...r, status: 'done' }));
+  const d3 = {};
+  OM.markDrawn(d3, allDone, place);
+  const lay3 = OM.layout(OM.assign(null, OM.visibleRows(allDone, place, d3)), { maxCols: 3, drawn: d3 });
+  assert.equal(lay3.rooms.length, 1);
+  assert.equal(lay3.rooms[0].desks.length, 0);
+});
+
+test('layout: pods are packed like masonry, a tall pod does not stretch its neighbours', () => {
+  const kid = (id, parent) => row({ id, parent, subagent: true, project: 'p1' });
+  const rows = [row({ id: 'T', project: 'p1' })];
+  for (let i = 0; i < 4; i++) rows.push(kid('k' + i, 'T'));          // a 3 x 2 pod (5 people and a spare)
+  for (let i = 0; i < 2; i++) rows.push(row({ id: 'z' + i, project: 'p1' }));
+  const lay = OM.layout(OM.assign(null, rows), { maxCols: 2 });
+  const room = lay.rooms[0];
+  const tall = room.pods.find((p) => p.h === 2 * OM.CELL_H);
+  assert.ok(tall);
+  const small = room.pods.filter((p) => p.h === OM.CELL_H);
+  assert.equal(small.length, 2);
+  // small pods sit side by side with and underneath each other, not each in a row as tall as the tall pod
+  assert.ok(small.some((p) => p.y > tall.y), 'a small pod is packed below the first row');
+  const bottom = Math.max(...room.pods.map((p) => p.y + p.h));
+  assert.ok(bottom - room.pods[0].y <= 2 * OM.CELL_H + 2 * OM.POD_GAP, 'two rows are enough');
+  // no overlaps
+  room.pods.forEach((p, i) => room.pods.forEach((q, j) => {
+    if (i < j) assert.ok(p.x + p.w <= q.x || q.x + q.w <= p.x || p.y + p.h <= q.y || q.y + q.h <= p.y, `pods ${i} and ${j} overlap`);
+  }));
+  room.desks.forEach((d) => assert.ok(room.pods.some((p) => d.x >= p.x && d.x + OM.CELL_W <= p.x + p.w && d.y >= p.y && d.y + OM.CELL_H <= p.y + p.h), 'every desk is inside a pod'));
+  // earlier pods never move when another one is added
+  const more = OM.layout(OM.assign(OM.assign(null, rows), rows.concat(row({ id: 'zz', project: 'p1' }))), { maxCols: 2 }).rooms[0];
+  room.pods.forEach((p, i) => assert.deepEqual([more.pods[i].x, more.pods[i].y], [p.x, p.y]));
+});
+
+test('name plate font: 3 x 5 letters', () => {
+  for (const ch of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') { const g = SP.glyphSmall(ch); assert.equal(g.length, 5, ch); g.forEach((r) => assert.equal(r.length, 3, ch)); }
+  assert.equal(SP.glyphSmall('1'), null);
+  assert.equal(SP.textWidthSmall('LEAD'), 15);
+  assert.deepEqual(SP.CELL.screen, { x: 3, y: 3, w: 12, h: 7 });
+  const mon = SP.SPRITES.monitor;
+  assert.ok(SP.CELL.screen.x + SP.CELL.screen.w <= mon[0].length && SP.CELL.screen.y + SP.CELL.screen.h <= mon.length);
+});

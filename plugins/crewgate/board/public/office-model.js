@@ -231,54 +231,95 @@
     return n;
   }
 
-  // layout(state, opts { maxCols }) -> { rooms: [{ key, w, h, cols, pods: [{ x, y, w, h }], desks: [{ id, x, y, orch, free }] }], pos: { id: desk } }
-  // Pods are sized to the people in them: one desk per seat (holes included) plus one spare, 3 desks wide at most,
-  // another row per 3. Pods flow left to right and wrap when a row would be wider than maxCols full pods, so a refresh
-  // never reshuffles anything unless somebody joins or leaves a pod. Desk x/y is the top-left of its 48 x 72 cell.
+  // ---- which sessions get a desk
+  // A desk is drawn for a session that is (or was, since the last full rebuild) not finished. `drawn` is a map the page keeps
+  // between refreshes: once somebody has a desk it stays (empty) until the next full rebuild, so nobody jumps when others leave;
+  // a full rebuild starts from an empty map and compacts everything.
+  function visibleRows(rows, placeOf, drawn) {
+    var byId = {};
+    rows.forEach(function (r) { byId[r.id] = r; });
+    var keep = {};
+    rows.forEach(function (r) { if ((drawn && drawn[r.id]) || placeOf(r) !== 'out') keep[r.id] = true; });
+    Object.keys(keep).forEach(function (id) {   // a pod keeps its head: ancestors stay in the room structure
+      var cur = byId[id];
+      for (var n = 0; n < 8 && cur && cur.parent && cur.parent !== cur.id && byId[cur.parent]; n++) { keep[cur.parent] = true; cur = byId[cur.parent]; }
+    });
+    var out = rows.filter(function (r) { return keep[r.id]; });
+    return out.length ? out : rows;
+  }
+  function markDrawn(drawn, rows, placeOf) {
+    var alive = {};
+    rows.forEach(function (r) { alive[r.id] = true; alive['+' + r.id] = true; if (placeOf(r) !== 'out') drawn[r.id] = true; });
+    prune(drawn, alive);
+    return drawn;
+  }
+
+  // layout(state, opts { maxCols, drawn, seated }) -> { rooms: [{ key, w, h, cols, pods: [{ x, y, w, h }], desks: [{ id, x, y, orch, free }] }], pos: { id: desk } }
+  // Pods are sized to the people in them: one desk per drawn seat, plus one spare desk when somebody of the pod is seated
+  // (opts.seated: map of ids at their desk; all when omitted), at most 3 desks wide, another row per 3. A pod nobody has a desk
+  // in is not drawn. Pods are packed like masonry (each into the lowest free spot, left first), so a tall pod does not
+  // stretch its neighbours and earlier pods never move when a later one appears. Desk x/y is the top-left of its 48 x 72 cell.
   function layout(state, opts) {
     var maxCols = Math.max(1, Math.floor((opts && opts.maxCols) || 1));
-    var budget = maxCols * POD_W + (maxCols - 1) * POD_GAP;
+    var drawn = opts && opts.drawn;
+    var seatedMap = opts && opts.seated;
+    var STEP = POD_GAP;                                   // the packing grid: 6 px, every pod width plus gap is a multiple
+    var budget = maxCols * (POD_W + POD_GAP);
+    var cells = Math.floor(budget / STEP);
     var pos = {};
     var rooms = state.roomOrder.map(function (key) {
       var room = state.rooms[key];
-      var heads = room.pods.length ? room.pods : [null];
-      var specs = heads.map(function (head) {
-        var seats = head ? [head].concat(room.kids[head] || []) : [];
-        var total = head ? seats.length + 1 : 1;
-        var cols = Math.min(POD_COLS, total);
-        return { head: head, seats: seats, total: total, cols: cols, rows: Math.max(POD_MIN_ROWS, Math.ceil(total / POD_COLS)), w: cols * CELL_W };
-      });
-      var lines = [];
-      var cur = null;
-      specs.forEach(function (sp) {
-        if (!cur || cur.w + POD_GAP + sp.w > budget) { cur = { specs: [], w: 0, rows: POD_MIN_ROWS }; lines.push(cur); }
-        sp.x = ROOM_PAD + (cur.specs.length ? cur.w + POD_GAP : 0);
-        cur.w = (cur.specs.length ? cur.w + POD_GAP : 0) + sp.w;
-        cur.rows = Math.max(cur.rows, sp.rows);
-        cur.specs.push(sp);
-      });
+      var sky = [];
+      for (var i = 0; i < cells; i++) sky.push(0);
       var pods = [];
       var desks = [];
-      var y = WALL_H + ROOM_PAD;
+      var top = WALL_H + ROOM_PAD;
       var widest = 0;
-      var cols = 1;
-      lines.forEach(function (line) {
-        widest = Math.max(widest, line.w);
-        cols = Math.max(cols, line.specs.length);
-        line.specs.forEach(function (sp) {
-          pods.push({ x: sp.x, y: y, w: sp.w, h: sp.rows * CELL_H });
-          for (var s = 0; s < sp.total; s++) {
-            var p = slotPos(s, sp.cols);
-            var desk = { id: sp.seats[s] || null, x: sp.x + p.col * CELL_W, y: y + p.row * CELL_H, orch: s === 0 && !!sp.head, free: !sp.seats[s] };
-            desks.push(desk);
-            if (desk.id) pos[desk.id] = desk;
-          }
+      var bottom = 0;
+      var xs = {};
+      room.pods.forEach(function (head) {
+        if (!head) return;
+        var seats = [head].concat(room.kids[head] || []);
+        var show = seats.map(function (id) { return !!id && (!drawn || !!drawn[id]); });
+        if (!show.some(Boolean)) return;
+        var anySeated = !seatedMap || seats.some(function (id) { return id && seatedMap[id]; });
+        var spare = !!(drawn && drawn['+' + head]) || anySeated;
+        if (drawn && spare) drawn['+' + head] = true;
+        if (seats.length >= POD_COLS && seats.length % POD_COLS === 0) spare = false;   // a spare desk never opens a new row on its own
+        var total = seats.length + (spare ? 1 : 0);
+        var cols = Math.min(POD_COLS, total);
+        var slots = [];
+        for (var s = 0; s < total; s++) if (s >= seats.length || show[s]) slots.push(s);
+        var rowsN = 1;
+        slots.forEach(function (sl) { rowsN = Math.max(rowsN, slotPos(sl, cols).row + 1); });
+        var w = cols * CELL_W;
+        var h = rowsN * CELL_H;
+        var need = Math.ceil((w + POD_GAP) / STEP);
+        var bestX = 0;
+        var bestY = Infinity;
+        for (var x0 = 0; x0 + need <= cells; x0++) {
+          var yy = 0;
+          for (var k = 0; k < need; k++) yy = Math.max(yy, sky[x0 + k]);
+          if (yy < bestY) { bestY = yy; bestX = x0; }
+        }
+        if (bestY === Infinity) { bestX = 0; bestY = Math.max.apply(null, sky); }   // wider than the budget: stack below
+        for (var k2 = 0; k2 < need && bestX + k2 < cells; k2++) sky[bestX + k2] = bestY + h + POD_GAP;
+        var px = ROOM_PAD + bestX * STEP;
+        var py = top + bestY;
+        pods.push({ x: px, y: py, w: w, h: h });
+        xs[px] = true;
+        widest = Math.max(widest, bestX * STEP + w);
+        bottom = Math.max(bottom, bestY + h);
+        slots.forEach(function (sl) {
+          var p = slotPos(sl, cols);
+          var desk = { id: seats[sl] || null, x: px + p.col * CELL_W, y: py + p.row * CELL_H, orch: sl === 0, free: !seats[sl] };
+          desks.push(desk);
+          if (desk.id) pos[desk.id] = desk;
         });
-        y += line.rows * CELL_H + POD_GAP;
       });
       var rw = Math.max(MIN_ROOM_W, ROOM_PAD * 2 + widest);
-      var lounge = { x: ROOM_PAD, y: y - POD_GAP + 4, w: rw - ROOM_PAD * 2, h: LOUNGE_H };
-      return { key: key, cols: cols, w: rw, h: lounge.y + LOUNGE_H + 6, pods: pods, desks: desks, lounge: lounge, spots: loungeSpots(lounge), door: doorFor(rw) };
+      var lounge = { x: ROOM_PAD, y: top + bottom + 4, w: rw - ROOM_PAD * 2, h: LOUNGE_H };
+      return { key: key, cols: Math.max(1, Object.keys(xs).length), w: rw, h: lounge.y + LOUNGE_H + 6, pods: pods, desks: desks, lounge: lounge, spots: loungeSpots(lounge), door: doorFor(rw) };
     });
     return { rooms: rooms, pos: pos };
   }
@@ -379,7 +420,7 @@
 
   return {
     CELL_W: CELL_W, CELL_H: CELL_H, POD_W: POD_W, POD_GAP: POD_GAP, ROOM_PAD: ROOM_PAD, WALL_H: WALL_H, ROLES: ROLES,
-    LOUNGE_H: LOUNGE_H, LOUNGE_AFTER_MS: LOUNGE_AFTER_MS, DOOR_W: DOOR_W, ACCS: ACCS, toolAct: toolAct, placeFor: placeFor, detectEvents: detectEvents, loungeSpots: loungeSpots, pickActor: pickActor, prune: prune, LOUNGE_MAX: LOUNGE_MAX, MIN_ROOM_W: MIN_ROOM_W, doorFor: doorFor, fillSlots: fillSlots,
+    LOUNGE_H: LOUNGE_H, LOUNGE_AFTER_MS: LOUNGE_AFTER_MS, DOOR_W: DOOR_W, ACCS: ACCS, toolAct: toolAct, placeFor: placeFor, detectEvents: detectEvents, loungeSpots: loungeSpots, visibleRows: visibleRows, markDrawn: markDrawn, pickActor: pickActor, prune: prune, LOUNGE_MAX: LOUNGE_MAX, MIN_ROOM_W: MIN_ROOM_W, doorFor: doorFor, fillSlots: fillSlots,
     shownStatus: shownStatus, activityKind: activityKind, toolKind: toolKind, animFor: animFor, hash: hash, looks: looks,
     STYLES: STYLES, HAIRS: HAIRS, SKINS: SKINS, slotPos: slotPos, rootOf: rootOf, assign: assign, layout: layout, planFor: planFor, describe: describe, activityLine: activityLine
   };
