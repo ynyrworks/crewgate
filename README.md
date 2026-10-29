@@ -246,6 +246,7 @@ codex plugin marketplace add ynyrworks/crewgate
 codex plugin add crewgate@crewgate
 ```
 
+- **Upgrading:** run only `codex plugin marketplace upgrade crewgate`; it refreshes the installed plugin, so there is no need to run `codex plugin add` again.
 - **Trust the hooks once.** Open `/hooks` in Codex and trust the crewgate hooks; do it again after a plugin update changes a command.
 - **Set up the project:** `crew init --engine codex` adds `.codex/agents/crew-reviewer.toml`, `crew-refuter.toml` and a marked block in `AGENTS.md` (existing text is kept).
 - **Codex as a worker** (from a Claude or a Codex orchestrator): `crew task run <id> --engine codex`. Codex edits files in the task's worktree; crewgate commits (the Codex sandbox cannot), writes the report and returns the task. Failures commit nothing and leave the worktree for inspection.

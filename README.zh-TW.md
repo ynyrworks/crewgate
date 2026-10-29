@@ -227,6 +227,7 @@ codex plugin marketplace add ynyrworks/crewgate
 codex plugin add crewgate@crewgate
 ```
 
+- **升級：** 只需執行 `codex plugin marketplace upgrade crewgate`，它會更新已安裝的外掛，不必再執行 `codex plugin add`。
 - **hook 要信任一次。** 在 Codex 輸入 `/hooks` 信任 crewgate 的 hook；外掛更新而指令字串改變時要再信任一次。
 - **設定專案：** `crew init --engine codex` 會新增 `.codex/agents/crew-reviewer.toml`、`crew-refuter.toml`，以及 `AGENTS.md` 裡有標記的區塊（既有內容不動）。
 - **Codex 當工人**（統籌可以是 Claude 或 Codex）：`crew task run <id> --engine codex`。Codex 在任務的 worktree 內改檔；commit 由 crewgate 做（Codex 沙盒做不到），並寫報告、把任務交回。失敗時不 commit，worktree 原樣保留供檢查。
