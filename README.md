@@ -171,6 +171,13 @@ All screenshots come from a fully fictional demo (`node scripts/demo-board.js`, 
   <img alt="Sessions" src="docs/images/sessions-light.png" width="100%">
 </picture>
 
+**Office (experimental): the same sessions as a small pixel-art office, one room per project.** Hats show the role, shirt colour the engine; bubbles show thinking, tool use, writing and "waiting for you". Drawn from scratch on a canvas, no external assets, still works with a keyboard through the list under it.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/office-dark.png">
+  <img alt="Office: sessions as pixel-art characters at desks" src="docs/images/office-light.png" width="100%">
+</picture>
+
 **Usage: tokens and estimated cost per model and day.**
 
 <picture>

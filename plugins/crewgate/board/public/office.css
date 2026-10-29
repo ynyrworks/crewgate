@@ -1,0 +1,36 @@
+:root {
+  --o-claude: #f29b6b; --o-codex: #6fa0f2;
+  --o-orchestrator: #f7c531; --o-worker: #56c27a; --o-reviewer: #9b72e0; --o-refuter: #ef6a64;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --o-claude: #f0a074; --o-codex: #82aef7;
+    --o-orchestrator: #ffd24d; --o-worker: #6bd68f; --o-reviewer: #b08cf2; --o-refuter: #ff827b;
+  }
+}
+.o-legend { margin: 0 0 12px; }
+.o-legend p { margin: 2px 0; }
+.o-key { display: inline-flex; align-items: center; gap: 5px; margin-right: 14px; font-size: 13px; color: var(--text-2); }
+.o-sw { width: 12px; height: 12px; border-radius: 2px; border: 1px solid var(--border); display: inline-block; }
+.o-sw.e-claude { background: var(--o-claude); }
+.o-sw.e-codex { background: var(--o-codex); }
+.o-sw.h-orchestrator { background: var(--o-orchestrator); }
+.o-sw.h-worker { background: var(--o-worker); }
+.o-sw.h-reviewer { background: var(--o-reviewer); }
+.o-sw.h-refuter { background: var(--o-refuter); }
+.o-stage { position: relative; margin: 0 0 14px; }
+.o-rooms { display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: flex-start; }
+.o-room { max-width: 100%; }
+.o-room-name { font-size: 14px; margin: 0 0 6px; overflow-wrap: anywhere; }
+.o-canvas { display: block; max-width: 100%; image-rendering: pixelated; image-rendering: crisp-edges; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); touch-action: manipulation; }
+.o-tip { position: absolute; z-index: 5; width: max-content; max-width: min(280px, 100%); padding: 8px 10px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 14px rgba(0, 0, 0, .25); pointer-events: none; font-size: 13px; overflow-wrap: anywhere; }
+.o-tip[hidden] { display: none; }
+.o-tip-head { font-weight: 600; margin-bottom: 2px; }
+.o-tip-line { line-height: 1.35; }
+.o-tip-hint { margin-top: 4px; font-size: 11px; color: var(--accent); }
+.o-list { list-style: none; margin: 0; padding: 0; }
+.o-li { border-bottom: 1px solid var(--border); }
+.o-li.is-waiting { border-left: 3px solid var(--warn); padding-left: 8px; }
+.o-item { display: block; padding: 6px 4px; color: var(--text); text-decoration: none; overflow-wrap: anywhere; }
+.o-item:hover { background: var(--track); }
+@media (max-width: 520px) { .o-tip { max-width: calc(100vw - 32px); } }
