@@ -418,6 +418,22 @@ the subagent session; prompt text and tool targets are included only when `board
 live activity. Crewgate events of the session (from the project's event tail) are merged by time into the span the page
 covers.
 
+History. `GET /api/history` (`board/history.js`) serves sessions older than the watcher's 24-hour window (and the newer ones, too: it lists everything
+inside `days`, 1-90, default 7). Discovery walks the known layouts of the Claude and Codex roots (Codex date folders out of range are not opened), entry by
+entry, charging every directory open and entry to a budget (40,000, then `truncated: true`), and takes one `stat` per transcript; a subagent file (`<session>/subagents/agent-*.jsonl`) belongs to its parent session file, and a group is as new
+as its newest member. Groups are sorted by (whole-millisecond mtime, id) descending, newest first, and a page is 50 sessions (`limit` up to 100). The cursor
+`next` is `<ms>-<id>` of the last session looked at and `before` means strictly after it in that order, so ties are never skipped or
+repeated even when the examination cap or the page size ends inside one; at most 300
+candidates have their head and tail read per request (the cwd, model and branch come from `watcher.readInfo`, remembered per file
+and size), so a project filter that skips many sessions continues through the cursor instead of reading without end. The project is
+resolved from the cwd like on the Sessions page; `project=-` means none. Statistics come from `session-stats` with its per-call byte
+budget in newest-first order (parent, then its subagents), so what does not fit is `partial` and continues on the next request. Rows
+have the Sessions row shape with `status: done`; `started` is the first record time, `day` the calendar day of the last activity for the
+viewer's `tz` (minutes east of UTC), `day_totals` sum the rows of the page. Row ids are `hashId(file)` as everywhere; the module
+remembers a bounded id to file map, and `GET /api/session/<id>` falls back to it (or, after a restart, to hashing the paths under the
+roots), so ids never name a path the caller chose. The page keeps pages in memory, fetches again a page whose rows are `partial`, and
+reloads the first page when you come back to it.
+
 ## 15. Testing and acceptance
 
 - Unit tests per module; hook tests feed fixture payloads on stdin and assert stdout,

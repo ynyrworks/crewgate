@@ -317,7 +317,7 @@
     if (!p.length) return { page: 'overview' };
     if (p[0] === 'p' && p[1]) return p[2] === 'settings' ? { page: 'psettings', id: p[1] } : { page: 'project', id: p[1] };
     if (p[0] === 's' && p[1]) return { page: 'session', id: p[1] };
-    if (['sessions', 'office', 'usage', 'settings'].indexOf(p[0]) >= 0) return { page: p[0] };
+    if (['sessions', 'office', 'history', 'usage', 'settings'].indexOf(p[0]) >= 0) return { page: p[0] };
     return { page: 'overview' };
   }
 
@@ -327,7 +327,7 @@
     $('skip').textContent = t('skip');
     $('nav').setAttribute('aria-label', t('nav'));
     var page = S.route.page;
-    var items = [['overview', '#/', t('nav.overview')], ['sessions', '#/sessions', t('nav.sessions')], ['office', '#/office', t('office.nav')], ['usage', '#/usage', t('nav.usage')], ['settings', '#/settings', t('nav.settings')]];
+    var items = [['overview', '#/', t('nav.overview')], ['sessions', '#/sessions', t('nav.sessions')], ['history', '#/history', t('nav.history')], ['office', '#/office', t('office.nav')], ['usage', '#/usage', t('nav.usage')], ['settings', '#/settings', t('nav.settings')]];
     var nav = $('nav');
     nav.textContent = '';
     items.forEach(function (it) {
@@ -780,7 +780,7 @@
     if (s.role) top.appendChild(h('span', { class: 'role r-' + s.role, text: t('role.' + (ROLES.indexOf(s.role) >= 0 ? s.role : 'other')) }));
     top.appendChild(h('span', { class: 's-time muted', text: ago(s.lastActivity) }));
     var root = h('div', null,
-      h('p', null, h('a', { href: '#/sessions', text: '← ' + t('sessions.back') })),
+      h('p', null, h('a', { href: d.history ? '#/history' : '#/sessions', text: '← ' + (d.history ? t('nav.history') : t('sessions.back')) })),
       h('h1', { text: title }), top, h('div', { class: 's-meta muted', text: meta.join(' · ') }));
     if (SM.validId(s.parent)) root.appendChild(h('p', null, h('a', { href: '#/s/' + s.parent, text: t('sessions.parent') })));
     if (s.task) root.appendChild(h('div', { class: 's-task' }, h('span', { class: 'task-id', text: s.task.id }), v.taskTitle ? ' ' + v.taskTitle : ''));
@@ -839,6 +839,150 @@
   }
 
   var FAMS = ['opus', 'sonnet', 'haiku', 'openai', 'other'];
+  // ------------------------------------------------------------------ history (#/history)
+  // Pages of past sessions (older ones included), newest first, grouped by day. Each page is one /api/history
+  // answer; "load more" appends the next one. A page with rows that are still being counted is fetched again on the
+  // refresh tick until the numbers are complete.
+  var HIST = { days: 7, project: '', pages: [], projects: [], loaded: false, loading: false, error: null, gen: 0 };
+  var HIST_RANGES = [1, 7, 30, 90];
+
+  function histQuery(before) {
+    var q = ['days=' + HIST.days, 'tz=' + (-new Date().getTimezoneOffset())];
+    if (HIST.project) q.push('project=' + encodeURIComponent(HIST.project));
+    if (before !== null && before !== undefined) q.push('before=' + encodeURIComponent(before));
+    return '?' + q.join('&');
+  }
+
+  function histGet(before) {
+    var gen = HIST.gen;
+    return api('/api/history' + histQuery(before)).then(function (res) {
+      if (gen !== HIST.gen) return null;   // the range or project changed meanwhile
+      if (res.status >= 400) throw new Error(res.data.error ? res.data.error.message : 'Error');
+      return { before: before === undefined ? null : before, rows: res.data.sessions, totals: res.data.day_totals, next: res.data.next, truncated: !!res.data.truncated, showText: !!res.data.show_text };
+    });
+  }
+
+  function histReset() { HIST.gen++; HIST.loaded = false; HIST.pages = []; HIST.error = null; HIST.loading = false; S.last = ''; }
+  function histSave() { store('crew.historyFilter', JSON.stringify({ days: HIST.days, project: HIST.project })); }
+
+  function histDraw() {
+    var sig = 'h' + S.lang + S.mask + HIST.days + HIST.project + HIST.loading + (HIST.error || '') + JSON.stringify(HIST.pages);
+    render(historyPage(), sig);
+  }
+
+  function histMore() {
+    var last = HIST.pages[HIST.pages.length - 1];
+    if (HIST.loading || !last || last.next === null) return;
+    HIST.loading = true;
+    HIST.error = null;
+    histDraw();
+    var gen = HIST.gen;
+    histGet(last.next).then(function (p) {
+      if (gen !== HIST.gen) return;
+      HIST.loading = false;
+      if (p) HIST.pages.push(p);
+      histDraw();
+    }).catch(function (e) { if (gen !== HIST.gen) return; HIST.loading = false; HIST.error = e.message; histDraw(); });
+  }
+
+  // One refresh tick of the history page: first load, else refetch one page whose numbers are still growing, else just redraw.
+  function histTick() {
+    if (!HIST.loaded) {
+      HIST.loaded = true;
+      var gen = HIST.gen;
+      return Promise.all([histGet(), api('/api/overview')]).then(function (rs) {
+        if (gen !== HIST.gen || !rs[0]) return;
+        HIST.pages = [rs[0]];
+        HIST.projects = rs[1].status < 400 ? rs[1].data.projects.map(function (p) { return { id: p.id, name: p.name }; }) : [];
+        histDraw();
+      }).catch(function (e) { HIST.loaded = false; render(card(t('error'), h('p', { class: 'err', text: e.message })), 'herr' + S.lang); });
+    }
+    // board.show_text may have been switched elsewhere: cached rows carry (or lack) text, so start over when it differs
+    var gen2 = HIST.gen;
+    return api('/api/meta').then(function (res) {
+      if (gen2 !== HIST.gen) return null;
+      if (res.status < 400 && SM.textChanged(HIST.pages, !!res.data.show_text)) { histReset(); return histTick(); }
+      var i = -1;
+      HIST.pages.forEach(function (p, k) { if (i < 0 && SM.pagePartial(p)) i = k; });
+      if (i < 0) { histDraw(); return null; }
+      return histGet(HIST.pages[i].before).then(function (p) {
+        if (gen2 !== HIST.gen || !p) return;
+        if (SM.textChanged(HIST.pages, p.showText)) { histReset(); return histTick(); }
+        HIST.pages[i] = p;
+        histDraw();
+      });
+    }).catch(function () { histDraw(); });
+  }
+
+  function dayLabel(day) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(day));
+    if (!m) return String(day);
+    return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(S.lang, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function dayLine(d) {
+    if (!d) return null;
+    var parts = [plural('history.sessions', d.sessions), SM.fmtDuration(d.duration_ms)];
+    if (d.prompts) parts.push(plural('stats.linePrompts', d.prompts));
+    if (d.tool_calls) parts.push(plural('stats.lineTools', d.tool_calls));
+    if (d.tokens) parts.push(t('stats.lineTokens', { count: SM.compact(d.tokens) }));
+    if (d.cost !== null) parts.push(costText(d.cost, d.cost_complete));
+    return h('p', { class: 'muted day-total', text: parts.join(' · ') + (d.partial ? ' …' : '') });
+  }
+
+  function historyItem(r) {
+    var v = SM.visible(r, S.mask);
+    var name = (r.engine === 'codex' ? 'Codex' : 'Claude') + (r.model ? ' ' + r.model : '');
+    var head = h('div', { class: 's-head' },
+      h('span', { class: 's-name', text: name }),
+      h('a', { class: 's-link', href: '#/s/' + r.id, text: t('stats.open'), 'aria-label': t('stats.openFor', { name: name }) }),
+      h('span', { class: 's-time muted', text: (r.started ? timeText(Date.parse(r.started)) + ' – ' : '') + timeText(Date.parse(r.lastActivity)) }));
+    var meta = [];
+    if (r.subagent) meta.push(t('sessions.subagent'));
+    if (r.project) meta.push(pname({ id: r.project, name: r.project_name || r.project }));
+    if (v.folder) meta.push(v.folder);
+    if (v.branch) meta.push(v.branch);
+    var li = h('li', { class: 'sess' + (r.subagent ? ' is-sub' : '') }, head);
+    if (meta.length) li.appendChild(h('div', { class: 's-meta muted', text: meta.join(' · ') }));
+    var sl = statsLine(r);
+    li.appendChild(sl || h('div', { class: 's-stats muted', text: t('stats.partial') }));
+    if (v.title) li.appendChild(h('div', { class: 's-title', text: v.title }));
+    if (v.prompt) li.appendChild(h('div', { class: 's-snip' }, h('span', { class: 'muted', text: t('sessions.prompt') + ' ' }), v.prompt));
+    return li;
+  }
+
+  function historyPage() {
+    var pick = function (label, opts, cur, on) {
+      return h('label', { class: 'fl' }, h('span', { class: 'muted', text: label }),
+        h('select', { 'aria-label': label, onchange: function (e) { on(e.target.value); e.target.blur(); } },
+          opts.map(function (o) { return h('option', { value: o[0], selected: String(cur) === String(o[0]), text: o[1] }); })));
+    };
+    var ranges = HIST_RANGES.map(function (n) { return [n, n === 1 ? t('history.last1') : t('history.lastN', { count: n })]; });
+    var popts = [['', t('sessions.allProjects')]];
+    HIST.projects.forEach(function (p) { popts.push([p.id, pname(p)]); });
+    popts.push(['-', t('sessions.noProject')]);
+    var bar = h('div', { class: 'filters', role: 'group', 'aria-label': t('sessions.filters') },
+      pick(t('history.range'), ranges, HIST.days, function (v) { HIST.days = HIST_RANGES.indexOf(+v) >= 0 ? +v : 7; histSave(); histReset(); refresh(true); }),
+      pick(t('sessions.project'), popts, HIST.project, function (v) { HIST.project = v.slice(0, 40); histSave(); histReset(); refresh(true); }));
+    var root = h('div', null, h('h1', { text: t('nav.history') }), bar);
+    var groups = SM.historyGroups(HIST.pages);
+    if (!groups.length) root.appendChild(h('div', { class: 'card' }, empty('history.none')));
+    groups.forEach(function (g) {
+      root.appendChild(h('section', { class: 'card' }, h('h2', { text: dayLabel(g.day) }), dayLine(g.totals), h('ul', { class: 'stree' }, g.rows.map(historyItem))));
+    });
+    var last = HIST.pages[HIST.pages.length - 1];
+    if (last) {
+      root.appendChild(last.next !== null
+        ? h('p', null, h('button', { type: 'button', class: 'older', 'data-fid': 'more', disabled: HIST.loading, onclick: histMore, text: HIST.loading ? t('sessions.loading') : t('history.more') }))
+        : h('p', { class: 'muted', text: t('history.end') }));
+      if (HIST.pages.some(function (p) { return p.truncated; })) root.appendChild(h('p', { class: 'muted', text: t('history.truncated') }));
+    }
+    if (HIST.error) root.appendChild(h('p', { class: 'err', role: 'alert', text: HIST.error }));
+    var shown = HIST.pages.length && HIST.pages[0].showText;
+    root.appendChild(h('p', { class: 'muted', text: S.mask ? t('sessions.textPrivate') : shown ? t('sessions.textOn') : t('sessions.textOff') }));
+    return root;
+  }
+
   function usagePage(d) {
     var root = h('div', null, h('h1', { text: t('nav.usage') }));
     root.appendChild(h('div', { class: 'kpis' },
@@ -1042,6 +1186,12 @@
       }).then(done, fail);
       return;
     }
+    if (r.page !== 'history') HIST.loaded = false;   // coming back reloads the first page
+    if (r.page === 'history') {
+      if (force) S.last = '';
+      histTick().then(done, fail);
+      return;
+    }
     if (r.page === 'settings' || r.page === 'psettings') {
       if (!force && S.last.indexOf('settings') === 0) { done(); return; }   // do not refresh a form while editing
       var pid = r.page === 'psettings' ? r.id : null;
@@ -1072,6 +1222,7 @@
     S.lang = saved === 'zh-TW' || saved === 'en' ? saved : ((navigator.language || '').toLowerCase().indexOf('zh') === 0 ? 'zh-TW' : 'en');
     S.mask = store('crew.mask') === '1';
     try { S.sf = SM.cleanFilter(JSON.parse(store('crew.sessionFilter') || '{}')); } catch (e) { S.sf = SM.cleanFilter({}); }
+    try { var hf = JSON.parse(store('crew.historyFilter') || '{}'); if (HIST_RANGES.indexOf(hf.days) >= 0) HIST.days = hf.days; if (typeof hf.project === 'string') HIST.project = hf.project.slice(0, 40); } catch (e) { /* defaults */ }
     try { var so = JSON.parse(store('crew.sessionOpen') || '{}'); S.sopen = so && typeof so === 'object' && !Array.isArray(so) ? so : {}; } catch (e) { S.sopen = {}; }
     loadTables().then(function () {
       S.route = parseRoute();
