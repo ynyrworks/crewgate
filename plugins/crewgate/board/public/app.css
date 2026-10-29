@@ -218,3 +218,9 @@ button.older { margin: 0 0 10px; min-height: 36px; }
   .cap thead th { position: static; box-shadow: none; }
   .card.cap .proj.head { position: static; }
 }
+/* print: nothing is clipped, no fade hints */
+@media print {
+  .cap, .cap.tall, .cap.main, .update pre, .update .results { max-height: none; overflow: visible; background: none; }
+  .cap thead th { position: static; box-shadow: none; }
+  .card.cap .proj.head { position: static; }
+}

@@ -10,7 +10,7 @@ const read = (f) => fs.readFileSync(path.join(PUB, f), 'utf8');
 test('capped lists: focusable named scroll areas, no cap on phones, count strings in both languages', () => {
   const js = read('app.js');
   const css = read('app.css');
-  assert.match(js, /function cap\(label, child, mod\)[\s\S]*tabindex: '0'[\s\S]*role: 'region'[\s\S]*'aria-label': label/);
+  assert.match(js, /function cap\(key, label, child, mod\)[\s\S]*tabindex: '0'[\s\S]*role: 'region'[\s\S]*'aria-label': label/);
   assert.match(css, /\.cap \{[^}]*max-height: var\(--cap-h\)[^}]*overflow-y: auto/);
   const phone = css.slice(css.lastIndexOf('@media (max-width: 720px)'));
   assert.match(phone, /\.cap \{ max-height: none;/);
@@ -25,4 +25,15 @@ test('wide screens: fluid main up to 2400px and more grid columns', () => {
   assert.match(css, /main \{[^}]*max-width: 2400px/);
   assert.match(css, /@media \(min-width: 1600px\)/);
   assert.match(css, /@media \(min-width: 2200px\)/);
+});
+
+test('capped areas are keyed by structural ids, focus is restored and print is unclipped', () => {
+  const js = read('app.js');
+  const css = read('app.css');
+  const keys = [...js.matchAll(/data-cap': ([^,}]+)/g)].map((m) => m[1]);
+  assert.ok(keys.length >= 4);
+  for (const k of keys) assert.doesNotMatch(k, /\bt\(/, `data-cap must not use a translated title: ${k}`);
+  assert.doesNotMatch(js, /cap\(t\(/);
+  assert.match(js, /el\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(css, /@media print \{[^@]*\.cap[^}]*max-height: none; overflow: visible/);
 });
