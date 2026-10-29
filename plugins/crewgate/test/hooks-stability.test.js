@@ -8,7 +8,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { PassThrough } = require('node:stream');
 const H = require('./hooks-helpers');
-const { tmpDir } = require('./helpers');
+const { tmpDir, git } = require('./helpers');
+const project = require('../lib/core/project');
 const events = require('../lib/core/events');
 const hooklog = require('../lib/core/hooklog');
 const gitcmd = require('../lib/hooks/gitcmd');
@@ -55,8 +56,8 @@ test('detect: heredoc bodies are literal text, the command after them still coun
   assert.deepEqual(gitcmd.detect('cat <<-EOF\n\tgit push\n\tEOF\ngit merge a').map((x) => x.type), ['git.merge']);
   assert.deepEqual(gitcmd.detect('cat <<A <<B\ngit push\nA\ngit merge x\nB\ngit push o r').map((x) => x.data.refs), [['r']]);
   assert.deepEqual(gitcmd.detect('cat <<EOF\r\ngit push\r\nEOF\r\ngit merge a').map((x) => x.type), ['git.merge']);
-  // an unterminated heredoc swallows the rest, like the shell
-  assert.deepEqual(gitcmd.detect('cat <<EOF\ngit push'), []);
+  // safety: with no terminator line nothing is swallowed (a false event is better than a hidden push)
+  assert.deepEqual(gitcmd.detect('cat <<EOF\ngit push').map((x) => x.type), ['git.push']);
   // a here-string is not a heredoc
   assert.deepEqual(gitcmd.detect('cat <<<hello; git push o r').map((x) => x.data.refs), [['r']]);
 });
@@ -69,6 +70,32 @@ test('PostToolUse: a heredoc mentioning git merge / git push records nothing and
   assert.equal(H.evs(f, 'git.merge').length, 0);
   assert.equal(H.evs(f, 'git.push').length, 0);
   assert.equal(H.evs(f, 'gate.missing').length, 0);
+});
+
+test('detect: # starts a comment only at a word start, so a commented <<EOF opens no heredoc', () => {
+  assert.deepEqual(gitcmd.detect('echo ok # <<EOF\ngit push origin main').map((x) => x.data.refs), [['main']]);
+  assert.deepEqual(gitcmd.detect('git push origin main # <<EOF').map((x) => x.data.refs), [['main']]);
+  assert.deepEqual(gitcmd.detect('echo a#b; git push o r').map((x) => x.data.refs), [['r']]);
+  assert.deepEqual(gitcmd.detect('git push "#x" o').map((x) => x.data.refs), [['o']]);
+  assert.deepEqual(gitcmd.detect('# git push o x\ngit merge a').map((x) => x.type), ['git.merge']);
+});
+
+test('detect: a quoted heredoc delimiter is literal, an unquoted one loses its backslashes', () => {
+  // bash ends <<'E\OF' at a line E\OF; the real push after it must be seen
+  assert.deepEqual(gitcmd.detect("cat <<'E\\OF'\ngit push fake\nE\\OF\ngit push o real").map((x) => x.data.refs), [['real']]);
+  assert.deepEqual(gitcmd.detect('cat <<"E\\OF"\ngit push fake\nE\\OF\ngit push o real').map((x) => x.data.refs), [['real']]);
+  // unquoted E\OF means EOF
+  assert.deepEqual(gitcmd.detect('cat <<E\\OF\ngit push fake\nEOF\ngit push o real').map((x) => x.data.refs), [['real']]);
+  // the literal delimiter never appears: nothing is swallowed
+  assert.deepEqual(gitcmd.detect("cat <<'E\\OF'\ngit push o real\nEOF").map((x) => x.data.refs), [['real']]);
+});
+
+test('PostToolUse: a push after a commented <<EOF is recorded and reminded', () => {
+  const f = H.fixture({ config: { gates: { push: 'ask' } } });
+  H.start(f);
+  post(f, 'echo ok # <<EOF\ngit push origin main', 'cm1');
+  assert.equal(H.evs(f, 'git.push').length, 1);
+  assert.equal(H.evs(f, 'gate.missing').length, 1);
 });
 
 // ---------------------------------------------------------------- 3. hook error log
@@ -120,6 +147,9 @@ test('hook error log: counts by window, size cap, and a broken home never throws
   for (let i = 0; i < 6000; i++) hooklog.log('stop', 'error', `${i} ${big}`);
   assert.ok(fs.statSync(hooklog.file()).size <= hooklog.MAX_BYTES + 1000);
   assert.ok(hookErrors(f.home).length > 100);
+  // rotation renamed the full file instead of rewriting it; counts read both files
+  assert.ok(fs.existsSync(hooklog.oldFile()));
+  assert.ok(hooklog.counts().d7.total > hookErrors(f.home).length, 'counts read both files');
   // the home is a file: logging fails quietly
   const prev = process.env.CREWGATE_HOME;
   const blocker = path.join(tmpDir('crew-blk-'), 'file');
@@ -212,10 +242,19 @@ test('a Codex session started twice (counters moved in between) records one sess
 });
 
 // ---------------------------------------------------------------- 6. CLI + hook merge pair
-test('hook keeps quiet about a merge `crew task merge` recorded for the same branch within a minute', () => {
+const cliMerge = (f, over) => events.append(f.pid, {
+  type: 'git.merge', src: 'cli',
+  data: {
+    command: 'crew task merge', branches: ['feat/x'], flags: [], commit: 'abc123456789', via: 'cli-merge',
+    target: git(f.repo, 'rev-parse', '--abbrev-ref', 'HEAD'), root: project.normalizePath(git(f.repo, 'rev-parse', '--show-toplevel')), ...over,
+  },
+  key: `merge:${JSON.stringify(over || {})}`,
+});
+
+test('hook keeps quiet about the merge `crew task merge` recorded: same branches, same target, same work tree', () => {
   const f = H.fixture();
   H.start(f);
-  events.append(f.pid, { type: 'git.merge', src: 'cli', data: { command: 'crew task merge', branches: ['feat/x'], flags: [], commit: 'abc123456789', via: 'cli-merge' }, key: 'merge:feat/x:abc' });
+  cliMerge(f);
   post(f, 'git merge feat/x', 'm1', { stdout: 'Merge made by the \'ort\' strategy.\n' });
   const all = H.evs(f, 'git.merge');
   assert.equal(all.length, 1);
@@ -223,6 +262,32 @@ test('hook keeps quiet about a merge `crew task merge` recorded for the same bra
   // another branch is still recorded
   post(f, 'git merge feat/y', 'm2');
   assert.deepEqual(H.evs(f, 'git.merge').map((e) => e.data.branches), [['feat/x'], ['feat/y']]);
+});
+
+test('hook still records a merge of the same branch into another target or work tree, or of more branches', () => {
+  const f = H.fixture();
+  H.start(f);
+  cliMerge(f, { target: 'release' }); // CLI merged feat/x into release; the hook sees a merge into the current branch
+  post(f, 'git merge feat/x', 'n1');
+  assert.equal(H.evs(f, 'git.merge').filter((e) => e.src === 'hook').length, 1);
+  const g = H.fixture();
+  H.start(g);
+  cliMerge(g, { root: 'C:/elsewhere/other-worktree' });
+  post(g, 'git merge feat/x', 'n2');
+  assert.equal(H.evs(g, 'git.merge').filter((e) => e.src === 'hook').length, 1);
+  const k = H.fixture();
+  H.start(k);
+  cliMerge(k);
+  post(k, 'git merge feat/x feat/y', 'n3');
+  const hook = H.evs(k, 'git.merge').filter((e) => e.src === 'hook');
+  assert.equal(hook.length, 1);
+  assert.deepEqual(hook[0].data.branches, ['feat/x', 'feat/y']);
+  // an old-style CLI record without target / root is not trusted for dedupe
+  const m = H.fixture();
+  H.start(m);
+  events.append(m.pid, { type: 'git.merge', src: 'cli', data: { command: 'crew task merge', branches: ['feat/x'], via: 'cli-merge' }, key: 'old' });
+  post(m, 'git merge feat/x', 'n4');
+  assert.equal(H.evs(m, 'git.merge').filter((e) => e.src === 'hook').length, 1);
 });
 
 test('hook still records the merge when the CLI record is older than a minute or comes from a hook', () => {

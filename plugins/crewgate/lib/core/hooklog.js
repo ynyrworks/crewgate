@@ -1,7 +1,7 @@
 'use strict';
 
 // <home>/hook-errors.jsonl: one line per hook failure that would otherwise be silent
-// ({ ts, event, kind: 'error' | 'guard' | 'worker_exit', msg, version }). Capped near 1 MiB.
+// ({ ts, event, kind: 'error' | 'guard' | 'worker_exit', msg, version }). Rotated at 1 MiB (hook-errors.1.jsonl keeps the previous file).
 // Nothing here may throw: a hook must answer even when its own logging is broken.
 const fs = require('fs');
 const path = require('path');
@@ -9,11 +9,11 @@ const paths = require('./paths');
 const { clean } = require('./redact');
 
 const MAX_BYTES = 1024 * 1024;
-const KEEP_BYTES = 512 * 1024;
 const MSG_MAX = 300;
 const KINDS = ['error', 'guard', 'worker_exit'];
 
 const file = () => path.join(paths.home(), 'hook-errors.jsonl');
+const oldFile = () => path.join(paths.home(), 'hook-errors.1.jsonl');
 
 let versionCache = null;
 function pluginVersion() {
@@ -25,20 +25,14 @@ function pluginVersion() {
   return (versionCache = '0.0.0');
 }
 
-// Drops the oldest half once the file passes the cap (cut at a line start).
-function trim(f) {
-  const st = fs.statSync(f);
-  if (st.size <= MAX_BYTES) return;
-  const fd = fs.openSync(f, 'r');
-  let tail;
+// Rotation: a live file over the cap is renamed to hook-errors.1.jsonl (the old .1 is overwritten) and appending
+// goes on in a fresh file. A rename is atomic, so concurrent appenders never lose a record; where it fails
+// (EBUSY / EPERM on Windows while another process holds the file) rotation is skipped until the next call.
+function rotate(f) {
   try {
-    const len = Math.min(st.size, KEEP_BYTES);
-    const buf = Buffer.alloc(len);
-    fs.readSync(fd, buf, 0, len, st.size - len);
-    tail = buf.toString('utf8');
-  } finally { fs.closeSync(fd); }
-  const nl = tail.indexOf('\n');
-  fs.writeFileSync(f, nl >= 0 ? tail.slice(nl + 1) : '');
+    if (fs.statSync(f).size <= MAX_BYTES) return;
+    fs.renameSync(f, oldFile());
+  } catch { /* skip: nothing is lost */ }
 }
 
 // log(event, kind, msg) -> true when a line was written. `now` is for tests.
@@ -52,8 +46,8 @@ function log(event, kind, msg, now) {
     });
     const f = file();
     fs.mkdirSync(path.dirname(f), { recursive: true });
+    rotate(f);
     fs.appendFileSync(f, `${line}\n`);
-    try { trim(f); } catch { /* keep the line anyway */ }
     return true;
   } catch { return false; }
 }
@@ -62,7 +56,7 @@ function log(event, kind, msg, now) {
 function counts(now = new Date()) {
   const out = { h24: { total: 0, by: {} }, d7: { total: 0, by: {} } };
   let raw = '';
-  try { raw = fs.readFileSync(file(), 'utf8'); } catch { return out; }
+  for (const f of [oldFile(), file()]) { try { raw += `${fs.readFileSync(f, 'utf8')}\n`; } catch { /* missing */ } }
   const t = now.getTime();
   for (const l of raw.split('\n')) {
     if (!l) continue;
@@ -78,4 +72,4 @@ function counts(now = new Date()) {
   return out;
 }
 
-module.exports = { log, counts, file, MAX_BYTES };
+module.exports = { log, counts, file, oldFile, MAX_BYTES };

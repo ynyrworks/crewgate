@@ -47,17 +47,23 @@ function redirectAt(s, i) {
 }
 
 // Index of the last char of the heredoc bodies that start after the newline at s[nl].
+// Safety rule: when a terminator line cannot be found, nothing is skipped for that heredoc (and the ones after
+// it): scanning the rest may give a false event, swallowing it could hide a real push.
 function skipHeredocs(s, nl, pending) {
   let pos = nl + 1;
   for (const h of pending) {
-    while (pos < s.length) {
-      let e = s.indexOf('\n', pos);
+    let p = pos;
+    let found = false;
+    while (p < s.length) {
+      let e = s.indexOf('\n', p);
       if (e < 0) e = s.length;
-      let line = s.slice(pos, e).replace(/\r$/, '');
+      let line = s.slice(p, e).replace(/\r$/, '');
       if (h.strip) line = line.replace(/^\t+/, '');
-      pos = e + 1;
-      if (line === h.delim) break;
+      p = e + 1;
+      if (line === h.delim) { found = true; break; }
     }
+    if (!found) return pos - 1;
+    pos = p;
   }
   return Math.min(pos, s.length) - 1;
 }
@@ -68,14 +74,16 @@ function tokenize(cmd) {
   let has = false;
   let skipNext = false;   // the next word is a redirect target
   let hereNext = null;    // the next word is a heredoc delimiter: { strip }
+  let quoted = false;     // the current word has a quoted part
   const heredocs = [];    // delimiters whose bodies follow the next newline
   const flush = () => {
     if (has) {
-      if (hereNext) { heredocs.push({ delim: cur.split('\\').join(''), strip: hereNext.strip }); hereNext = null; skipNext = false; }
+      // bash: a quoted delimiter is literal; backslash-quoting is removed only from an unquoted one
+      if (hereNext) { heredocs.push({ delim: quoted ? cur : cur.split('\\').join(''), strip: hereNext.strip }); hereNext = null; skipNext = false; }
       else if (skipNext) skipNext = false;
       else toks.push(cur);
     }
-    cur = ''; has = false;
+    cur = ''; has = false; quoted = false;
   };
   const op = (o) => { skipNext = false; hereNext = null; toks.push({ op: o }); };
   const s = String(cmd).slice(0, MAX_CMD);
@@ -84,12 +92,12 @@ function tokenize(cmd) {
     let r = null;
     if (c === '>' || c === '<' || (c === '&' && s[i + 1] === '>') || (DIGITS.test(c) && !has)) r = redirectAt(s, i);
     if (c === "'") {
-      has = true;
+      has = true; quoted = true;
       const j = s.indexOf("'", i + 1);
       cur += s.slice(i + 1, j < 0 ? s.length : j);
       i = j < 0 ? s.length : j;
     } else if (c === '"') {
-      has = true;
+      has = true; quoted = true;
       let j = i + 1;
       for (; j < s.length && s[j] !== '"'; j++) {
         if (s[j] === '\\' && j + 1 < s.length && '"\\$`'.includes(s[j + 1])) j++;
@@ -100,6 +108,10 @@ function tokenize(cmd) {
       i++;
     } else if (c === ' ' || c === '\t' || c === '\r') {
       flush();
+    } else if (c === '#' && !has) {
+      // a comment runs to the end of the line (the newline itself stays an operator)
+      const e = s.indexOf('\n', i);
+      i = (e < 0 ? s.length : e) - 1;
     } else if (r) {
       flush();
       i = r.end - 1;

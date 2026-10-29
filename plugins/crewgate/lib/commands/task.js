@@ -147,9 +147,12 @@ function recordGitMerge(proj, task, cwd) {
     return d.commit ? String(d.commit).slice(0, 12) === commit : Date.parse(e.ts) >= Date.parse(task.created);
   });
   if (seen) return { status: 'already', commit };
+  // where it was merged into: the current branch and work tree, so a hook event for the same branch merged elsewhere is kept
+  const into = (common.git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd) || '').trim();
+  const top = (common.git(['rev-parse', '--show-toplevel'], cwd) || '').trim();
   events.append(proj.id, {
     type: 'git.merge', src: 'cli', task: task.id,
-    data: { command: 'crew task merge', branches: [branch], flags: [], commit, via: 'cli-merge' }, key: `merge:${branch}:${sha}`,
+    data: { command: 'crew task merge', branches: [branch], flags: [], commit, via: 'cli-merge', ...(into ? { target: into } : {}), ...(top ? { root: require('../core/project').normalizePath(top) } : {}) }, key: `merge:${branch}:${sha}`,
   });
   return { status: 'recorded', commit };
 }
