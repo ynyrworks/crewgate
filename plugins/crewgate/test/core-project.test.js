@@ -142,7 +142,7 @@ test('git: a linked worktree maps to the same project as the main checkout', { s
   const wtParent = h.tmpDir('crew-wt-');
   const wt = path.join(wtParent, 'feature');
   h.git(repo, 'worktree', 'add', '-q', '-b', 'feat/x', wt);
-  const real = fs.realpathSync(wt);
+  const real = fs.realpathSync.native(wt);
   const info = project.inspect(real);
   assert.equal(info.linked, true);
   assert.equal(info.root, repo);

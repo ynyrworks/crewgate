@@ -12,7 +12,7 @@ process.on('exit', () => {
 });
 
 function tmpDir(prefix = 'crew-test-') {
-  const d = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
+  const d = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
   created.push(d);
   return d;
 }
@@ -23,7 +23,7 @@ function setupHome() {
   process.env.CREWGATE_HOME = home;
   process.env.CREWGATE_LOCK_WAIT_MS = '3000';
   // temp folders may sit inside a repository (e.g. a git-tracked home dir): stop git's upward search there
-  process.env.GIT_CEILING_DIRECTORIES = fs.realpathSync(os.tmpdir());
+  process.env.GIT_CEILING_DIRECTORIES = fs.realpathSync.native(os.tmpdir());
   return home;
 }
 

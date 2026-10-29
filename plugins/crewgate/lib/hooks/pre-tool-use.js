@@ -71,7 +71,7 @@ function onEdit(payload) {
   const ti = C.obj(payload.tool_input);
   const target = C.str(ti.file_path) || C.str(ti.notebook_path) || C.str(ti.path);
   if (!target) return null;
-  const rel = path.relative(h.root, path.resolve(h.ctx.cwd, target));
+  const rel = path.relative(paths.canonical(h.root), paths.canonical(path.resolve(h.ctx.cwd, target)));
   if (!rel || paths.isOutside(rel)) return null; // outside the project
   const relPosix = rel.split(path.sep).join('/');
   if (glob.matchAny(limits.orchestrator_edit_allow, relPosix, process.platform === 'win32' || process.platform === 'darwin')) return null;

@@ -254,7 +254,7 @@ test('usage endpoint reads days and prices from the global config', async () => 
 });
 
 test('HOME stays inside the temp dir', () => {
-  assert.ok(HOME.startsWith(fs.realpathSync(require('os').tmpdir())));
+  assert.ok(HOME.startsWith(fs.realpathSync.native(require("os").tmpdir())));
 });
 
 test('reviewStats: one finding in one round counts as rounds=1, final=1 (kept/refutations files are not rounds)', () => {

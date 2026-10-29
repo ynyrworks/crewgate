@@ -16,9 +16,7 @@ const { CrewError } = require('./errors');
 function normalizePath(p, platform = process.platform) {
   const pp = platform === 'win32' ? path.win32 : path.posix;
   let r = pp.resolve(String(p));
-  if (platform === process.platform) {
-    try { r = fs.realpathSync.native(r); } catch { /* path may not exist */ }
-  }
+  if (platform === process.platform) r = paths.canonical(r);
   if (platform === 'win32') r = r.replace(/\\/g, '/').toLowerCase();
   if (r.length > 1 && r.endsWith('/') && !/^[a-z]:\/$/.test(r)) r = r.slice(0, -1);
   return r;
@@ -29,10 +27,7 @@ function projectId(root, platform = process.platform) {
   return `p${crypto.createHash('sha256').update(normalizePath(root, platform)).digest('hex').slice(0, 10)}`;
 }
 
-function physical(p) {
-  const r = path.resolve(String(p));
-  try { return fs.realpathSync.native(r); } catch { return r; }
-}
+const physical = (p) => paths.canonical(p);
 
 // ---------------------------------------------------------------- git
 function git(args, cwd) {

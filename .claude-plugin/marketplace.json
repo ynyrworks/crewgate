@@ -7,7 +7,7 @@
       "name": "crewgate",
       "source": "./plugins/crewgate",
       "description": "Delegated development for Claude Code: orchestrator, worker, reviewer and refuter subagents in git worktrees, a deterministic review filter, hook-recorded progress and a local board.",
-      "version": "0.1.0",
+      "version": "0.9.0",
       "license": "MIT",
       "repository": "https://github.com/ynyrworks/crewgate",
       "keywords": ["subagents", "orchestration", "delegation", "code-review", "worktree", "hooks"]
