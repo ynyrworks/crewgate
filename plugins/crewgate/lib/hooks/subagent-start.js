@@ -8,6 +8,7 @@ const events = require('../core/events');
 const tasks = require('../core/tasks');
 const C = require('./common');
 const sess = require('./session');
+const { typeFields } = require('../core/agents');
 
 function codexDispatch(h, payload, agentId, type) {
   const id = C.codexSpawnMarker(payload);
@@ -15,7 +16,7 @@ function codexDispatch(h, payload, agentId, type) {
   let task;
   try { task = tasks.load(h.pid, id); } catch { return null; }
   const worker = task.state === 'created' || task.state === 'dispatched';
-  const data = { agent_type: type, model: C.snippet(payload.model, 60) || null, background: true, engine: 'codex', via: 'subagent-start' };
+  const data = { ...typeFields(payload.agent_type), model: C.snippet(payload.model, 60) || null, background: true, engine: 'codex', via: 'subagent-start' };
   try {
     if (task.state === 'created') tasks.transition(h.pid, id, 'dispatched', { src: 'hook', session: h.sid, agent: agentId, data });
     else if (task.state === 'dispatched') {
@@ -41,7 +42,7 @@ function run(payload) {
   try {
     events.append(h.pid, {
       type: 'subagent.start', src: 'hook', session: h.sid, agent: agentId, task: rec && rec.task,
-      data: { agent_type: C.snippet(payload.agent_type, 80), linked: !!rec }, key: agentId,
+      data: { ...typeFields(payload.agent_type), linked: !!rec }, key: agentId,
     });
   } catch { /* ignore */ }
   return null;

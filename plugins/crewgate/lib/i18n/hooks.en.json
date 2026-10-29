@@ -19,5 +19,6 @@
   "hooks.stop.line": "Reminder: {parts}.",
   "hooks.need.inflight": "A session ended while task(s) were still in flight: {ids}",
   "hooks.need.question": "A session ended on a question that is waiting for your answer",
-  "hooks.need.noStop": "A session ended in the middle of a turn (interrupted or crashed)"
+  "hooks.need.noStop": "A session ended in the middle of a turn (interrupted or crashed)",
+  "hooks.gate.missing": "You just ran {what}, but the \"{gate}\" gate is set to ask and no approved answer was recorded in the last 30 minutes. Tell the user. Next time run {cmd} gate ask {gate} --task <id>, ask the user in chat, then {cmd} gate answer <gate-id> yes|no before you do it."
 }

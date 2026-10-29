@@ -132,10 +132,13 @@ test('full delegated flow: dispatch, report, review, send-back, accept, merge', 
   // ---- accept, merge
   const accepted = wf.crewJson(['task', 'accept', id, '--note', 'dedupe verified'], repo);
   assert.equal(accepted.code, 0, accepted.err);
+  const gate = wf.crewJson(['gate', 'ask', 'merge', '--task', id, '--detail', 'merge todo-due'], repo);
+  assert.equal(gate.code, 0, gate.err);
+  assert.equal(h.crew(['gate', 'answer', gate.data.id, 'yes', '--note', 'user said yes'], repo).code, 0);
   h.git(repo, 'merge', '-q', '--no-ff', '-m', 'merge todo-due', BRANCH);
   hook('post-tool-use', base({
     hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_use_id: 'toolu_merge',
-    tool_input: { command: `git merge --no-ff ${BRANCH}` }, tool_response: { stdout: 'Merge made', stderr: '' },
+    tool_input: { command: `git merge --no-ff ${BRANCH}` }, tool_response: { stdout: "Merge made by the 'ort' strategy.", stderr: '' },
   }));
   assert.equal(h.crew(['task', 'merge', id], repo).code, 0);
   hook('stop', base({ hook_event_name: 'Stop', stop_hook_active: false, last_assistant_message: 'Merged.' }));
@@ -148,7 +151,7 @@ test('full delegated flow: dispatch, report, review, send-back, accept, merge', 
   assert.deepEqual(all.map((e) => e.type), [
     'session.start', 'task.created', 'task.dispatched', 'subagent.start', 'task.returned', 'subagent.stop',
     'task.reviewed', 'task.sent_back', 'task.dispatched', 'subagent.start', 'task.returned', 'subagent.stop',
-    'task.accepted', 'git.merge', 'task.merged', 'session.end',
+    'task.accepted', 'gate.asked', 'gate.answered', 'git.merge', 'task.merged', 'session.end',
   ]);
   const dispatches = all.filter((e) => e.type === 'task.dispatched');
   assert.equal(dispatches[0].data.agent_type, 'crew-worker');

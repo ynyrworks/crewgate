@@ -8,6 +8,7 @@ const paths = require('../core/paths');
 const tasks = require('../core/tasks');
 const C = require('./common');
 const sess = require('./session');
+const { typeFields } = require('../core/agents');
 const glob = require('./glob');
 
 const MAX_READ_BYTES = 20 * 1024 * 1024;
@@ -38,13 +39,13 @@ function onAgent(payload) {
     if (task.state === 'created') {
       tasks.transition(h.pid, id, 'dispatched', {
         src: 'hook', session: h.sid,
-        data: { agent_type: type, model, background: bg, tool_use_id: C.snippet(tuid, 80) || null, ...eng },
+        data: { ...typeFields(C.agentTypeOf(ti)), model, background: bg, tool_use_id: C.snippet(tuid, 80) || null, via: 'pre-tool-use', ...eng },
       });
     } else if (task.state === 'dispatched' && !sess.byToolUse(h.pid, key)) {
       // Already dispatched through the CLI (send-back): record this launch.
       events.append(h.pid, {
         type: 'task.dispatched', src: 'hook', session: h.sid, task: id, tool_use_id: tuid,
-        data: { agent_type: type, model, background: bg, tool_use_id: C.snippet(tuid, 80), redispatch: true, ...eng }, key,
+        data: { ...typeFields(C.agentTypeOf(ti)), model, background: bg, tool_use_id: C.snippet(tuid, 80), redispatch: true, via: 'pre-tool-use', ...eng }, key,
       });
     }
   } catch { /* an illegal transition must not stop the dispatch */ }

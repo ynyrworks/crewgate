@@ -78,7 +78,7 @@
   "need.stateOpen": "等你確認",
   "need.empty": "沒有等你確認的事項。",
 
-  "work.usage": "work 要接 set 工作流 \"工作\" 狀態 [\"備註\"] | rm 工作流 \"工作\" | list",
+  "work.usage": "work 要接 set 工作流 \"工作\" 狀態 [\"備註\"] [--id ID | --new] | rm 工作流 \"工作\" | list",
   "work.set": "{stream}／{title}：{state}",
   "work.removed": "已移除",
   "work.empty": "沒有工作項目。",
@@ -107,5 +107,14 @@
   "import.done": "已把專案 {from} 匯入 {id}：{files}",
   "import.counts": "等你確認 {needs} 筆、工作 {items} 項、日誌 {log} 筆、合併請求 {mrs} 筆、驗證基準 {validation} 個",
   "import.backups": "已備份原有檔案：{files}",
-  "import.unmapped": "有 {n} 個工作的狀態不認得，已設為 todo"
+  "import.unmapped": "有 {n} 個工作的狀態不認得，已設為 todo",
+  "work.idAndNew": "--id 與 --new 不能同時使用",
+  "gate.usage": "gate 要接 ask GATE [--task ID] [--detail 文字] | answer GATE-ID yes|no [--note 文字]",
+  "gate.unknown": "不認得的關卡 \"{gate}\"（可用：{choices}）",
+  "gate.never": "\"{gate}\" 關卡設為 never：不要做這件事。",
+  "gate.notFound": "找不到 id 為 {id} 的關卡詢問",
+  "gate.alreadyAnswered": "關卡 {id} 已回答過（{answer}）",
+  "gate.asked": "已記錄關卡 {gate} 的詢問：{id}。請在聊天裡問使用者，再執行：gate answer {id} yes|no",
+  "gate.askedAuto": "關卡 {gate} 為 auto：已核准（{id}）。",
+  "gate.answered": "關卡 {gate}（{id}）：{answer}"
 }

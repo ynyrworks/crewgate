@@ -332,6 +332,18 @@
     }).catch(function () { /* offline banner already shown */ });
   }
 
+  // Small muted suffix of an event row: where it came from (via), merged branches, a subagent's last words.
+  function eventNote(e, showText) {
+    var x = e.data || {};
+    var bits = [];
+    if (x.via) bits.push(t('events.via') + ' ' + x.via);
+    if (x.agent_type) bits.push(x.agent_type);
+    if (Array.isArray(x.branches) && x.branches.length) bits.push(x.branches.join(', '));
+    if (x.dynamic) bits.push(t('events.dynamic'));
+    if (showText && x.last) bits.push(x.last);
+    return bits.length ? h('span', { class: 'muted', text: ' · ' + bits.join(' · ') }) : '';
+  }
+
   function projectPage(d) {
     var id = d.project.id;
     var root = h('div', null,
@@ -412,9 +424,20 @@
     }
     grid.appendChild(card(t('project.lessons'), lb));
     root.appendChild(grid);
+    // approval gates and hook wiring
+    var gateRows = (d.gates || []).slice(0, 15).map(function (g) {
+      var st = g.missing ? badge('failed', t('gate.missing')) : g.answer ? badge(g.answer === 'yes' ? 'done' : 'failed', t(g.answer === 'yes' ? 'gate.yes' : 'gate.no') + (g.auto ? ' (' + t('gate.auto') + ')' : '')) : badge('waiting', t('gate.asked'));
+      return h('tr', null, td(ago(g.ts)), td(g.gate || ''), td(g.task || ''), td(st), td(g.missing ? g.detail : (g.note || g.detail || '')));
+    });
+    grid.appendChild(card(t('project.gates'), gateRows.length ? table([t('gate.when'), t('gate.gate'), t('gate.task'), t('gate.state'), t('gate.detail')], gateRows) : empty('gate.none')));
+    var hs = d.hook_seen || { rows: [], missing: [] };
+    var hbody = h('div', null);
+    if (hs.missing.length) hbody.appendChild(h('p', { class: 'err', text: t('hooks.missing', { events: hs.missing.join(', ') }) }));
+    hbody.appendChild(table([t('hooks.event'), t('hooks.last')], hs.rows.map(function (r) { return h('tr', null, td(r.event), td(r.last ? ago(r.last) : t('hooks.never'))); })));
+    grid.appendChild(card(t('project.hooks'), hbody, hs.missing.length ? 'alert' : ''));
     // events
     root.appendChild(card(t('project.events'), d.events.length
-      ? h('div', { class: 'scroll' }, h('ul', { class: 'list' }, d.events.slice(0, 25).map(function (e) { return h('li', null, h('span', { class: 'muted', text: ago(e.ts) + ' · ' }), h('code', { text: e.type }), e.task ? ' ' + e.task : ''); })))
+      ? h('div', { class: 'scroll' }, h('ul', { class: 'list' }, d.events.slice(0, 25).map(function (e) { return h('li', null, h('span', { class: 'muted', text: ago(e.ts) + ' · ' }), h('code', { text: e.type }), e.task ? ' ' + e.task : '', eventNote(e, d.show_text)); })))
       : empty('events.none')));
     return root;
   }

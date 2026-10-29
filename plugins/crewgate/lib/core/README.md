@@ -29,6 +29,11 @@ Conventions
   `handoffFile(id, state, handoffId)`, `runtimeDir(id)` (hook dispatch map), `sessionsDir()` (hook session counters), `projectConfigFile(root)` (`<root>/.claude/crew.json`).
 - All ids are validated (`ID_RE`, `TASK_ID_RE`, `SAFE_ID_RE`); bad ones throw.
 
+## agents.js, gates.js, hookseen.js
+- `agents.js`: `bareName(type)` (`crewgate:crew-reviewer` -> `crew-reviewer`), `roleOf(type)`, `typeFields(raw)` (`agent_type` + `agent_type_raw`). The one place that normalises agent names.
+- `gates.js`: `ask(pid, cfg, { gate, task, detail })`, `answer(pid, gateId, 'yes'|'no', note)`, `hasApproval(pid, gate, session)` (a yes of the last 30 minutes), `gateOf(found)`, `history(pid)`. Events `gate.asked` / `gate.answered`; the hook writes `gate.missing`.
+- `hookseen.js`: `note(pid, hookEvent)` (at most one write per event per 60 s into `runtime/hook-seen.json`), `read(pid)` -> `{ rows, missing }`.
+
 ## json.js
 - `readJson(file, fallback)` -> `{ status: 'ok'|'missing'|'corrupt', data }` — pure, never modifies files.
   `fallback` fixes the expected top-level type (object vs array); `data` is a private copy.

@@ -3,6 +3,7 @@
 // Board store: needs, work streams, log, merge requests and validation records of one project.
 // Every function takes the project id first, returns plain data (no printing) and every
 // mutation appends an event. opts.src ('cli' by default) names the writer.
+const crypto = require('crypto');
 const paths = require('./paths');
 const json = require('./json');
 const events = require('./events');
@@ -81,41 +82,96 @@ function needList(id, opts = {}) {
 // ------------------------------------------------------------------ work streams
 const WORK = () => ({ streams: [] });
 
-// workSet(id, { stream, title, state, note, need }, opts) -> item { title, state, note, updated }
+// Titles match when they only differ in case or white space.
+const normTitle = (t) => String(t === undefined || t === null ? '' : t).trim().replace(/\s+/g, ' ').toLowerCase();
+
+// The ids of a stream's items, in order. Items made before ids existed get a stable id derived from
+// stream and title (a repeated one gets -2, -3 ... so every item stays addressable).
+function idsOf(s) {
+  const seen = new Set();
+  return s.items.map((it) => {
+    const base = it.id || `w-${crypto.createHash('sha1').update(`${s.name}\n${normTitle(it.title)}`).digest('hex').slice(0, 6)}`;
+    let id = base;
+    for (let n = 2; seen.has(id); n++) id = `${base}-${n}`;
+    seen.add(id);
+    return id;
+  });
+}
+const newItemId = () => `w-${crypto.randomBytes(3).toString('hex')}`;
+
+function findItem(s, o) {
+  if (has(o.id)) return s.items[idsOf(s).indexOf(o.id)];
+  if (o.forceNew) return undefined;
+  const want = normTitle(o.title);
+  return s.items.find((x) => normTitle(x.title) === want);
+}
+
+// workSet(id, { stream, title, state, note, need, itemId, forceNew }, opts) -> item { id, title, state, note, updated }
+// The item is matched inside its stream by itemId when given (the title may then change), otherwise by
+// normalised title (trimmed, white space collapsed, case-insensitive); forceNew always adds a new item.
 function workSet(id, o, opts) {
   const state = oneOf(o.state, WORK_STATES, 'state');
   const streamName = text(o.stream, 'stream', 200);
-  const title = text(o.title, 'title', 300);
+  const title = text(o.title, 'title', 300).trim().replace(/\s+/g, ' ');
+  const lookup = { id: has(o.itemId) ? o.itemId : undefined, title, forceNew: !!o.forceNew };
+  let created = false;
   const item = json.update(file(id, 'work'), WORK(), (d) => {
     if (!Array.isArray(d.streams)) d.streams = [];
     let s = d.streams.find((x) => x.name === streamName);
     if (!s) { s = { name: streamName, items: [] }; d.streams.push(s); }
-    let it = s.items.find((x) => x.title === title);
-    if (!it) { it = { title, note: '' }; s.items.push(it); }
+    let it = findItem(s, lookup);
+    if (!it && has(lookup.id)) throw new CrewError('store.workNotFound');
+    if (!it) { it = { id: newItemId(), title, note: '' }; s.items.push(it); created = true; }
+    const ids = idsOf(s);
+    s.items.forEach((x, i) => { x.id = ids[i]; }); // ids of older items become permanent once the stream is touched
+    it.title = title;
     it.state = state;
     if (has(o.note)) it.note = clean(String(o.note), TEXT_MAX);
     if (has(o.need)) it.need = o.need;
     it.updated = now();
     return { ...it };
   });
-  emit(id, opts, 'work.set', { stream: streamName, title, state }, `work:${streamName}:${title}:${state}:${item.updated}`);
+  emit(id, opts, 'work.set', { stream: streamName, title, state, item: item.id, created }, `work:${streamName}:${item.id}:${state}:${item.updated}`);
   return item;
 }
 
-function workRm(id, stream, title, opts) {
+// workRm(id, stream, title, opts, itemId): removes the item matched like workSet does (by id, else title).
+function workRm(id, stream, title, opts, byId) {
+  let gone = null;
   json.update(file(id, 'work'), WORK(), (d) => {
     const s = (Array.isArray(d.streams) ? d.streams : []).find((x) => x.name === stream);
-    if (!s || !s.items.some((i) => i.title === title)) throw new CrewError('store.workNotFound');
-    s.items = s.items.filter((i) => i.title !== title);
+    const it = s && findItem(s, { id: byId, title });
+    if (!it) throw new CrewError('store.workNotFound');
+    gone = { id: idsOf(s)[s.items.indexOf(it)], title: it.title };
+    s.items = s.items.filter((i) => i !== it);
     if (!s.items.length) d.streams.splice(d.streams.indexOf(s), 1);
   });
-  emit(id, opts, 'work.removed', { stream, title }, `work:${stream}:${title}:rm:${now()}`);
+  emit(id, opts, 'work.removed', { stream, title: gone.title, item: gone.id }, `work:${stream}:${gone.id}:rm:${now()}`);
 }
 
-// workList(id) -> streams [{ name, items: [...] }]
+// workList(id) -> streams [{ name, items: [{ id, title, state, note, ... }] }]
 function workList(id) {
   const d = json.readJson(file(id, 'work'), WORK()).data;
-  return Array.isArray(d.streams) ? d.streams : [];
+  const streams = Array.isArray(d.streams) ? d.streams : [];
+  return streams.map((s0) => {
+    const s = { ...s0, items: Array.isArray(s0.items) ? s0.items : [] };
+    const ids = idsOf(s);
+    return { ...s, items: s.items.map((it, i) => ({ ...it, id: ids[i] })) };
+  });
+}
+
+// Items of one stream whose titles only differ in case or white space -> [{ stream, title, count }].
+function workDuplicates(id) {
+  const out = [];
+  for (const s of workList(id)) {
+    const by = new Map();
+    for (const it of s.items) {
+      const k = normTitle(it.title);
+      by.set(k, (by.get(k) || []).concat(it.title));
+    }
+    for (const titles of by.values()) if (titles.length > 1) out.push({ stream: s.name, title: titles[0], count: titles.length });
+  }
+  return out;
 }
 
 // ------------------------------------------------------------------ log
@@ -191,5 +247,5 @@ function validateList(id) {
 
 module.exports = {
   WORK_STATES, CI_STATES, LOG_KEEP,
-  needAdd, needDone, needList, workSet, workRm, workList, logAdd, logList, mrSet, mrList, validateSet, validateList,
+  needAdd, needDone, needList, workSet, workRm, workList, workDuplicates, logAdd, logList, mrSet, mrList, validateSet, validateList,
 };

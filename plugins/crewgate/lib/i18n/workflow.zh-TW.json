@@ -158,5 +158,17 @@
   "wf.doctor.updateOff": "更新檢查已關閉（updates.check）",
   "wf.doctor.updateUnknown": "{current}；尚未檢查最新版（看板每天檢查一次，或執行 `crew update check`）",
   "wf.doctor.updateCurrent": "{current} 已是最新版",
-  "wf.doctor.updateNewer": "{current}；{latest} 可更新（執行 `crew update apply`）"
+  "wf.doctor.updateNewer": "{current}；{latest} 可更新（執行 `crew update apply`）",
+  "wf.task.mergeGit": "已記錄 git.merge：{branch}（{commit}）。",
+  "wf.init.updated": "已更新      ",
+  "wf.init.checksChosen": "已偵測專案類型，並把 checks 設為：{checks}（要調整請改 .claude/crew.json 的 \"checks\"）。",
+  "wf.init.checksNone": "認不出測試指令：.claude/crew.json 的 \"checks\" 是空的。請補上 worker 回報前必須執行的指令。",
+  "wf.init.agentsPrecedence": "提醒：.claude/agents/ 內的專案副本優先於外掛內建的，所以同一角色可能顯示為 crew-worker（專案副本）或 crewgate:crew-worker（外掛）；crewgate 視為同一角色。",
+  "wf.doctor.name.checks": "檢查指令",
+  "wf.doctor.name.hookseen": "Hooks 最近觸發",
+  "wf.doctor.name.work": "工作項目",
+  "wf.doctor.checksEmpty": "\"checks\" 是空的：worker 不會被告知要跑哪些測試。請加到 .claude/crew.json（或在能辨識的專案裡執行 `crew init`）。",
+  "wf.doctor.neverSeen": "從未",
+  "wf.doctor.hookSeenMissing": "此專案從未觸發：{events}。外掛安裝前就開始的工作階段，要重新啟動後才會收到這些 hooks",
+  "wf.doctor.workDuplicates": "疑似重複的項目（標題只差大小寫或空白）：{items}。多的請用 `crew work rm` 移除"
 }

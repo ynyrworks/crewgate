@@ -72,6 +72,7 @@ function work() {
         const parsed = text.trim() ? JSON.parse(text) : {};
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) payload = parsed;
       } catch { /* malformed JSON: treat as empty */ }
+      require(path.join(__dirname, '..', 'lib', 'hooks', 'common.js')).setEvent(event);
       const mod = require(path.join(__dirname, '..', 'lib', 'hooks', `${event}.js`));
       const r = mod.run(payload);
       if (r && typeof r === 'object') out = JSON.stringify(r);

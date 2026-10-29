@@ -95,9 +95,11 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
 `remote_hosts`, `large_task`, `install_or_download`:
 
 - `auto`: do it.
-- `ask`: stop and ask the user in chat first, name the exact action (branch, target, size), and wait
-  for a clear yes. A yes covers that one action only.
-- `never`: refuse and say which gate blocks it. `crew task merge` itself refuses when
+- `ask`: run `crew gate ask <gate> --task <id> --detail "<exact action>"` (it prints a gate id), then stop and ask
+  the user in chat, name the exact action (branch, target, size), and wait for a clear yes. Record the reply with
+  `crew gate answer <gate-id> yes|no`. A yes covers that one action only. A hook notices a push, PR or merge under an
+  `ask` gate that has no recorded yes in the last 30 minutes and reminds you (`gate.missing` on the board).
+- `never`: refuse and say which gate blocks it (`crew gate ask` exits 1). `crew task merge` itself refuses when
   `gates.merge` is `never`.
 
 Workers are told never to push, use the network or touch remote hosts; if a task needs one, that

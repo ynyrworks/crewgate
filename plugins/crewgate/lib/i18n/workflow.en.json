@@ -158,5 +158,17 @@
   "wf.doctor.updateOff": "update check is off (updates.check)",
   "wf.doctor.updateUnknown": "{current}; latest release not checked yet (the board checks once a day, or run `crew update check`)",
   "wf.doctor.updateCurrent": "{current} is the latest release",
-  "wf.doctor.updateNewer": "{current}; {latest} is available (run `crew update apply`)"
+  "wf.doctor.updateNewer": "{current}; {latest} is available (run `crew update apply`)",
+  "wf.task.mergeGit": "Recorded git.merge for {branch} at {commit}.",
+  "wf.init.updated": "updated    ",
+  "wf.init.checksChosen": "Detected the project stack and set checks to: {checks} (edit \"checks\" in .claude/crew.json to change).",
+  "wf.init.checksNone": "No test command recognised: \"checks\" in .claude/crew.json is empty. Add the commands workers must run before they report.",
+  "wf.init.agentsPrecedence": "Note: agent copies in .claude/agents/ take precedence over the plugin's own, so a subagent may show up as crew-worker (project copy) or crewgate:crew-worker (plugin); crewgate treats both as the same role.",
+  "wf.doctor.name.checks": "Checks",
+  "wf.doctor.name.hookseen": "Hooks last seen",
+  "wf.doctor.name.work": "Work items",
+  "wf.doctor.checksEmpty": "\"checks\" is empty: workers will not be told which tests to run. Add them to .claude/crew.json (or run `crew init` in a project it can recognise).",
+  "wf.doctor.neverSeen": "never",
+  "wf.doctor.hookSeenMissing": "never fired in this project: {events}. A session that started before the plugin was installed only gets these hooks after a restart",
+  "wf.doctor.workDuplicates": "items that look like duplicates (same title apart from case or spaces): {items}. Remove the extra ones with `crew work rm`"
 }

@@ -19,5 +19,6 @@
   "hooks.stop.line": "提醒：{parts}。",
   "hooks.need.inflight": "有工作階段結束時仍有任務進行中：{ids}",
   "hooks.need.question": "有工作階段結束在一個等你回答的問題上",
-  "hooks.need.noStop": "有工作階段在回合進行中結束（被中斷或當掉）"
+  "hooks.need.noStop": "有工作階段在回合進行中結束（被中斷或當掉）",
+  "hooks.gate.missing": "你剛執行了 {what}，但「{gate}」關卡設為 ask，而且最近 30 分鐘內沒有記錄到核准。請告知使用者。下次動手前先執行 {cmd} gate ask {gate} --task <id>，在聊天裡問使用者，再執行 {cmd} gate answer <gate-id> yes|no。"
 }
