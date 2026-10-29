@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+Security and correctness fixes from the first review round.
+
+- The dismissed ledger stores a hash of the snippet, never its text; findings files are redacted before they are written.
+- Engine definitions are read only from the global config; a project `engines` block is ignored with a warning. `lessons.rules_file` must be inside the project.
+- Engines resolve through PATH/PATHEXT without a shell (`.cmd`/`.bat` via cmd.exe with quoted arguments); `crew doctor` reports each engine.
+- Stop and SubagentStop show a user notice (`systemMessage`) instead of `additionalContext`, which would keep the turn running.
+- Redaction covers suffixed keys, `Authorization: token`, npm, Stripe and Google keys.
+- `crew init --force` no longer resets REVIEW.md and LESSONS.md (`--reset-review-files` does, with a backup).
+- Smaller fixes: `..name` files inside the project, SessionEnd digest after resume, reserved store keys, Windows browser open, per-event hook guards, lesson rule validation, hygiene test without embedded names.
+
 ## 0.1.0 - 2026-10-29
 
 First release.

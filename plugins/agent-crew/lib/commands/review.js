@@ -3,6 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const execx = require('../core/exec');
+const config = require('../core/config');
 const { parse } = require('../core/args');
 const { UsageError, CrewError } = require('../core/errors');
 const tasks = require('../core/tasks');
@@ -38,11 +40,12 @@ const q = (p) => `"${p}"`;
 
 function ctxOf(ctx, taskId) {
   const proj = ctx.requireProject();
-  const cfg = ctx.config().config;
+  const loaded = ctx.config();
+  const cfg = loaded.config;
   const task = tasks.load(proj.id, taskId);
   const dir = paths.taskDir(proj.id, task.id);
   fs.mkdirSync(rv.findingsDir(dir), { recursive: true });
-  return { proj, cfg, task, dir };
+  return { proj, cfg, task, dir, warnings: loaded.warnings || [] };
 }
 
 function baseDirs(c) {
@@ -92,13 +95,15 @@ function externalPrompt(c, round) {
 }
 
 function runEngine(c, name, round) {
-  const eng = c.cfg.engines[name];
+  const eng = config.globalEngines()[name];
   if (!eng || !eng.command) throw new CrewError('wf.review.noEngine', { name });
   const input = externalPrompt(c, round);
-  const useShell = process.platform === 'win32' && /\.(cmd|bat)$/i.test(eng.command);
-  const r = spawnSync(eng.command, eng.args || [], {
+  const file = execx.resolveCommand(eng.command, { cwd: c.proj.path });
+  if (!file) throw new CrewError('wf.review.engineNotFound', { name, command: eng.command });
+  const plan = execx.spawnPlan(file, eng.args || []);
+  const r = spawnSync(plan.file, plan.args, {
     input, cwd: c.proj.path, encoding: 'utf8', timeout: 15 * 60 * 1000, maxBuffer: 64 * 1024 * 1024,
-    windowsHide: true, shell: useShell,
+    windowsHide: true, ...plan.options,
   });
   if (r.error || r.status !== 0) {
     throw new CrewError('wf.review.engineFailed', {
@@ -110,12 +115,14 @@ function runEngine(c, name, round) {
     json.saveRaw(rv.roundFile(c.dir, round, 'engine.txt'), clean(r.stdout, 20000));
     throw new CrewError('wf.review.noJson', { name, file: rv.roundFile(c.dir, round, 'engine.txt') });
   }
-  json.save(rv.roundFile(c.dir, round, 'raw.json'), list);
-  return list;
+  const safe = rv.sanitizeFindings(list, true);
+  json.save(rv.roundFile(c.dir, round, 'raw.json'), safe);
+  return safe;
 }
 
 function doRun(ctx, a) {
   const c = ctxOf(ctx, a.task);
+  for (const w of c.warnings) ctx.err(`warning: ${w.message}`);
   const round = nextRound(c, a);
   const engine = a.engine || (c.cfg.roles.reviewer || {}).engine || 'claude';
   const rawPath = rv.roundFile(c.dir, round, 'raw.json');
@@ -150,8 +157,9 @@ function doSubmit(ctx, a) {
   const list = Array.isArray(data) ? data : (data && Array.isArray(data.findings) ? data.findings : null);
   if (!list) throw new CrewError('wf.review.notArray', { what: a.kind });
   const round = a.round || Math.max(1, rv.latestRound(c.dir, 'raw.json'));
+  const safe = a.kind === 'findings' ? rv.sanitizeFindings(list, true) : list.map(rv.sanitizeRefutation);
   const file = rv.roundFile(c.dir, round, a.kind === 'findings' ? 'raw.json' : 'refutations.json');
-  json.save(file, list);
+  json.save(file, safe);
   ctx.emit({ round, kind: a.kind, count: list.length, file }, ctx.t('wf.review.submitted', { n: list.length, kind: a.kind, round }));
 }
 
@@ -161,7 +169,7 @@ const brief = (f) => `${f.id} [${f.severity}] ${f.category} ${f.file}:${f.line} 
 function doFilter(ctx, a) {
   const c = ctxOf(ctx, a.task);
   const round = currentRound(c, a, 'raw.json');
-  const list = rv.readArray(rv.roundFile(c.dir, round, 'raw.json'), 'raw findings');
+  const list = rv.sanitizeFindings(rv.readArray(rv.roundFile(c.dir, round, 'raw.json'), 'raw findings'), false);
   const { kept, dropped } = rv.filterFindings(list, { cfg: c.cfg, ledger: rv.readLedger(c.proj.path), baseDirs: baseDirs(c) });
   json.save(rv.roundFile(c.dir, round, 'filtered.json'), dropped);
   json.save(rv.roundFile(c.dir, round, 'kept.json'), kept);
@@ -190,12 +198,12 @@ function doFilter(ctx, a) {
 function doFinalize(ctx, a) {
   const c = ctxOf(ctx, a.task);
   const round = currentRound(c, a, 'kept.json');
-  const kept = rv.readArray(rv.roundFile(c.dir, round, 'kept.json'), 'kept findings');
+  const kept = rv.sanitizeFindings(rv.readArray(rv.roundFile(c.dir, round, 'kept.json'), 'kept findings'), false);
   let refs = [];
   if (kept.length) {
     const file = a.refFile || rv.roundFile(c.dir, round, 'refutations.json');
     if (!a.refFile && !fs.existsSync(file)) throw new UsageError('args.missing', { name: '--refutations-file' });
-    refs = rv.readArray(file, 'refutations');
+    refs = rv.readArray(file, 'refutations').map(rv.sanitizeRefutation);
   }
   const { findings, dropped, problems } = rv.applyRefutations(kept, refs);
   json.save(rv.roundFile(c.dir, round, 'json'), findings);
@@ -247,6 +255,12 @@ function findFinding(c, id) {
   return null;
 }
 
+// The ledger is committed to git: only a hash of the snippet goes in, never the text.
+function digestOf(f) {
+  if (typeof f.snippet_hash === 'string' && f.snippet_bytes > 0) return { snippet_hash: f.snippet_hash, snippet_bytes: f.snippet_bytes };
+  return rv.snippetDigest(f.snippet) || {};
+}
+
 function doDismiss(ctx, a) {
   const c = ctxOf(ctx, a.task);
   need(a.scope, '--scope');
@@ -257,11 +271,11 @@ function doDismiss(ctx, a) {
   const f = f0.downgraded_from ? { ...f0, category: f0.downgraded_from.category } : f0;
   const problems = rv.validateFinding(f, c.cfg.review.categories);
   if (problems.length) throw new CrewError('wf.review.cannotDismiss', { id: a.finding, detail: problems.join('; ') });
-  const fp = rv.fingerprint(f);
+  const fp = f0.downgraded_from || typeof f0.fingerprint !== 'string' ? rv.fingerprint(f) : f0.fingerprint;
   const dup = rv.readLedger(c.proj.path).find((e) => e.fingerprint === fp && e.scope === a.scope);
   const entry = {
     fingerprint: fp, category: f.category, file: String(f.file).replace(/\\/g, '/'), symbol: f.symbol || '',
-    snippet: rv.normSnippet(f.snippet).slice(0, 500), reason: clean(a.reason, 500), scope: a.scope,
+    ...digestOf(f0), reason: clean(a.reason, 500), scope: a.scope,
     decided_by: clean(a.by, 60), date: common.today(),
   };
   if (!dup) rv.appendLedger(c.proj.path, entry);

@@ -7,7 +7,7 @@ const paths = require('./paths');
 const json = require('./json');
 const events = require('./events');
 const { clean } = require('./redact');
-const { CrewError } = require('./errors');
+const { CrewError, UsageError } = require('./errors');
 
 const WORK_STATES = ['todo', 'doing', 'done', 'waiting', 'parked'];   // waiting = waiting for the user
 const CI_STATES = ['passed', 'failed', 'running'];
@@ -21,6 +21,13 @@ const file = (id, name) => paths.dataFile(id, name);
 function text(v, what, max = TEXT_MAX) {
   if (typeof v !== 'string' || v.trim() === '') throw new CrewError('store.textRequired', { what });
   return clean(v, max);
+}
+
+// Names that would hit the prototype when used as a key of a plain object (the validation map).
+const RESERVED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+function safeKey(v, what) {
+  if (RESERVED_KEYS.has(v)) throw new UsageError('store.badKey', { what, key: v });
+  return v;
 }
 
 function oneOf(value, allowed, what) {
@@ -162,7 +169,7 @@ function mrList(id) {
 // validateSet(id, { templateId, date: 'YYYY-MM-DD', host, result }, opts) -> record { date, host, result }
 function validateSet(id, o, opts) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(o.date || '')) throw new CrewError('store.badDate');
-  const tid = text(o.templateId, 'templateId', 200);
+  const tid = safeKey(text(o.templateId, 'templateId', 200), 'templateId');
   const host = text(o.host, 'host', 200);
   const result = text(o.result, 'result');
   const rec = { date: o.date, host, result };

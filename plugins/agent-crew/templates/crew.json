@@ -22,18 +22,6 @@
       "agent": "crew-refuter"
     }
   },
-  "engines": {
-    "codex": {
-      "command": "codex",
-      "args": [
-        "exec",
-        "-s",
-        "read-only",
-        "--skip-git-repo-check",
-        "-"
-      ]
-    }
-  },
   "gates": {
     "push": "ask",
     "open_pr": "ask",

@@ -1,7 +1,8 @@
 'use strict';
 
-// Stop: non-blocking reminder about unreviewed returns / running background tasks.
-// Never sets decision:"block", and does nothing when stop_hook_active is set.
+// Stop: non-blocking reminder about unreviewed returns / running background tasks, shown to the
+// user as a systemMessage. Never sets decision:"block" and never uses additionalContext (which would
+// make Claude continue); does nothing when stop_hook_active is set.
 const tasks = require('../core/tasks');
 const C = require('./common');
 const sess = require('./session');
@@ -41,7 +42,7 @@ function run(payload) {
     if (line && s.stop_sig !== sig) { s.stop_sig = sig; announce = true; } // do not nag with the same reminder
     if (!line && !payload.stop_hook_active) s.stop_sig = '';
   });
-  return announce || (line && !h.sid) ? C.withContext('Stop', line) : null;
+  return announce || (line && !h.sid) ? C.notice(line) : null;
 }
 
 module.exports = { run };

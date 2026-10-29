@@ -73,11 +73,24 @@ function defaultPort() {
   return DEFAULT_PORT;
 }
 
+// Only the local board is ever opened: http://127.0.0.1:<port>/<path without shell metacharacters>.
+const LOCAL_URL_RE = /^http:\/\/127\.0\.0\.1:\d{1,5}(\/[A-Za-z0-9._~\/?=#-]*)?$/;
+
+// -> { cmd, args, options } for opening a URL with the system browser, or null for an unsafe URL.
+// On Windows cmd.exe's own "start" is used with verbatim arguments, so the empty window title ""
+// reaches it untouched and the URL is never re-parsed by a shell layer of ours.
+function openPlan(url, platform = process.platform) {
+  if (typeof url !== 'string' || !LOCAL_URL_RE.test(url)) return null;
+  const options = { detached: true, stdio: 'ignore', windowsHide: true };
+  if (platform === 'win32') return { cmd: 'cmd.exe', args: ['/d', '/s', '/c', 'start', '""', url], options: { ...options, windowsVerbatimArguments: true } };
+  return { cmd: platform === 'darwin' ? 'open' : 'xdg-open', args: [url], options };
+}
+
 function openBrowser(url) {
-  const [cmd, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '""', url]]
-    : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
+  const plan = openPlan(url);
+  if (!plan) return;
   try {
-    const c = spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true });
+    const c = spawn(plan.cmd, plan.args, plan.options);
     c.on('error', () => { /* no browser available: the URL was printed */ });
     c.unref();
   } catch { /* ignore */ }
@@ -194,4 +207,5 @@ module.exports = {
     'zh-TW': '  crew board start [--port N] [--no-open]\n  crew board stop\n  crew board status        （未執行時 exit 1）\n  crew board serve [--port N]   （前景執行）',
   },
   run,
+  openPlan,
 };

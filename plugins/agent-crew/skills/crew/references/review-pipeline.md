@@ -5,7 +5,7 @@ only see the survivors.
 
 ## Stage 1: find
 
-`crew review run <task>` (`--engine <name>` to use an external engine from `engines` in the config).
+`crew review run <task>` (`--engine <name>` to use an external engine defined under `engines` in the **global** config `~/.agent-crew/config.json`; a project's own `engines` block is ignored).
 
 - Engine `claude` (default): the command prints the exact prompt for the reviewer subagent and the
   round's raw file path. Dispatch it with the Agent tool (`subagent_type: crew-reviewer`). The
@@ -60,7 +60,7 @@ usable verdict stays as `uncertain` with a warning. Finalize also moves a `retur
 - `uncertain`: check the cited `file:line` yourself, in a line range, before deciding.
 - `minor`/`nit`: batch them into one send-back note, or accept and mention them to the user.
 - Wrong or irrelevant: `crew review dismiss <task> <finding-id> --scope once|always --reason "..."`.
-  - `once`: this occurrence only; it stops matching when the snippet no longer exists in the file.
+  - `once`: this occurrence only; it stops matching when the snippet no longer exists in the file (the ledger stores only a hash of the snippet, never its text, because `.crew/dismissed.jsonl` is committed).
   - `always`: this pattern is accepted in this project; it also adds a lesson candidate suggesting a
     rule in `.crew/REVIEW.md`. Use it sparingly and tell the user.
 

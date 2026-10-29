@@ -265,7 +265,8 @@ test('dismiss: once stops matching when the snippet is gone, always keeps matchi
   assert.equal(d.data.lesson, null);
   const ledger = fs.readFileSync(path.join(repo, '.crew', 'dismissed.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
   assert.equal(ledger.length, 1);
-  assert.deepEqual(Object.keys(ledger[0]).filter((k) => k !== 'snippet').sort(), ['category', 'date', 'decided_by', 'file', 'fingerprint', 'reason', 'scope', 'symbol']);
+  assert.deepEqual(Object.keys(ledger[0]).sort(), ['category', 'date', 'decided_by', 'file', 'fingerprint', 'reason', 'scope', 'snippet_bytes', 'snippet_hash', 'symbol']);
+  assert.ok(!('snippet' in ledger[0]), 'the committed ledger never carries snippet text');
   // the same finding in the next round is filtered out as dismissed
   submit([u.finding('g1')], ['--round', '2']);
   let f = u.crewJson(['review', 'filter', t.id, '--round', '2'], repo);
@@ -316,6 +317,12 @@ const FAKE = [
   "});",
 ].join('\n');
 
+// Engine definitions are only honoured from the global config.
+function setGlobalEngines(engines) {
+  fs.mkdirSync(path.dirname(paths.configFile()), { recursive: true });
+  fs.writeFileSync(paths.configFile(), JSON.stringify({ version: 1, engines }));
+}
+
 function engineSetup(mode = 'ok') {
   const repo = u.initRepo();
   const base = h.git(repo, 'rev-parse', '--abbrev-ref', 'HEAD');
@@ -330,9 +337,9 @@ function engineSetup(mode = 'ok') {
   const script = u.writeFile(scratch, 'fake-engine.js', FAKE);
   const stdinCopy = path.join(scratch, 'stdin.txt');
   u.patchCfg(repo, (c) => {
-    c.engines = { fake: { command: process.execPath, args: [script, stdinCopy, mode] } };
     c.roles.reviewer = { engine: 'fake', model: 'inherit', agent: 'crew-reviewer' };
   });
+  setGlobalEngines({ fake: { command: process.execPath, args: [script, stdinCopy, mode] } });
   const t = u.createTask(repo, { branch: 'feat/e' });
   return { repo, t, stdinCopy };
 }
@@ -371,7 +378,7 @@ test('external engine: explicit --engine on a claude-default project, failures a
   assert.equal(x.code, 1);
   assert.match(x.err, /no branch that exists in git/);
   const other = u.initRepo();
-  u.patchCfg(other, (c) => { c.engines = { fake: { command: process.execPath, args: ['-e', ''] } }; });
+  setGlobalEngines({ fake: { command: process.execPath, args: ['-e', ''] } });
   const t3 = u.createTask(other);
   assert.equal(h.crew(['review', 'run', t3.id, '--engine', 'missing'], other).code, 1);
 });

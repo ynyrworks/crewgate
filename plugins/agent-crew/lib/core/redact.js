@@ -10,7 +10,11 @@ const MASK_IP = '[REDACTED-IP]';
 const PRIVATE_KEY = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----|$)/g;
 const AUTH_HEADER = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/g;
 const URL_CREDENTIALS = /(\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:)[^\s/@]+(@)/gi;
-const KEY_VALUE = /(\b[\w-]*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key)["']?\s*[=:]\s*)("[^"\r\n]*"|'[^'\r\n]*'|[^\s,;&"']+)/gi;
+// "Authorization: token abc" / "Authorization: Bearer abc" (scheme kept) and "Authorization: abc"
+const AUTH_SCHEME = /(\bAuthorization["']?\s*[:=]\s*[A-Za-z][\w-]*[ \t]+)(?!\[REDACTED\])[^\s"',;]+/gi;
+const AUTH_BARE = /(\bAuthorization["']?\s*[:=]\s*)(?![A-Za-z][\w-]*[ \t])(?!\[REDACTED\])[^\s"',;]+/gi;
+// the keyword may sit anywhere in the name: SECRET_KEY=, DB_PASSWORD_PROD=, api-token:
+const KEY_VALUE = /(\b[\w-]*(?:password|passwd|pwd|secret|token|api[_-]?key|access[_-]?key|private[_-]?key)(?:[_-][\w-]*)?["']?\s*[=:]\s*)("[^"\r\n]*"|'[^'\r\n]*'|[^\s,;&"']+)/gi;
 const TOKEN_PATTERNS = [
   /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g,                 // AWS access key id
   /\bgh[pousr]_[A-Za-z0-9]{30,}\b/g,                // GitHub
@@ -19,6 +23,9 @@ const TOKEN_PATTERNS = [
   /\bxox[abprs]-[A-Za-z0-9-]{10,}\b/g,              // Slack
   /\bsk-ant-[A-Za-z0-9_-]{16,}/g,                   // Anthropic
   /\bsk-[A-Za-z0-9_-]{20,}/g,                       // OpenAI-style
+  /\bnpm_[A-Za-z0-9]{30,}\b/g,                      // npm
+  /\b[sr]k_live_[A-Za-z0-9]{16,}\b/g,               // Stripe secret / restricted keys
+  /\bAIza[0-9A-Za-z_-]{35}\b/g,                     // Google API key
   /\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}/g, // JWT
 ];
 
@@ -58,7 +65,9 @@ function redact(text) {
   s = s.replace(PRIVATE_KEY, MASK);
   s = s.replace(URL_CREDENTIALS, `$1${MASK}$2`);
   s = s.replace(AUTH_HEADER, `$1 ${MASK}`);
-  s = s.replace(KEY_VALUE, (m, head, value) => {
+  s = s.replace(AUTH_SCHEME, `$1${MASK}`);
+  s = s.replace(AUTH_BARE, `$1${MASK}`);
+  s = s.replace(KEY_VALUE,(m, head, value) => {
     if (value === MASK) return m;
     return `${head}${MASK}`;
   });

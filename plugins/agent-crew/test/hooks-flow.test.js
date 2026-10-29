@@ -12,6 +12,8 @@ const store = require('../lib/core/store');
 const paths = require('../lib/core/paths');
 
 const ctxOf = (r) => (r.json && r.json.hookSpecificOutput && r.json.hookSpecificOutput.additionalContext) || '';
+// Stop and SubagentStop only show the user a notice: additionalContext there would keep the turn running.
+const noteOf = (r) => { assert.equal(r.json && r.json.hookSpecificOutput, undefined, 'no additionalContext on Stop/SubagentStop'); return (r.json && r.json.systemMessage) || ''; };
 
 test('SessionStart brief: states, handoff ids only, needs, fenced, <= 4000 bytes', () => {
   const f = H.fixture();
@@ -139,8 +141,8 @@ test('background launch: PostToolUse does nothing; SubagentStart/Stop link and r
 
   const stop = H.runHook('subagent-stop', H.base(f, { agent_id: 'ag-1', agent_type: 'crew-worker', last_assistant_message: 'finished' }), { cwd: f.repo });
   assert.equal(tasks.load(f.pid, t.id).state, 'returned');
-  assert.ok(ctxOf(stop).includes(`Task ${t.id} returned`));
-  assert.ok(ctxOf(stop).includes('task show'));
+  assert.ok(noteOf(stop).includes(`Task ${t.id} returned`));
+  assert.ok(noteOf(stop).includes('task show'));
   assert.equal(H.evs(f, 'subagent.stop').length, 1);
 });
 
@@ -154,9 +156,9 @@ test('SubagentStop links through the transcript head or the last message when th
   const tp = path.join(tmpDir('crew-tr-'), 'agent.jsonl');
   fs.writeFileSync(tp, `${JSON.stringify({ type: 'user', message: `crew-task: ${t1.id}\nbrief` })}\n${'z'.repeat(200000)}\n`);
   const r1 = H.runHook('subagent-stop', H.base(f, { agent_id: 'x1', agent_type: 'crew-worker', agent_transcript_path: tp }), { cwd: f.repo });
-  assert.ok(ctxOf(r1).includes(t1.id));
+  assert.ok(noteOf(r1).includes(t1.id));
   const r2 = H.runHook('subagent-stop', H.base(f, { agent_id: 'x2', agent_type: 'crew-worker', last_assistant_message: `done.\ncrew-task: ${t2.id}` }), { cwd: f.repo });
-  assert.ok(ctxOf(r2).includes(t2.id));
+  assert.ok(noteOf(r2).includes(t2.id));
   const r3 = H.runHook('subagent-stop', H.base(f, { agent_id: 'x3', agent_type: 'Explore', last_assistant_message: 'nothing' }), { cwd: f.repo });
   assert.equal(r3.out, '{}');
 });
@@ -170,7 +172,7 @@ test('Stop: reminds about returned tasks once, respects stop_hook_active, never 
   const active = H.runHook('stop', H.base(f, { stop_hook_active: true, last_assistant_message: 'x' }), { cwd: f.repo });
   assert.equal(active.out, '{}');
   const r = H.runHook('stop', H.base(f, { stop_hook_active: false, last_assistant_message: 'done' }), { cwd: f.repo });
-  assert.ok(ctxOf(r).includes(t.id) && ctxOf(r).includes('not reviewed'));
+  assert.ok(noteOf(r).includes(t.id) && noteOf(r).includes('not reviewed'));
   assert.equal(r.json.decision, undefined);
   assert.equal(H.runHook('stop', H.base(f, { last_assistant_message: 'done' }), { cwd: f.repo }).out, '{}', 'same reminder is not repeated');
 });
@@ -181,8 +183,8 @@ test('Stop: reminds about running background tasks', () => {
   const t = H.newTask(f);
   H.runHook('pre-tool-use', H.agentPayload(f, t, { tool_input: { prompt: `crew-task: ${t.id}`, subagent_type: 'crew-worker', run_in_background: true } }), { cwd: f.repo });
   const r = H.runHook('stop', H.base(f, { last_assistant_message: 'waiting' }), { cwd: f.repo });
-  assert.ok(ctxOf(r).includes('background task(s) still running'));
-  assert.ok(ctxOf(r).includes(t.id));
+  assert.ok(noteOf(r).includes('background task(s) still running'));
+  assert.ok(noteOf(r).includes(t.id));
 });
 
 test('PreCompact records session.compact once per checkpoint', () => {
@@ -247,4 +249,19 @@ test('SessionEnd abnormal flags each add a need', () => {
   r = H.runHook('session-end', H.base(g, { reason: 'other' }), { cwd: g.repo });
   assert.deepEqual(H.evs(g, 'session.end')[0].data.flags, ['ended_with_question']);
   assert.equal(store.needList(g.pid).length, 1);
+});
+
+test('SessionEnd: a resumed session that ends again gets its own digest; a double fire still does not', () => {
+  const f = H.fixture();
+  H.start(f);
+  H.runHook('user-prompt-submit', H.base(f, { prompt: 'first run' }), { cwd: f.repo });
+  H.runHook('stop', H.base(f, { last_assistant_message: 'ok' }), { cwd: f.repo });
+  H.runHook('session-end', H.base(f, { reason: 'other' }), { cwd: f.repo });
+  assert.equal(H.evs(f, 'session.end').length, 1);
+  // resume under the same session id: a new session file with a new start time and no prompts yet
+  H.runHook('session-start', H.base(f, { source: 'resume' }), { cwd: f.repo });
+  H.runHook('session-end', H.base(f, { reason: 'other' }), { cwd: f.repo });
+  assert.equal(H.evs(f, 'session.end').length, 2, 'the second digest is not lost');
+  H.runHook('session-end', H.base(f, { reason: 'other' }), { cwd: f.repo });
+  assert.equal(H.evs(f, 'session.end').length, 2);
 });

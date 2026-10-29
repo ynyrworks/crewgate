@@ -86,8 +86,12 @@ test('load: broken JSON, non-object and unreadable path never throw', () => {
 
 test('validate: engine may name a key of engines, claude, or the built-in codex', () => {
   assert.deepEqual(config.validate({ roles: { r: { engine: 'codex' } } }), []);
-  assert.deepEqual(config.validate({ roles: { r: { engine: 'mine' } }, engines: { mine: { command: 'x', args: [] } } }), []);
+  // an engine defined only in the project is not known: definitions come from the global config
+  assert.equal(config.validate({ roles: { r: { engine: 'mine' } }, engines: { mine: { command: 'x', args: [] } } }).length, 1);
   assert.equal(config.validate({ roles: { r: { engine: 'mine' } } }).length, 1);
+  config.saveGlobal({ engines: { mine: { command: 'x', args: [] } } });
+  assert.deepEqual(config.validate({ roles: { r: { engine: 'mine' } } }), []);
+  fs.rmSync(paths.configFile(), { force: true });
   assert.equal(config.validate({ version: 2 }).length, 1);
   assert.equal(config.validate({ review: { min_confidence: 1.5 } })[0].key, 'config.err.max');
   assert.equal(config.validate('str')[0].key, 'config.err.notObject');

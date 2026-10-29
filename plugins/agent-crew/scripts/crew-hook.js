@@ -11,8 +11,7 @@ const { Worker, isMainThread, parentPort, workerData } = require('worker_threads
 const EVENTS = ['session-start', 'user-prompt-submit', 'pre-tool-use', 'post-tool-use', 'subagent-start',
   'subagent-stop', 'stop', 'pre-compact', 'session-end'];
 const MAX_STDIN = 64 * 1024 * 1024;
-const GUARD_MS = { 'session-end': 1200 };
-const DEFAULT_GUARD_MS = 8000;
+const { guardMs } = require('../lib/hooks/timeouts');
 
 function normEvent(x) {
   const s = String(x || '').replace(/([a-z])([A-Z])/g, '$1-$2').replace(/_/g, '-').toLowerCase();
@@ -35,7 +34,7 @@ function main() {
 
   // Keep lock waits short: a hook must not hold up the session.
   if (!process.env.AGENT_CREW_LOCK_WAIT_MS) process.env.AGENT_CREW_LOCK_WAIT_MS = '500';
-  const guard = Number(process.env.AGENT_CREW_HOOK_GUARD_MS) || GUARD_MS[event] || DEFAULT_GUARD_MS;
+  const guard = Number(process.env.AGENT_CREW_HOOK_GUARD_MS) || guardMs(event);
   setTimeout(() => finish('{}'), guard).unref();
 
   const chunks = [];

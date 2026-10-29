@@ -77,7 +77,7 @@ function run(payload) {
     events.append(h.pid, {
       type: 'session.start', src: 'hook', session: h.sid,
       data: { source: C.snippet(p.source, 20), model: C.snippet(p.model, 80) },
-      key: `${h.sid}:${C.snippet(p.source, 20)}:${st.prompts || 0}:${st.tool_total || 0}`,
+      key: `${h.sid}:${C.snippet(p.source, 20)}:${st.started || ''}:${st.prompts || 0}:${st.tool_total || 0}`,
     });
   } catch { /* logging must not block the brief */ }
   return C.withContext('SessionStart', brief(h));

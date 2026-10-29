@@ -61,7 +61,7 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
    printed prompt (it contains the marker line, which links the subagent to the task), and
    `run_in_background: true` for anything that takes more than a minute. Never run more workers than
    `max_parallel_workers`; start the next one when a task returns.
-7. **When a worker returns** (the stop hook tells you, or the background notification arrives):
+7. **When a worker returns** (the background notification arrives; the stop hooks only show the user a reminder, they tell you nothing):
    `crew task show <id>`. You get the state, return count, the capped report, the diff stat of the
    branch and the packet path. If the report is invalid or missing, the worker did not finish: send
    it back (step 9).

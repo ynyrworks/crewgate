@@ -128,5 +128,6 @@
   "settings.noChanges": "沒有變更。",
   "settings.saved": "已儲存。",
   "settings.failed": "未儲存，請修正標示的欄位。",
-  "config.errors": "設定檔問題"
+  "config.errors": "設定檔問題",
+  "config.ignored": "已忽略的設定"
 }

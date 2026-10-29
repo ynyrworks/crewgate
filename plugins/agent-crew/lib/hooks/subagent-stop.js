@@ -50,7 +50,7 @@ function run(payload) {
   if (found.rec) sess.markStopped(h.pid, found.rec.id);
   sess.touch(h, (s) => sess.addTask(s, found.id));
   if (task.state !== 'returned') return null;
-  return C.withContext('SubagentStop', h.t(noReport ? 'sub.returnedNoReport' : 'sub.returned', { id: found.id, cmd: C.crewCmd() }));
+  return C.notice(h.t(noReport ? 'sub.returnedNoReport' : 'sub.returned', { id: found.id, cmd: C.crewCmd() }));
 }
 
 module.exports = { run };

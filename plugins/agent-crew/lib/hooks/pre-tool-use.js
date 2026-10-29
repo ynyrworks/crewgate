@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const events = require('../core/events');
+const paths = require('../core/paths');
 const tasks = require('../core/tasks');
 const C = require('./common');
 const sess = require('./session');
@@ -71,7 +72,7 @@ function onEdit(payload) {
   const target = C.str(ti.file_path) || C.str(ti.notebook_path) || C.str(ti.path);
   if (!target) return null;
   const rel = path.relative(h.root, path.resolve(h.ctx.cwd, target));
-  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null; // outside the project
+  if (!rel || paths.isOutside(rel)) return null; // outside the project
   const relPosix = rel.split(path.sep).join('/');
   if (glob.matchAny(limits.orchestrator_edit_allow, relPosix, process.platform === 'win32' || process.platform === 'darwin')) return null;
 

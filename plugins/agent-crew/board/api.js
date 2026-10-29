@@ -296,7 +296,7 @@ function createApi(opts = {}) {
 
   // ---- config
   function configView(res, extra) {
-    return { config: res.config, exists: res.exists, errors: res.errors.map((e) => ({ path: e.path, message: e.message })), ...extra };
+    return { config: res.config, exists: res.exists, errors: res.errors.map((e) => ({ path: e.path, message: e.message })), warnings: (res.warnings || []).map((e) => ({ path: e.path, message: e.message })), ...extra };
   }
 
   function saveWith(body, lang, saver, loader) {

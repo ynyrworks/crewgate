@@ -45,6 +45,9 @@
   "config.err.max": "{path}：不可大於 {max}",
   "config.err.empty": "{path}：不可為空",
   "config.err.engine": "{path}：「{value}」不是 \"claude\"，也不在 engines 裡",
+  "config.err.engines": "{path}：專案設定不能定義 engines，請放在全域設定（~/.agent-crew/config.json）",
+  "config.err.rulesFile": "{path}：「{value}」必須是專案資料夾內的路徑",
+  "config.warn.engines": "此專案設定中的 engines 已被忽略（{names}）：引擎指令只從全域設定（~/.agent-crew/config.json）讀取。請改在全域設定定義，這裡只保留 roles.*.engine。",
   "config.err.unreadable": "無法讀取設定檔（{code}）",
   "config.err.parse": "JSON 格式錯誤：{detail}",
   "config.invalid": "設定檔不合法（{count} 個問題）；第一個：{first}",
@@ -65,6 +68,7 @@
   "store.workNotFound": "找不到這個工作",
   "store.badIid": "合併請求編號必須是不小於 0 的整數",
   "store.badDate": "日期格式是 YYYY-MM-DD",
+  "store.badKey": "{what} 「{key}」是保留字，請換一個名稱",
 
   "need.usage": "need 要接 add \"文字\" | done N | list [--all]",
   "need.added": "等你確認 #{id} 已新增",

@@ -83,12 +83,19 @@ function snippet(text, n) {
   return clean(s, n);
 }
 
-// Context for the model. Which events honour additionalContext is partly unverified
-// (see docs/PLUGIN-FACTS.md); keeping the shape in one place makes a change a one-liner.
+// Context for the model (hookSpecificOutput.additionalContext). Use it only on events where the
+// model reads it and nothing else happens: SessionStart, PreToolUse, PostToolUse. On Stop and
+// SubagentStop additionalContext KEEPS THE TURN RUNNING (docs/PLUGIN-FACTS.md), so those use notice().
 function withContext(event, text, extra) {
   if (!text) return extra || null;
   const out = { hookSpecificOutput: { hookEventName: event, additionalContext: String(text).slice(0, MAX_CONTEXT) } };
   return extra ? Object.assign(out, extra) : out;
+}
+
+// A message for the user only (top-level systemMessage); it never reaches the model and never
+// continues a turn. Valid on every event.
+function notice(text) {
+  return text ? { systemMessage: String(text).slice(0, MAX_CONTEXT) } : null;
 }
 
 function deny(reason, extra) {
@@ -114,5 +121,5 @@ const normType = (t) => String(t || 'general-purpose').split(':').pop().toLowerC
 
 module.exports = {
   PLUGIN_ROOT, AGENT_TOOLS, EDIT_TOOLS, obj, str, sessionKey, open, crewCmd, snippet,
-  withContext, deny, readHead, normType,
+  withContext, notice, deny, readHead, normType,
 };

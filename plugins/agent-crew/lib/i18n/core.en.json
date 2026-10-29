@@ -45,6 +45,9 @@
   "config.err.max": "{path}: must be at most {max}",
   "config.err.empty": "{path}: must not be empty",
   "config.err.engine": "{path}: \"{value}\" is neither \"claude\" nor a key of engines",
+  "config.err.engines": "{path}: engines cannot be defined in a project config; put them in the global config (~/.agent-crew/config.json)",
+  "config.err.rulesFile": "{path}: \"{value}\" must be a path inside the project folder",
+  "config.warn.engines": "engines in this project config are ignored ({names}): engine commands are only read from the global config (~/.agent-crew/config.json). Define them there and keep only roles.*.engine here.",
   "config.err.unreadable": "Cannot read the config file ({code})",
   "config.err.parse": "Invalid JSON: {detail}",
   "config.invalid": "Config is invalid ({count} problem(s)); first: {first}",
@@ -65,6 +68,7 @@
   "store.workNotFound": "Work item not found",
   "store.badIid": "The merge request number must be a non-negative integer",
   "store.badDate": "The date format is YYYY-MM-DD",
+  "store.badKey": "{what} \"{key}\" is a reserved name; pick another",
 
   "need.usage": "need takes add \"TEXT\" | done N | list [--all]",
   "need.added": "Need #{id} added",

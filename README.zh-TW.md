@@ -153,15 +153,18 @@ _截圖之後會補在這裡：總覽、專案（任務與審查統計）、工�
 
 ## 用 Codex 或其他 CLI 當審查員
 
-審查員這個角色可以不用 Claude。設定檔預設就有名為 `codex` 的引擎（`codex exec -s read-only --skip-git-repo-check -`）。
-把 `roles.reviewer.engine` 設成 `codex`，或單次執行：
+審查員這個角色可以不用 Claude。全域設定（`~/.agent-crew/config.json`）預設就有名為 `codex` 的引擎（`codex exec -s read-only --skip-git-repo-check -`）。
+在專案把 `roles.reviewer.engine` 設成 `codex`，或單次執行：
 
 ```
 crew review run <任務> --engine codex
 ```
 
 agent-crew 會組出提示詞（任務書、審查規則、diff），從標準輸入餵進去，從標準輸出取出 JSON 陣列的發現，
-再接著走同樣的過濾與反駁階段。你也可以在 `engines` 底下加自己的引擎，指定 `command` 與 `args`；提示詞一律從標準輸入傳入。
+再接著走同樣的過濾與反駁階段。你也可以在**全域**設定的 `engines` 底下加自己的引擎，指定 `command` 與 `args`；提示詞一律從標準輸入傳入。
+指令依 `PATH` 尋找（Windows 也支援 `.cmd`/`.bat`，不經 shell 啟動）。專案的 `.claude/crew.json` 只能用名稱引用引擎
+（`roles.*.engine`）；專案檔裡的 `engines` 會被忽略並顯示警告，因為複製來的儲存庫不該決定 `crew review run` 要執行哪個程式。
+`crew doctor` 會顯示每個引擎是否找得到。
 Codex 只支援當審查員，不能當統籌。
 
 ## 限制
@@ -185,6 +188,9 @@ node scripts/gen-config-docs.js   # 修改設定結構之後
 規則：不得新增執行期相依套件、Node 18 以上、跨平台（不假設特定 shell）、測試只用暫存資料夾，絕不碰真實的
 `~/.agent-crew` 或 `~/.claude`。儲存庫衛生測試會擋下多餘的 IP 位址、像憑證的字串與專案專屬名稱；
 文件請用 `192.0.2.x`，測試中需要其他位址時請在執行時才組出來。修正與測試請放在同一次變更。
+
+若有些名稱（公司名、信箱前綴）不得出現在儲存庫，請不要寫進任何受版控的檔案：把每行一個正規表示式放在未追蹤的
+`.git/info/hygiene-extra`（或設環境變數 `AGENT_CREW_HYGIENE_EXTRA`，以分號分隔），衛生測試會把它們加進內建規則。
 
 ## 授權
 
