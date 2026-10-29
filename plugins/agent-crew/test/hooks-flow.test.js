@@ -55,7 +55,10 @@ test('Agent dispatch: marker moves created -> dispatched once, records details',
   const ev = H.evs(f, 'task.dispatched');
   assert.equal(ev.length, 1);
   assert.equal(ev[0].src, 'hook');
-  assert.ok(/agent=crew-worker model=sonnet background=true/.test(ev[0].data.note));
+  assert.equal(ev[0].data.agent_type, 'crew-worker');
+  assert.equal(ev[0].data.model, 'sonnet');
+  assert.equal(ev[0].data.background, true);
+  assert.equal(ev[0].data.note, '');
 });
 
 test('Agent dispatch: "Task" tool name works; no marker / unknown task / subagent payload do nothing', () => {

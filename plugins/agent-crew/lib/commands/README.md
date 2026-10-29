@@ -77,8 +77,8 @@ Endpoints (all JSON; reads are GET, every write is POST with `Content-Type: appl
 | `GET\|POST /api/config`, `/api/project/<id>/config` | read / save settings; body `{ config: { ...changed fields } }`; invalid input is a 400 with `errors: [{ path, message }]` |
 | `POST /api/project/<id>/need`, `need/done`, `work`, `work/rm`, `log` | board store writes (events carry `src: "board"`) |
 
-Optional global config keys read defensively: `show_text` (boolean, default false; shows a short redacted
-snippet of the last assistant message in the Sessions list).
+Global config key `board.show_text` (boolean, default false; shows a short redacted snippet of the last
+assistant message in the Sessions list). Settings saves record `config.changed` with `src: "board"`.
 
 ## Workflow groups (workflow step)
 

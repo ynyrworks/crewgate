@@ -80,7 +80,7 @@ function reviewStats(projectId, taskId) {
     if (m) { rounds.add(m[1]); stats.raw += findingsOf(data).length; continue; }
     m = /^(.+)\.filtered\.json$/.exec(name);
     if (m) { rounds.add(m[1]); stats.filtered += findingsOf(data).length; continue; }
-    m = /^(.+)\.json$/.exec(name);
+    m = /^([^.]+)\.json$/.exec(name); // N.json only: N.kept.json and N.refutations.json are intermediate
     if (!m) continue;
     rounds.add(m[1]);
     for (const f of findingsOf(data)) {
@@ -168,7 +168,7 @@ function createApi(opts = {}) {
   const rootCache = new Map();   // cwd -> { at, id }
 
   const globalCfg = () => config.loadGlobal().config;
-  const showText = () => globalCfg().show_text === true;
+  const showText = () => { const c = globalCfg(); return !!(c.board && c.board.show_text === true); };
 
   function norm(p) {
     let r = path.resolve(String(p));
@@ -322,11 +322,11 @@ function createApi(opts = {}) {
     ['GET', /^\/api\/usage$/, (a, q) => usageReport({ query: q })],
     ['GET', /^\/api\/schema$/, () => ({ project: config.SCHEMA, global: config.GLOBAL_SCHEMA })],
     ['GET', /^\/api\/config$/, () => configView(config.loadGlobal())],
-    ['POST', /^\/api\/config$/, (a, q, body, lang) => saveWith(body, lang, (c) => config.saveGlobal(c), () => config.loadGlobal())],
+    ['POST', /^\/api\/config$/, (a, q, body, lang) => saveWith(body, lang, (c) => config.saveGlobal(c, { src: 'board' }), () => config.loadGlobal())],
     ['GET', /^\/api\/project\/([^/]+)\/config$/, (a) => configView(config.load(projectOr404(a[0]).path))],
     ['POST', /^\/api\/project\/([^/]+)\/config$/, (a, q, body, lang) => {
       const p = projectOr404(a[0]);
-      return saveWith(body, lang, (c) => config.save(p.path, c), () => config.load(p.path));
+      return saveWith(body, lang, (c) => config.save(p.path, c, { src: 'board' }), () => config.load(p.path));
     }],
     // store writes
     ['POST', /^\/api\/project\/([^/]+)\/need$/, (a, q, b) => ({ ok: true, need: store.needAdd(projectOr404(a[0]).id, str(b, 'text'), SRC) })],

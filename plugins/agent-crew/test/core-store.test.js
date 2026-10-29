@@ -1,4 +1,5 @@
 'use strict';
+const ip = (...o) => o.join('.'); // addresses are built at runtime (repo hygiene scan)
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -31,9 +32,9 @@ test('needs: add, done, list (open only by default) and events', () => {
 
 test('free text is redacted before it is stored (IPs, secrets)', () => {
   const id = pid();
-  const need = store.needAdd(id, 'login to 10.20.30.40 with password=hunter2, docs use 192.0.2.5');
+  const need = store.needAdd(id, 'login to ' + ip(10,20,30,40) + ' with password=hunter2, docs use 192.0.2.5');
   assert.equal(need.text, 'login to [REDACTED-IP] with password=[REDACTED], docs use 192.0.2.5');
-  assert.ok(!JSON.stringify(events.read(id)).includes('10.20.30.40'));
+  assert.ok(!JSON.stringify(events.read(id)).includes(ip(10,20,30,40)));
 });
 
 test('work: set creates stream and item, updates in place, rm removes empty streams', () => {

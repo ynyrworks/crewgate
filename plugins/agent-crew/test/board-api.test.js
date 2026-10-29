@@ -237,12 +237,12 @@ test('sessions endpoint hides paths and text by default and links sessions to pr
   const ov = await get('/api/overview');
   assert.equal(ov.json.projects[0].live.sessions, 1);
   // opt in through the global config
-  await post('/api/config', { config: { show_text: true } });
+  await post('/api/config', { config: { board: { show_text: true } } });
   const t = await get('/api/sessions');
   assert.equal(t.json.show_text, true);
   assert.match(t.json.sessions[0].text, /PRIVATE REPLY/);
   assert.ok(!t.text.includes('PRIVATE PROMPT'));
-  await post('/api/config', { config: { show_text: false } });
+  await post('/api/config', { config: { board: { show_text: false } } });
 });
 
 test('usage endpoint reads days and prices from the global config', async () => {

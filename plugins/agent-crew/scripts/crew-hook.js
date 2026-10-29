@@ -64,7 +64,7 @@ function work() {
   try {
     const { event, input } = workerData;
     if (EVENTS.includes(event)) {
-      if (process.env.AGENT_CREW_HOOK_TEST_SLEEP_MS) { // test-only: simulates a stuck handler
+      if (process.env.AGENT_CREW_TEST === '1' && process.env.AGENT_CREW_HOOK_TEST_SLEEP_MS) { // test-only: simulates a stuck handler
         Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(process.env.AGENT_CREW_HOOK_TEST_SLEEP_MS) || 0);
       }
       let payload = {};

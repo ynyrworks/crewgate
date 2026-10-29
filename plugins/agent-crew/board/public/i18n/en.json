@@ -101,8 +101,8 @@
   "sessions.folder": "Folder",
   "sessions.last": "Last activity",
   "sessions.text": "Last message",
-  "sessions.textOff": "Message text is hidden. Set show_text to true in the global config to show a short snippet.",
-  "sessions.textOn": "Short redacted message snippets are shown (show_text is on).",
+  "sessions.textOff": "Message text is hidden. Set board.show_text to true in the global config to show a short snippet.",
+  "sessions.textOn": "Short redacted message snippets are shown (board.show_text is on).",
 
   "usage.tokens": "Tokens",
   "usage.messages": "Messages",

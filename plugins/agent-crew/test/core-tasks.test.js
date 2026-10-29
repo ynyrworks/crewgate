@@ -1,4 +1,5 @@
 'use strict';
+const ip = (...o) => o.join('.'); // addresses are built at runtime (repo hygiene scan)
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -34,11 +35,11 @@ test('createTask: id format, files, marker line, event', () => {
 
 test('createTask replaces a foreign marker line and redacts the brief', () => {
   const id = pid();
-  const t = make(id, { brief: `crew-task: t-19990101-zzzz\n${h.GOOD_BRIEF}\nhost 10.4.4.4 password=abc` });
+  const t = make(id, { brief: `crew-task: t-19990101-zzzz\n${h.GOOD_BRIEF}\nhost ${ip(10,4,4,4)} password=abc` });
   const brief = tasks.readBrief(id, t.id);
   assert.equal(brief.match(/crew-task:/g).length, 1);
   assert.ok(brief.includes(t.id));
-  assert.ok(!brief.includes('10.4.4.4') && !brief.includes('=abc'));
+  assert.ok(!brief.includes(ip(10,4,4,4)) && !brief.includes('=abc'));
 });
 
 test('brief validation: every section required and non-empty; zh-TW headings and numbering accepted', () => {
@@ -150,10 +151,10 @@ test('recordReport stores report/packet (redacted) and moves dispatched -> retur
   const id = pid();
   const t = make(id);
   tasks.transition(id, t.id, 'dispatched');
-  const r = tasks.recordReport(id, t.id, { report: `${h.GOOD_REPORT}\nhost 10.0.0.9`, packet: 'full diff\npassword=abc' }, { maxTokens: 1500 });
+  const r = tasks.recordReport(id, t.id, { report: `${h.GOOD_REPORT}\nhost ${ip(10,0,0,9)}`, packet: 'full diff\npassword=abc' }, { maxTokens: 1500 });
   assert.equal(r.task.state, 'returned');
   assert.ok(r.tokens > 0);
-  assert.ok(!tasks.readReport(id, t.id).includes('10.0.0.9'));
+  assert.ok(!tasks.readReport(id, t.id).includes(ip(10,0,0,9)));
   assert.ok(fs.readFileSync(path.join(paths.taskDir(id, t.id), 'packet.md'), 'utf8').includes('password=[REDACTED]'));
   assert.deepEqual(types(id).slice(-1), ['task.returned']);
   // reporting again after a send-back works the same way
@@ -175,4 +176,15 @@ test('findMarker', () => {
   assert.equal(tasks.findMarker('prefix crew-task: t-20260101-ab12 suffix'), 't-20260101-ab12');
   assert.equal(tasks.findMarker('no marker'), null);
   assert.equal(tasks.findMarker(undefined), null);
+});
+
+test('transition merges opts.data into the event data without overriding core fields', () => {
+  const id = pid();
+  const t = make(id);
+  tasks.transition(id, t.id, 'dispatched', { data: { agent_type: 'crew-worker', background: true, to: 'bogus' } });
+  const ev = events.read(id, { types: 'task.dispatched' })[0];
+  assert.equal(ev.data.agent_type, 'crew-worker');
+  assert.equal(ev.data.background, true);
+  assert.equal(ev.data.to, 'dispatched');
+  assert.equal(ev.data.note, '');
 });

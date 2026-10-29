@@ -96,3 +96,11 @@ test('args: positionals, options, ints, flags, multi, rest and errors', () => {
   }
   assert.throws(() => args.parse(['--__proto__', 'x'], spec), UsageError);
 });
+
+test('runtimeDir and sessionsDir sit under the data root', () => {
+  const p = require('../lib/core/paths');
+  const id = `p${'a'.repeat(10)}`;
+  assert.equal(p.runtimeDir(id), require('node:path').join(p.projectDir(id), 'runtime'));
+  assert.equal(p.sessionsDir(), require('node:path').join(p.home(), 'sessions'));
+  assert.throws(() => p.runtimeDir('bad'), (e) => e.key === 'paths.badProjectId');
+});

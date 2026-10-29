@@ -95,7 +95,7 @@ test('hard guard: a stuck handler is answered with {} in time', () => {
   const f = H.fixture();
   const t0 = Date.now();
   const r = H.runHook('session-start', H.base(f, { source: 'startup' }), {
-    cwd: f.repo, env: { AGENT_CREW_HOOK_GUARD_MS: '400', AGENT_CREW_HOOK_TEST_SLEEP_MS: '5000' },
+    cwd: f.repo, env: { AGENT_CREW_HOOK_GUARD_MS: '400', AGENT_CREW_TEST: '1', AGENT_CREW_HOOK_TEST_SLEEP_MS: '5000' },
   });
   assert.equal(r.out, '{}');
   assert.equal(r.code, 0);
@@ -144,4 +144,15 @@ test('hooks.json: exec-form commands for known events, valid matchers', () => {
     }
   }
   assert.ok(cfg.hooks.SessionEnd[0].hooks[0].timeout <= 2);
+});
+
+test('the stuck-handler test knob is ignored without AGENT_CREW_TEST=1', () => {
+  const f = H.fixture();
+  const t0 = Date.now();
+  const r = H.runHook('session-start', H.base(f, { source: 'startup' }), {
+    cwd: f.repo, env: { AGENT_CREW_TEST: '', AGENT_CREW_HOOK_TEST_SLEEP_MS: '4000' },
+  });
+  assert.equal(r.code, 0);
+  assert.ok(Date.now() - t0 < 3500, 'no sleep happened');
+  assert.notEqual(r.out, '{}');
 });

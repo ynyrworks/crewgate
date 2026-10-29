@@ -37,6 +37,10 @@ function taskDir(id, taskId) {
   return path.join(tasksDir(id), taskId);
 }
 
+// Hook runtime state: per-project (dispatch map) and global (per-session counters).
+function runtimeDir(id) { return path.join(projectDir(id), 'runtime'); }
+function sessionsDir() { return path.join(home(), 'sessions'); }
+
 function handoffDir(id, state) {
   if (!HANDOFF_STATES.includes(state)) throw new CrewError('paths.badHandoffState', { state: String(state) });
   return path.join(projectDir(id), 'handoffs', state);
@@ -53,5 +57,5 @@ function projectConfigFile(root) { return path.join(root, '.claude', 'crew.json'
 module.exports = {
   ID_RE, TASK_ID_RE, SAFE_ID_RE, STORE_NAMES, HANDOFF_STATES,
   home, configFile, projectsFile, projectDir, dataFile, eventsFile, tasksDir, taskDir,
-  handoffDir, handoffFile, projectConfigFile,
+  handoffDir, handoffFile, projectConfigFile, runtimeDir, sessionsDir,
 };

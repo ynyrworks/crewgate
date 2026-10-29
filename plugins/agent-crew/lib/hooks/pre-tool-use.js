@@ -36,7 +36,7 @@ function onAgent(payload) {
     if (task.state === 'created') {
       tasks.transition(h.pid, id, 'dispatched', {
         src: 'hook', session: h.sid,
-        note: `agent=${type} model=${model || '-'} background=${bg} tool_use_id=${C.snippet(tuid, 80) || '-'}`,
+        data: { agent_type: type, model, background: bg, tool_use_id: C.snippet(tuid, 80) || null },
       });
     } else if (task.state === 'dispatched' && !sess.byToolUse(h.pid, key)) {
       // Already dispatched through the CLI (send-back): record this launch.
