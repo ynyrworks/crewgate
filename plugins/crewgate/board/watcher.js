@@ -163,16 +163,20 @@ function closedTail(objs) {
   return seen;
 }
 
+// `entrypoint` of non-interactive Claude Code runs (claude -p is sdk-cli); interactive ones are cli / claude-desktop / ide.
+const HEADLESS_ENTRY = /^sdk(?:-|$)/i;
+
 // Claude Code transcript lines -> { state, cwd, model, subagent, lastTs, text }.
 // state: 'tool' | 'working' | 'waiting' (before the age rules are applied)
 function readClaude(objs) {
-  const r = { state: null, cwd: null, model: null, subagent: false, lastTs: null, text: null, closed: closedTail(objs), sessionId: null, act: null, prompt: null, agentId: null, gitBranch: null };
+  const r = { state: null, cwd: null, model: null, subagent: false, lastTs: null, text: null, closed: closedTail(objs), sessionId: null, act: null, prompt: null, agentId: null, gitBranch: null, headless: false };
   const titles = {};
   for (const o of objs) {
     if (isStr(o.cwd)) r.cwd = o.cwd;
     if (isStr(o.sessionId)) r.sessionId = o.sessionId;
     if (isStr(o.agentId)) r.agentId = o.agentId;
     if (isStr(o.gitBranch)) r.gitBranch = o.gitBranch;
+    if (isStr(o.entrypoint) && HEADLESS_ENTRY.test(o.entrypoint)) r.headless = true;   // claude -p / Agent SDK: no human to wait for
     if (o.isSidechain === true) r.subagent = true;
     if (o.type === 'last-prompt' && isStr(o.lastPrompt)) r.prompt = o.lastPrompt;
     else if (o.type === 'custom-title' && isStr(o.customTitle)) titles.custom = o.customTitle;
@@ -219,10 +223,13 @@ function codexArg(p) {
 
 // Codex rollout lines. `head` is the first line (session_meta) when available.
 function readCodex(objs, head) {
-  const r = { state: null, cwd: null, model: null, subagent: false, lastTs: null, text: null, act: null, prompt: null };
+  const r = { state: null, cwd: null, model: null, subagent: false, lastTs: null, text: null, act: null, prompt: null, sessionId: null, headless: false };
   const meta = head && head.type === 'session_meta' ? head.payload || {} : {};
   if (isStr(meta.cwd)) r.cwd = meta.cwd;
   if (meta.source && typeof meta.source === 'object') r.subagent = true;
+  if (isStr(meta.id)) r.sessionId = meta.id;   // the id the Codex hooks report as session_id
+  // codex exec (originator codex_exec, source exec) is one-shot: a finished turn means done, not waiting
+  if (meta.originator === 'codex_exec' || meta.source === 'exec') r.headless = true;
   for (const o of objs) {
     const p = o.payload || {};
     if (o.type === 'turn_context') {
@@ -294,7 +301,7 @@ function createWatcher(opts = {}) {
     const info = {
       engine, state: r.state, cwd: r.cwd, model: r.model, subagent: r.subagent, lastTs: r.lastTs, text: r.text, closed: !!r.closed,
       sessionId: r.sessionId || null, act: r.act || null, prompt: r.prompt || null, title: r.title || null,
-      agentId: r.agentId || null, gitBranch: r.gitBranch || null, parentFile: r.parentFile || null,
+      agentId: r.agentId || null, gitBranch: r.gitBranch || null, headless: !!r.headless, parentFile: r.parentFile || null,
     };
     perFile.set(file, { key, info });
     return info;
@@ -363,13 +370,15 @@ function createWatcher(opts = {}) {
       const info = inspectFile(file, engine, st);
       const lastMs = Math.max(info.lastTs || 0, st.mtimeMs);
       let status = statusOf(info.state, lastMs, now, lim);
-      if (engine === 'claude' && info.sessionId) {
+      if (info.sessionId) {
         const endedAt = o.sessionEnds ? o.sessionEnds.get(info.sessionId) : null;
         const ended = endedAt !== null && endedAt >= (info.lastTs || st.mtimeMs);
-        const closed = detectClosed === true && info.closed && !info.subagent && now - st.mtimeMs > lim.closedMs;
+        const closed = engine === 'claude' && detectClosed === true && info.closed && !info.subagent && now - st.mtimeMs > lim.closedMs;
         if (ended || closed) status = 'done';
-        if (status === 'done' && !info.subagent) doneIds.add(info.sessionId);
+        if (status === 'done' && !info.subagent && engine === 'claude') doneIds.add(info.sessionId);
       }
+      // a one-shot run (codex exec, claude -p) whose last turn ended is finished: nobody is there to answer
+      if (info.headless && info.state === 'waiting' && (status === 'waiting' || status === 'idle')) status = 'done';
       // the model asked the user a question / for plan approval: it is waiting even though the last line is a tool call
       if (info.act && info.act.kind === 'waiting' && (status === 'tool' || status === 'working')) status = 'waiting';
       const row = {

@@ -135,7 +135,42 @@ claude --plugin-dir crewgate/plugins/crewgate
 
 ## 看板截圖
 
-_截圖之後會補在這裡：總覽、專案（任務與審查統計）、工作階段、用量、設定。_
+所有截圖都來自完全虛構的示範資料（`node scripts/demo-board.js`，再執行 `node scripts/screenshots.js <網址>`），沒有任何真實資料。淺色與深色會跟著系統主題。
+
+**總覽：所有已登錄專案、任務數量、等你處理的事。**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/overview-dark-zh-TW.png">
+  <img alt="總覽：所有已登錄專案、任務數量、等你處理的事。" src="docs/images/overview-light-zh-TW.png" width="100%">
+</picture>
+
+**專案：任務與審查統計、即時工作階段（統籌、worker、審查員）、工作流、日誌。**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/project-dark-zh-TW.png">
+  <img alt="專案：任務與審查統計、即時工作階段（統籌、worker、審查員）、工作流、日誌。" src="docs/images/project-light-zh-TW.png" width="100%">
+</picture>
+
+**工作階段：Claude 與 Codex 併在同一棵樹，等你回覆的排最前面。**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/sessions-dark-zh-TW.png">
+  <img alt="工作階段：Claude 與 Codex 併在同一棵樹，等你回覆的排最前面。" src="docs/images/sessions-light-zh-TW.png" width="100%">
+</picture>
+
+**用量：依模型與日期的 token 與估算費用。**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/usage-dark-zh-TW.png">
+  <img alt="用量：依模型與日期的 token 與估算費用。" src="docs/images/usage-light-zh-TW.png" width="100%">
+</picture>
+
+**設定：每個選項都有說明。**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-dark-zh-TW.png">
+  <img alt="設定：每個選項都有說明。" src="docs/images/settings-light-zh-TW.png" width="100%">
+</picture>
 
 ## 路線圖
 

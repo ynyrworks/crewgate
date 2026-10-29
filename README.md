@@ -147,7 +147,42 @@ Groups: `init`, `doctor`, `project`, `task`, `review`, `handoff`, `lesson`, `nee
 
 ## Board screenshots
 
-_Screenshots will be added here: Overview, Project (tasks and review stats), Sessions, Usage, Settings._
+All screenshots come from a fully fictional demo (`node scripts/demo-board.js`, then `node scripts/screenshots.js <url>`); nothing here is real data. Light and dark follow your system theme.
+
+**Overview: every registered project, task counts, what waits for you.**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/overview-dark.png">
+  <img alt="Overview" src="docs/images/overview-light.png" width="100%">
+</picture>
+
+**Project: tasks with review stats, live sessions (orchestrator, workers, reviewers), work streams, log.**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/project-dark.png">
+  <img alt="Project" src="docs/images/project-light.png" width="100%">
+</picture>
+
+**Sessions: Claude and Codex sessions in one tree; the ones waiting for you come first.**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/sessions-dark.png">
+  <img alt="Sessions" src="docs/images/sessions-light.png" width="100%">
+</picture>
+
+**Usage: tokens and estimated cost per model and day.**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/usage-dark.png">
+  <img alt="Usage" src="docs/images/usage-light.png" width="100%">
+</picture>
+
+**Settings: every option with its description.**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/settings-dark.png">
+  <img alt="Settings" src="docs/images/settings-light.png" width="100%">
+</picture>
 
 ## Roadmap
 
