@@ -3,7 +3,7 @@
 `hooks.json` registers one entry point, `scripts/crew-hook.js <event>`, in exec form (no shell).
 The script reads stdin, runs `lib/hooks/<event>.js` in a worker thread and prints exactly one JSON
 object (`{}` when there is nothing to say). A timer in the main thread answers `{}` if the handler
-hangs (8 s; SessionEnd 1.2 s). Any internal error also gives `{}` and exit code 0.
+hangs (8 s; SessionEnd 1.2 s). Any internal error also gives `{}` and exit code 0. Failures are not silent: a handler error, a worker crash and a guard expiry append one line `{ts, event, kind: error|guard|worker_exit, msg, version}` to `<home>/hook-errors.jsonl` (message redacted and cut to 300 characters, rotated at 1 MiB to `hook-errors.1.jsonl`); `crew doctor` shows the counts.
 
 Rules every hook follows
 - Unregistered project: `{}`, nothing is written. Hooks never register a project.
@@ -35,6 +35,7 @@ Codex: `.codex-plugin/plugin.json` points Codex at `hooks/codex-hooks.json`, the
 
 Files written
 - `<home>/sessions/<session>.json` — running counters (pruned after 3 days).
+- `<home>/hook-errors.jsonl` (and `hook-errors.1.jsonl`) — failures of the hooks themselves.
 - `<home>/projects/<id>/runtime/dispatch.json` — tool_use_id -> task / agent map (newest 100).
 - Events and needs through the core (`events.append`, `store.needAdd`).
 

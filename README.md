@@ -4,30 +4,65 @@
 
 [繁體中文](README.zh-TW.md)
 
-**crewgate** is a [Claude Code](https://code.claude.com) plugin for delegated development. One
-*orchestrator* session plans the work, writes a brief, and dispatches *worker* subagents that implement in
-their own git worktrees. Read-only *reviewer* and *refuter* subagents check the result, and only the findings
-that survive a deterministic filter reach you. Progress is recorded by **hooks and workflow commands, not by
-the model remembering to log**, and shown on a local board that listens on `127.0.0.1` only.
+**Delegate coding work to AI subagents, with independent review, approvals before anything leaves your machine, and a record of what really happened.**
 
-It exists because free-text "delegation rules" in a prompt tend to fail in the same ways:
+## What is crewgate
 
-- the orchestrator starts writing code itself and skips review;
-- the progress board goes stale, duplicated or incomplete;
-- briefs lack boundaries, so workers break things outside their scope;
-- reviewers over-report low-value findings and bury the real ones;
-- background work finishes and nobody notices;
-- the orchestrator burns its (expensive) context reading big files;
-- rules live as prose in a long file and get forgotten.
+When you give [Claude Code](https://code.claude.com) a big job, it can hand parts of it to helper agents
+("subagents"). Left to itself that gets messy: the main session starts coding instead of coordinating, nobody
+checks the result properly, and afterwards you cannot tell what was done by whom. **crewgate** is a Claude Code
+plugin (it also runs with the Codex CLI, experimentally) that adds a process around this. One *orchestrator*
+session plans the work and writes a *brief*. *Worker* subagents implement it, each in its own git worktree and
+branch. Read-only *reviewer* and *refuter* subagents check the result, and only the findings that survive a
+deterministic filter reach you. You decide about pushes, pull requests and merges. Everything is recorded by
+**hooks and workflow commands, not by the model remembering to log**, and shown on a local board that listens on
+`127.0.0.1` only.
 
-crewgate turns each of those into something enforced or recorded: a five-section brief that the CLI refuses
-to accept incomplete, edit and big-read guards, state recorded from hook events, a three-stage review
-pipeline, stop reminders for unreviewed or still-running work, and lessons that are promoted into rules only
-when you say yes.
+## Who it is for
 
-Zero runtime dependencies. Node.js 18 or newer. Works on Windows, macOS and Linux. The only network request is the board's optional update check
-(one request a day to GitHub, see Privacy and safety; turn it off with `updates.check`). No model calls from hooks or
-the board.
+Solo developers and small teams who already use Claude Code (and optionally Codex) and want delegation they can
+trust: work split into reviewable pieces, a second pair of eyes that is not the author, a gate in front of
+`git push`, and an audit trail they can look at later. You do not need a server, an account or a database, and
+crewgate adds nothing to your project except a config file and a few markdown files.
+
+## What you get
+
+**Delegation**
+- A five-section brief for every task (goal, scope, must not regress, acceptance, context); the CLI refuses an incomplete one.
+- One git worktree and branch per task, and a task state machine: `created -> dispatched -> returned -> (reviewing) -> accepted -> merged`, with a limit on send-backs before the orchestrator takes over.
+- Workers on Claude subagents, or on the Codex CLI (`crew task run --engine codex`, experimental).
+
+**Review**
+- A three-stage pipeline: find (reviewer), filter (deterministic, no model), refute (a skeptic tries to disprove what is left).
+- A dismissal ledger: a finding you reject once is not reported again.
+
+**Safety**
+- Approval gates for push, PR, merge, remote hosts, large tasks and installs, set to `auto`, `ask` or `never`. `gates.enforce` picks how a missing approval is handled: `remind`, `confirm` (Claude Code asks you) or `block` (see Gates below).
+- An edit guard that warns or blocks when the orchestrator edits code itself, and a reminder when it reads a huge file without a range.
+- Secrets, keys and IP addresses are redacted before anything is stored; worker boundaries are written into the agent files.
+- Local only: the board binds `127.0.0.1`, no telemetry, no model calls from hooks or the board, one optional update check.
+
+**Visibility**
+- A local board with these pages: Overview, Project, Sessions (live Claude and Codex sessions in one tree), a per-session timeline with search, History (up to 90 days), Usage (tokens and estimated cost), Office (experimental pixel-art view), Settings (a form generated from the config schema), and an update banner. English and Traditional Chinese.
+- Dispatches, returns, pushes, merges and session digests are recorded by hooks; you do not log anything by hand.
+
+**Learning**
+- Lessons from reviews and send-backs are collected, and become rules in your `CLAUDE.md` only when you approve.
+
+## How it differs from writing rules in CLAUDE.md
+
+Free-text "delegation rules" tend to fail in the same ways: the orchestrator writes code itself and skips
+review; the progress board goes stale; briefs lack boundaries; reviewers bury the real findings under nits;
+finished background work goes unnoticed; the orchestrator burns its context on big files; and the rules are
+forgotten in a long file. crewgate turns each of these into something enforced or recorded: a brief the CLI
+will not accept incomplete, edit and big-read guards, state taken from hook events, a filtered review pipeline,
+stop reminders for unreviewed or still-running work, and lessons promoted into rules only when you say yes.
+The model is still asked to follow the process; crewgate makes it visible when it does not.
+
+Status: experimental parts are labelled where they appear: Codex support, the Office view, and `confirm` mode
+in bypass-permissions mode (not verified). Zero runtime dependencies. Node.js 18 or newer. Works on Windows,
+macOS and Linux. The only network request is the board's optional update check (one request a day to GitHub, see
+Privacy and safety; turn it off with `updates.check`).
 
 ## How it works
 
@@ -75,13 +110,14 @@ and tells the orchestrator to take the task over.
 **Hooks.** One script (`scripts/crew-hook.js`) handles SessionStart, UserPromptSubmit, PreToolUse,
 PostToolUse, SubagentStart/Stop, Stop, PreCompact and SessionEnd. They link a dispatched subagent to its task
 through the `crew-task:` marker, warn (or block, if you choose) when the orchestrator edits code itself, warn
-about reading huge files without a range, record `git push` / `git merge`, remind you of returned-but-unreviewed
+about reading huge files without a range, record `git push` / `git merge` / PR creation and check them against the approval gates, remind you of returned-but-unreviewed
 work, and write a deterministic session digest. In a project that was not registered with `crew init`, every
 hook is a silent no-op. Details: [plugins/crewgate/hooks/README.md](plugins/crewgate/hooks/README.md).
 
 **Board.** `crew board start` serves a local page: all projects, tasks by state with return counts, live
 subagents, things waiting for you, work streams, log, review statistics, lessons, handoffs, a live list of
-local Claude Code / Codex sessions, token usage, and a Settings form generated from the config schema.
+local Claude Code / Codex sessions with a per-session timeline, a History page that looks back up to 90 days,
+token usage, an experimental Office view, and a Settings form generated from the config schema.
 English and Traditional Chinese.
 
 A complete, fictional session is in [examples/todo-cli/WALKTHROUGH.md](examples/todo-cli/WALKTHROUGH.md).
@@ -172,11 +208,18 @@ All screenshots come from a fully fictional demo (`node scripts/demo-board.js`, 
   <img alt="Sessions" src="docs/images/sessions-light.png" width="100%">
 </picture>
 
-**Office (experimental): the same sessions as a small pixel-art office, one room per project.** Hats show the role, shirt colour the engine; bubbles show thinking, tool use, writing and "waiting for you". Drawn from scratch on a canvas, no external assets, still works with a keyboard through the list under it.
+**Office (experimental): the same sessions as a small pixel-art office, one room per project.** Role marks (headset, hard hat, glasses, horns) show the role, shirt colour the engine. Characters act out the work: reading holds a document, searching a magnifier, editing types fast, a command shows a terminal with a progress bar, waiting shows a `!`. Finished subagents walk to their parent with a paper, idle sessions rest on the sofa, finished ones walk out of the door. Drawn from scratch on a canvas, no external assets, still works with a keyboard through the list under it.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/office-dark.png">
   <img alt="Office: sessions as pixel-art characters at desks" src="docs/images/office-light.png" width="100%">
+</picture>
+
+**History: sessions older than 24 hours, up to 90 days back, grouped by day with the same statistics; every row opens its timeline.**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/history-dark.png">
+  <img alt="History" src="docs/images/history-light.png" width="100%">
 </picture>
 
 **Usage: tokens and estimated cost per model and day.**
@@ -214,6 +257,7 @@ What is next, what comes later and what is 1.0: [docs/ROADMAP.md](docs/ROADMAP.m
 - **Redaction.** Text is redacted before it is truncated and stored: private keys, bearer and basic auth,
   `password=` style pairs, common provider keys, JWTs, and IP addresses other than loopback and the
   documentation ranges.
+- **Hook error log.** A hook that fails (a handler error, a crash, a timeout) still answers Claude Code normally and appends one line to `~/.crewgate/hook-errors.jsonl`: time, event, kind (`error`, `guard`, `worker_exit`), the message redacted and cut to 300 characters, and the plugin version. The file is local, capped at 1 MiB (the previous one is kept as `hook-errors.1.jsonl`), and `crew doctor` shows the counts of the last 24 hours and 7 days.
 - **Where data goes.** Runtime data is written under `~/.crewgate/` (override with `CREWGATE_HOME`).
   Project files (`.claude/crew.json`, `.crew/*`) are written only by `crew init` and the lesson commands.
 - **Hooks run outside the sandbox**, with your permissions. They read stdin, the project's git metadata and
@@ -237,7 +281,7 @@ and record your answer with `crew gate answer`. `gates.enforce` decides when cre
 | `block` | Before it runs, the hook denies it. The model must `gate ask`, ask you, wait for your reply, `gate answer yes` and retry. A false detection stops work. Not a security boundary: the model can still record an approval itself. | CI and headless runs, together with `auto` gates |
 
 `gates.require_user_turn` (default `true`) adds one rule to all three modes: a hand-recorded approval counts only if you sent
-a message between its `gate ask` and its `gate answer yes`. That stops the model from asking and approving in one go; it
+a message in the asking session between its `gate ask` and its `gate answer yes` (judged once, when the answer is recorded; where the session id is unknown, as in the Codex CLI, a message in any session of the project counts, which is weaker). That stops the model from asking and approving in one go; it
 does not stop it from answering "yes" after you wrote something unrelated. Detection only reads the Bash command: a script
 that pushes, an alias, a variable (`$GIT push`) or a push by another tool is not seen. The target repo of `cd` / `git -C`
 decides which project's config applies, and an unregistered repo is never enforced. Codex sessions stay on `remind`.
@@ -288,7 +332,10 @@ codex plugin add crewgate@crewgate
 - The board lists sessions by reading local Claude Code and Codex logs; message text is hidden unless you set
   `board.show_text` in the global config. Session statistics (duration, prompts, tool calls, tokens, cost) are numbers only;
   they are cached per transcript under `~/.crewgate/cache/sessions`.
-- No animated "office" view. A Codex orchestrator is experimental; there is no Gemini support.
+- Git and gate detection reads only the command text of the Bash tool. A script that pushes, an alias, a variable (`$GIT push`), `eval` or a push by another tool (IDE, Git GUI, MCP server) is not seen; the gates guard against the model's ordinary habits, not against a determined bypass.
+- `gates.enforce: confirm` relies on Claude Code honouring a PreToolUse `ask`; its behaviour in bypass-permissions mode (and `dontAsk`) is not verified. `gate.confirmed` means the command ran after an ask was returned, not that a human clicked.
+- Codex sessions stay on `remind`: whether Codex honours `ask` / `deny` from a hook is not established. Where the session id is unknown (Codex CLI), `gates.require_user_turn` falls back to the weaker `"project"` check: a message in any session of the project counts.
+- The Office view is experimental and shows activity, not results: whether a command passed is not in the data it receives. A Codex orchestrator is experimental; there is no Gemini support.
 
 ## Contributing
 

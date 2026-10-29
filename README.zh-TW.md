@@ -4,25 +4,58 @@
 
 [English](README.md)
 
-**crewgate** 是一個 [Claude Code](https://code.claude.com) 外掛，用來做「分工開發」。由一個**統籌**（orchestrator）
-工作階段負責規劃、寫任務書（brief），再派出**工人**（worker）子代理，在各自的 git worktree 裡實作；唯讀的**審查員**
-（reviewer）與**反駁員**（refuter）子代理負責檢查成果，只有通過決定性過濾的發現才會送到你面前。進度由
-**hook 與流程指令自動記錄，不靠模型自己記得去記**，並顯示在只監聽 `127.0.0.1` 的本機看板上。
+**把寫程式的工作交給 AI 子代理，並且有獨立審查、推送前的核准，以及一份真實發生過什麼的紀錄。**
 
-它要解決的是：只靠文字規則來分工，常常會一再出現同樣的問題：
+## crewgate 是什麼
 
-- 統籌自己動手寫程式，還跳過審查；
-- 看板過時、重複或漏記；
-- 任務書沒有邊界，工人改壞範圍以外的東西；
-- 審查員挑出一大堆沒價值的意見，真正的問題被淹沒；
-- 背景工作做完了卻沒人發現；
-- 統籌把（昂貴的）上下文拿去讀大檔案；
-- 規則只是一大段文字，寫了就被忘記。
+請 [Claude Code](https://code.claude.com) 處理大一點的工作時，它可以把其中一部分交給輔助的代理（「子代理」）去做。
+放著不管，場面很容易亂：主對話自己跳下去寫程式、沒人認真檢查成果，事後也說不清楚誰做了什麼。**crewgate** 是一個
+Claude Code 外掛（也能搭配 Codex CLI，目前屬實驗性），在這件事外面加上一套流程：由一個**統籌**（orchestrator）工作階段
+規劃並寫下**任務書**（brief），**工人**（worker）子代理各自在獨立的 git worktree 與分支裡實作，唯讀的**審查員**
+（reviewer）與**反駁員**（refuter）子代理負責檢查成果，只有通過決定性過濾的發現才會送到你面前；要不要推送、開 PR、
+合併，由你決定。所有紀錄都由 **hook 與流程指令自動寫下，不靠模型自己記得去記**，並顯示在只監聽 `127.0.0.1` 的本機看板上。
 
-crewgate 把這些都變成強制或自動記錄的機制：五段式任務書（缺段落 CLI 直接拒收）、改程式與讀大檔的提醒、
-由 hook 事件記錄狀態、三段式審查流程、尚未審查或仍在背景執行時的收尾提醒，以及只有你點頭才會升格成規則的經驗。
+## 適合誰
 
-沒有任何執行期相依套件，需要 Node.js 18 以上，Windows、macOS、Linux 都能用。唯一的對外連線是看板選用的更新檢查（一天向 GitHub 一次，見「隱私與安全」，可用 `updates.check` 關閉）；hook 與看板不會呼叫模型。
+已經在用 Claude Code（也可能用 Codex）的個人開發者與小團隊，想要「可以放心交辦」的分工：工作切成可審查的小塊、
+有一雙不是作者本人的眼睛來檢查、`git push` 前有一道關卡，事後還能回頭查紀錄。不需要伺服器、帳號或資料庫；
+crewgate 除了一個設定檔和幾個 markdown 檔之外，不會在你的專案裡放任何東西。
+
+## 你會得到什麼
+
+**分工**
+- 每件任務都有五段式任務書（目標、範圍、不可退化、驗收、脈絡），缺段落 CLI 直接拒收。
+- 每件任務一個 git worktree 與分支，以及任務狀態機：`created -> dispatched -> returned -> (reviewing) -> accepted -> merged`；退回達到上限後，統籌改為自己接手。
+- 工人可以是 Claude 子代理，也可以是 Codex CLI（`crew task run --engine codex`，實驗性）。
+
+**審查**
+- 三段式流程：找出（審查員）、過濾（決定性、不用模型）、反駁（反駁員試著推翻剩下的發現）。
+- 駁回清單：你駁回過的發現不會再被提出來。
+
+**安全**
+- 推送、PR、合併、遠端主機、大型任務、安裝下載都有關卡，可設為 `auto`、`ask` 或 `never`；沒有核准時怎麼處理由 `gates.enforce` 決定：`remind`（提醒）、`confirm`（讓 Claude Code 問你）或 `block`（擋下），見下方「關卡」。
+- 統籌自己動手改程式時，編輯守門會提醒或擋下；不帶範圍就讀超大檔案時也會提醒。
+- 金鑰、憑證與 IP 位址會先遮蔽再儲存；工人的界線寫進 agent 檔。
+- 只在本機：看板只綁定 `127.0.0.1`，沒有遙測，hook 與看板不會呼叫模型，只有一個可關閉的更新檢查。
+
+**可見度**
+- 本機看板的頁面：總覽、專案、工作階段（Claude 與 Codex 的即時工作階段併在同一棵樹）、含搜尋的單一工作階段時間軸、歷史（最多回溯 90 天）、用量（token 與估算費用）、辦公室（實驗性的像素風畫面）、設定（由設定結構產生的表單），以及更新橫幅。支援英文與繁體中文。
+- 派工、交回、push、merge 與工作階段摘要都由 hook 記錄，你不用手動記任何東西。
+
+**學習**
+- 審查與退回中得到的經驗會被收集起來，只有你點頭才會升格成 `CLAUDE.md` 裡的規則。
+
+## 和直接在 CLAUDE.md 寫規則有什麼不同
+
+只靠文字規則來分工，常常一再出現同樣的問題：統籌自己寫程式、跳過審查；看板過時或漏記；任務書沒有邊界；
+審查員的瑣碎意見淹沒真正的問題；背景工作做完卻沒人發現；統籌把上下文耗在大檔案上；規則寫在一大段文字裡，寫了就被忘記。
+crewgate 把這些都變成強制或自動記錄的機制：缺段落就拒收的任務書、改程式與讀大檔的提醒、由 hook 事件記錄的狀態、
+經過過濾的審查流程、尚未審查或仍在背景執行時的收尾提醒，以及只有你點頭才會升格成規則的經驗。
+模型仍然是被「要求」照流程走；crewgate 做的是，一旦沒照做，你看得到。
+
+現況：實驗性的部分都在出現的地方標示出來：Codex 支援、辦公室畫面，以及 `confirm` 模式在 bypass-permissions 模式下的行為（尚未驗證）。
+沒有任何執行期相依套件，需要 Node.js 18 以上，Windows、macOS、Linux 都能用。唯一的對外連線是看板選用的更新檢查
+（一天向 GitHub 一次，見「隱私與安全」，可用 `updates.check` 關閉）。
 
 ## 運作方式
 
@@ -66,12 +99,12 @@ commit，絕不 push。審查員讀 diff、任務書與 `.crew/REVIEW.md`，回�
 
 **Hook。** 同一支腳本（`scripts/crew-hook.js`）處理 SessionStart、UserPromptSubmit、PreToolUse、PostToolUse、
 SubagentStart/Stop、Stop、PreCompact 與 SessionEnd。它們透過 `crew-task:` 標記把派出去的子代理對應到任務；統籌自己
-改程式時提醒（或依設定直接擋下）；不帶範圍讀超大檔案時提醒；記錄 `git push` 與 `git merge`；有已回報卻未審查的工作時提醒；
+改程式時提醒（或依設定直接擋下）；不帶範圍讀超大檔案時提醒；記錄 `git push`、`git merge` 與建立 PR，並對照核准關卡檢查；有已回報卻未審查的工作時提醒；
 並在工作階段結束時寫下決定性的摘要。沒有用 `crew init` 登錄的專案，所有 hook 都是靜默的空操作。詳見
 [plugins/crewgate/hooks/README.md](plugins/crewgate/hooks/README.md)。
 
 **看板。** `crew board start` 會啟動本機網頁：所有專案、依狀態排列的任務與退回次數、執行中的子代理、等你處理的事項、
-工作流、紀錄、審查統計、經驗、交接、本機 Claude Code / Codex 工作階段即時清單、token 用量，以及由設定結構產生的設定頁。
+工作流、紀錄、審查統計、經驗、交接、本機 Claude Code / Codex 工作階段即時清單與單一工作階段時間軸、可回溯 90 天的歷史頁、token 用量、實驗性的辦公室畫面，以及由設定結構產生的設定頁。
 支援英文與繁體中文。
 
 完整的虛構示範流程請看 [examples/todo-cli/WALKTHROUGH.md](examples/todo-cli/WALKTHROUGH.md)（英文）。
@@ -159,11 +192,18 @@ claude --plugin-dir crewgate/plugins/crewgate
   <img alt="工作階段：Claude 與 Codex 併在同一棵樹，等你回覆的排最前面。" src="docs/images/sessions-light-zh-TW.png" width="100%">
 </picture>
 
-**辦公室（實驗性）：同樣的工作階段，用像素風小辦公室呈現，每個專案一個房間。** 帽子代表角色、衣服顏色代表引擎；泡泡顯示思考、用工具、撰寫與「等你回覆」。全部在 canvas 上自行繪製，沒有外部素材，下方的清單仍可用鍵盤操作。
+**辦公室（實驗性）：同樣的工作階段，用像素風小辦公室呈現，每個專案一個房間。** 角色標記（耳麥、安全帽、眼鏡、角）代表角色，衣服顏色代表引擎。角色會照工作內容演出：讀檔拿著文件、搜尋拿放大鏡、編輯時快速打字、執行指令時顯示終端機與進度條、等你回覆時冒出 `!`。做完的子代理會拿著文件走向上層，閒置的工作階段到沙發休息，結束的會從門走出去。全部在 canvas 上自行繪製，沒有外部素材，下方的清單仍可用鍵盤操作。
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/office-dark-zh-TW.png">
   <img alt="辦公室：工作階段化為像素風角色坐在辦公桌前" src="docs/images/office-light-zh-TW.png" width="100%">
+</picture>
+
+**歷史：超過 24 小時的工作階段，最多回溯 90 天，依日期分組並附同樣的統計；每一列都能點開它的時間軸。**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/history-dark-zh-TW.png">
+  <img alt="歷史：超過 24 小時的工作階段，依日期分組" src="docs/images/history-light-zh-TW.png" width="100%">
 </picture>
 
 **用量：依模型與日期的 token 與估算費用。**
@@ -198,6 +238,7 @@ claude --plugin-dir crewgate/plugins/crewgate
   終端機：`crew update check`、`crew update apply`、`crew update cleanup`（移除更新後留在外掛快取的舊版本，看板上也有按鈕）。
 - **遮蔽。** 文字會先遮蔽再截斷才儲存：私鑰、Bearer／Basic 認證、`password=` 之類的鍵值、常見服務金鑰、JWT，
   以及除了本機迴路與文件保留網段以外的 IP 位址。
+- **Hook 錯誤紀錄。** hook 失敗（處理程式出錯、當掉、逾時）時，仍會正常回應 Claude Code，並在 `~/.crewgate/hook-errors.jsonl` 追加一行：時間、事件、種類（`error`、`guard`、`worker_exit`）、遮蔽後並截斷到 300 字的訊息，以及外掛版本。檔案只在本機，上限 1 MiB（前一份保留為 `hook-errors.1.jsonl`），`crew doctor` 會顯示最近 24 小時與 7 天的筆數。
 - **資料放哪裡。** 執行期資料寫在 `~/.crewgate/`（可用 `CREWGATE_HOME` 改位置）。專案內的檔案
   （`.claude/crew.json`、`.crew/*`）只會由 `crew init` 與經驗相關指令寫入。
 - **Hook 在沙盒之外執行**，使用你自己的權限。它們只讀取標準輸入、專案的 git 資訊與 crewgate 的檔案，只寫入資料目錄。
@@ -220,7 +261,7 @@ claude --plugin-dir crewgate/plugins/crewgate
 | `block` | 執行前由 hook 直接拒絕；模型必須 `gate ask`、問你、等你回覆、`gate answer yes` 再重試。誤判會讓工作停下。不是安全邊界：模型仍可自己記錄核准。 | CI、無人值守，搭配 `auto` 關卡 |
 
 `gates.require_user_turn`（預設 `true`）對三種模式都多加一條規則：手動記錄的核准，要在 `gate ask` 與 `gate answer yes`
-之間有你送出的訊息才算數。這能防止模型一口氣自問自答；防不了你寫了不相干的訊息後它回答「yes」。偵測只讀 Bash 指令文字：
+之間，在發出 ask 的那個工作階段有你送出的訊息才算數（回答被記錄時判斷一次；不知道工作階段 id 時，例如 Codex CLI，專案中任何工作階段有訊息就算，這個判斷較弱）。這能防止模型一口氣自問自答；防不了你寫了不相干的訊息後它回答「yes」。偵測只讀 Bash 指令文字：
 會推送的腳本、alias、變數（`$GIT push`）、其他工具的推送都看不到。`cd`／`git -C` 指到的專案決定採用哪份設定，
 未註冊的專案永遠不攔。Codex 工作階段維持 `remind`。逐步流程、限制與建議設定見 [docs/DESIGN.md §8.1](docs/DESIGN.md)。
 
@@ -264,7 +305,10 @@ codex plugin add crewgate@crewgate
 - `crew task merge` 只記錄合併，不會執行 git。合併由統籌執行，hook 負責記錄那個指令。
 - 工人的隔離方式是 worktree 加上指示，不是容器。
 - 看板的工作階段清單是讀取本機 Claude Code 與 Codex 的紀錄；除非在全域設定打開 `board.show_text`，否則不顯示訊息文字。工作階段統計（時長、提示、工具呼叫、token、費用）只有數字，依對話紀錄快取在 `~/.crewgate/cache/sessions`。
-- 沒有動畫式「辦公室」畫面。以 Codex 當統籌屬實驗性；不支援 Gemini。
+- Git 與關卡偵測只讀 Bash 工具的指令文字。會推送的腳本、alias、變數（`$GIT push`）、`eval`，或其他工具（IDE、Git 圖形介面、MCP 伺服器）的推送都看不到；關卡防的是模型的一般習慣，不是蓄意繞過。
+- `gates.enforce: confirm` 依賴 Claude Code 遵守 PreToolUse 的 `ask`；在 bypass-permissions（以及 `dontAsk`）模式下的行為尚未驗證。`gate.confirmed` 的意思是「指令在回傳 ask 之後執行了」，不代表真有人點過。
+- Codex 工作階段維持 `remind`：Codex 是否遵守 hook 回傳的 `ask`／`deny` 尚未確認。不知道工作階段 id 時（Codex CLI），`gates.require_user_turn` 會退回較弱的「專案」判斷：專案中任何工作階段的訊息都算。
+- 辦公室畫面是實驗性的，只呈現活動、不呈現結果：指令是否成功不在它收到的資料裡。以 Codex 當統籌屬實驗性；不支援 Gemini。
 
 ## 參與貢獻
 
