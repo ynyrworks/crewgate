@@ -15,6 +15,8 @@ const { clean } = require('../core/redact');
 const common = require('../features/common');
 const rv = require('../features/review');
 const lessons = require('../features/lessons');
+const plans = require('../core/plans');
+const pr = require('../core/plan-review');
 
 const ROUND = { '--round': { dest: 'round', int: true } };
 const SPECS = {
@@ -32,6 +34,10 @@ const SPECS = {
       '--scope': { dest: 'scope', choices: ['once', 'always'] }, '--reason': { dest: 'reason' },
       '--by': { dest: 'by', default: 'orchestrator' },
     },
+  },
+  followup: {
+    positionals: [{ name: 'task' }, { name: 'finding' }],
+    options: { '--done-when': { dest: 'doneWhen' }, '--text': { dest: 'text' }, '--plan': { dest: 'plan' }, ...ROUND },
   },
 };
 
@@ -296,11 +302,40 @@ function doDismiss(ctx, a) {
   ]);
 }
 
+// ---------------------------------------------------------------- follow-up
+// A finding of a finalized round (a refuted one is not there). -> { finding, round } or null
+function findFinal(c, id, only) {
+  for (let r = only || rv.latestRound(c.dir, 'json'); r >= 1; r--) {
+    let list = [];
+    try { list = rv.readArray(rv.roundFile(c.dir, r, 'json'), 'findings'); } catch { /* no such round */ }
+    const hit = list.find((f) => f && f.id === id);
+    if (hit) return { finding: hit, round: r };
+    if (only) break;
+  }
+  return null;
+}
+
+function doFollowup(ctx, a) {
+  const c = ctxOf(ctx, a.task);
+  need(a.doneWhen, '--done-when');
+  const hit = findFinal(c, a.finding, a.round);
+  if (!hit) throw new CrewError('wf.review.findingNotFinal', { id: a.finding, task: c.task.id });
+  const target = a.plan ? { slug: plans.checkSlug(a.plan), node: null } : pr.planOfTask(c.wt, c.task.id);
+  if (!target) throw new CrewError('wf.review.followupNoPlan', { id: c.task.id });
+  if (!plans.exists(c.wt, target.slug)) throw new CrewError('plan.notFound', { slug: target.slug });
+  const text = a.text || hit.finding.suggestion || hit.finding.claim;
+  const r = pr.addFollowup(c.wt, c.proj.id, { ...target, task: c.task.id, finding: a.finding, round: hit.round, text, doneWhen: a.doneWhen });
+  const L = [ctx.t(r.existing ? 'wf.review.followupExists' : 'wf.review.followupAdded', { node: r.id, slug: r.slug, state: r.state })];
+  if (r.goal) L.push(ctx.t('wf.review.followupGoal', { goal: r.goal }));
+  if (!r.existing) L.push(ctx.t('wf.review.followupDecide', { slug: r.slug, node: r.id }));
+  ctx.emit(r, L);
+}
+
 function run(argv, ctx) {
   const sub = argv[0];
   if (!Object.prototype.hasOwnProperty.call(SPECS, sub)) throw new UsageError('wf.review.usage');
   const a = parse(argv.slice(1), SPECS[sub]);
-  ({ run: doRun, submit: doSubmit, filter: doFilter, finalize: doFinalize, show: doShow, dismiss: doDismiss })[sub](ctx, a);
+  ({ run: doRun, submit: doSubmit, filter: doFilter, finalize: doFinalize, show: doShow, dismiss: doDismiss, followup: doFollowup })[sub](ctx, a);
   return 0;
 }
 
@@ -315,6 +350,7 @@ module.exports = {
       '  crew review finalize <task> [--refutations-file F] [--round N]',
       '  crew review show <task> [--round N]',
       '  crew review dismiss <task> <finding-id> --scope once|always --reason "..."',
+      '  crew review followup <task> <finding-id> --done-when "..." [--text "..."] [--plan SLUG] [--round N]   (proposes the work as a [?] step of the plan)',
     ].join('\n'),
     'zh-TW': [
       '  crew review run <task> [--engine claude|<名稱>] [--round N]',
@@ -323,6 +359,7 @@ module.exports = {
       '  crew review finalize <task> [--refutations-file F] [--round N]',
       '  crew review show <task> [--round N]',
       '  crew review dismiss <task> <finding-id> --scope once|always --reason "..."',
+      '  crew review followup <task> <finding-id> --done-when "..." [--text "..."] [--plan SLUG] [--round N]   （把這項工作提議成計畫裡的 [?] 步驟）',
     ].join('\n'),
   },
   run,

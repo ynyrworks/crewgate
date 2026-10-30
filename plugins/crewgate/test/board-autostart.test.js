@@ -106,7 +106,7 @@ test('SessionStart starts the board when board.autostart is on, without waiting 
   h.start(F);
   // the second start's detached check must have finished (and found the board) before the board is stopped,
   // or it could outlive this test and start a new board
-  assert.ok(await until(() => /autostart check: running/.test(fs.readFileSync(log, 'utf8'))), 'the detached check ran');
+  assert.ok(await until(() => /autostart check: running/.test(fs.readFileSync(log, 'utf8'))), `the detached check ran; board.log:\n${fs.readFileSync(log, 'utf8')}`);
   assert.equal(JSON.parse(fs.readFileSync(state, 'utf8')).pid, st.pid, 'no second board');
   assert.equal(crew(['board', 'stop']).code, 0);
 });

@@ -319,6 +319,7 @@
   "plan.prop.whole": "the plan as a whole",
   "plan.prop.proposal": "Proposal",
   "plan.prop.doneWhen": "Done when",
+  "plan.prop.fromTask": "From the review of task",
   "plan.prop.claim": "Claim",
   "plan.prop.evidence": "Evidence",
   "plan.prop.refuter": "Refuter",

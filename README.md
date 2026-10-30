@@ -209,6 +209,10 @@ criticism, and the survivors appear as proposed `[?]` nodes under the step they 
 You accept or reject each one (`crew plan accept|reject`); only accepted nodes count. The board lists the pending proposals
 with the commands to copy.
 
+When a code review finds real work that the task will not fix, `crew review followup <task> <finding-id> --done-when "..."` proposes it
+the same way, as a `[?]` step next to the task's step, so it is not lost and does not quietly widen the plan. Work that does not serve the
+goal can go to another plan with `--plan <name>`.
+
 Hand-edit the file whenever you like (`- [ ] step`, two-space indentation, `[x]` done, `[~]` dropped); the CLI keeps
 your text and order and only adds ids. Details: [references/commands.md](plugins/crewgate/skills/crew/references/commands.md#plans).
 

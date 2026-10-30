@@ -257,7 +257,8 @@ function ensureStarted(opts = {}) {
   } catch { return 'error'; }
 }
 
-// What `board ensure` runs: like ensureStarted, but a live pid only counts when the board answers (300 ms).
+// What `board ensure` runs: like ensureStarted, but a live pid only counts when the board answers. It runs detached
+// and nothing waits for it, so a busy machine gets 2 s before a healthy board is taken for a dead one.
 // -> 'off' | 'running' | 'busy' | 'started' | 'error'
 async function ensureChecked(opts = {}) {
   try {
@@ -265,7 +266,7 @@ async function ensureChecked(opts = {}) {
     if (!(g.board && g.board.autostart === true)) return 'off';
     const st = readState();
     if (st && alive(st.pid)) {
-      if (await health(st.port, 300)) return 'running';
+      if (await health(st.port, 2000)) return 'running';
       logLine(`state file names pid ${st.pid} (started ${st.started || 'unknown'}) but no board answers on port ${st.port}; starting one`);
     }
     return launch(g, opts);
