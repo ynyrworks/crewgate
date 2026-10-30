@@ -11,6 +11,7 @@ const tasks = require('../lib/core/tasks');
 const store = require('../lib/core/store');
 const gates = require('../lib/core/gates');
 const plans = require('../lib/core/plans');
+const planReview = require('../lib/core/plan-review');
 const hookseen = require('../lib/core/hookseen');
 const { CrewError } = require('../lib/core/errors');
 const { t } = require('../lib/core/i18n');
@@ -146,16 +147,27 @@ function plansOf(root, projectId) {
     const doc = plans.readCapped(root, slug);
     if (!doc) continue;
     const d = plans.derive(doc, states);
-    out.push({ slug, title: d.title, ...d.summary, updated: doc.mtime, truncated: d.truncated });
+    out.push({ slug, title: d.title, ...d.summary, pending: d.summary.proposed, updated: doc.mtime, truncated: d.truncated });
   }
   return out;
 }
 
-function planOf(root, projectId, slug) {
+// The plan page: the derived tree, the proposals waiting for a decision (with what the review rounds said about
+// them) and the round history. The reviewer's claim, evidence and the refuter's reasoning are free text from a model:
+// they follow board.show_text like other snippets (opts.showText); step text and the commands are not hidden here
+// (private mode hides them in the page).
+function planOf(root, projectId, slug, opts = {}) {
   if (!plans.SLUG_RE.test(String(slug))) throw new ApiError(404, 'api.notFound');
   const doc = plans.readCapped(root, slug);
   if (!doc) throw new ApiError(404, 'api.notFound');
-  return { slug, ...plans.derive(doc, plans.taskStates(projectId)), updated: doc.mtime };
+  const show = opts.showText === true;
+  const proposals = planReview.proposalsOf(projectId, slug, doc).map((p) => (show ? p : {
+    ...p, claim: null, evidence: [], refutation: null, better: null,
+  }));
+  return {
+    slug, ...plans.derive(doc, plans.taskStates(projectId)), updated: doc.mtime, show_text: show,
+    proposals, rounds: planReview.roundsOf(projectId, slug),
+  };
 }
 
 function handoffsOf(projectId) {
@@ -494,7 +506,7 @@ function createApi(opts = {}) {
     ['GET', /^\/api\/overview$/, () => overview()],
     ['GET', /^\/api\/project\/([^/]+)$/, (a) => projectDetail({ id: a[0] })],
     ['GET', /^\/api\/project\/([^/]+)\/plans$/, (a) => { const p = projectOr404(a[0]); return { plans: plansOf(p.path, p.id) }; }],
-    ['GET', /^\/api\/project\/([^/]+)\/plan\/([^/]+)$/, (a) => { const p = projectOr404(a[0]); return planOf(p.path, p.id, a[1]); }],
+    ['GET', /^\/api\/project\/([^/]+)\/plan\/([^/]+)$/, (a) => { const p = projectOr404(a[0]); return planOf(p.path, p.id, a[1], { showText: showText() }); }],
     ['GET', /^\/api\/sessions$/, () => sessionsList()],
     ['GET', /^\/api\/session\/([^/]+)$/, (a, q) => sessionDetail({ id: a[0], query: q })],
     ['GET', /^\/api\/history$/, (a, q) => historyList({ query: q })],

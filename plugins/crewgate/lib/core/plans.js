@@ -25,6 +25,13 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const BOX_STATE = { ' ': 'open', x: 'done', '~': 'dropped', '?': 'proposed' };
 const STATE_BOX = { open: ' ', done: 'x', dropped: '~', proposed: '?' };
 
+// Proposals from a plan review carry round, kind, action, done_when and for (the step they are about) in the comment.
+// A comment token cannot hold spaces, so done_when escapes space and % only.
+const KINDS = ['missing-step', 'wrong-order', 'too-big', 'risk', 'vague-done', 'redundant'];
+const ACTIONS = ['add', 'split', 'change', 'drop'];
+const encodeToken = (s) => String(s).replace(/[\t\r\n ]+/g, ' ').trim().replace(/%/g, '%25').replace(/ /g, '%20');
+const decodeToken = (s) => String(s || '').replace(/%20/g, ' ').replace(/%25/g, '%');
+
 const planDir = (root) => path.join(root, '.crew', 'plans');
 const planFile = (root, slug) => path.join(planDir(root), `${slug}.md`);
 
@@ -169,8 +176,8 @@ function cleanText(text) {
   return s;
 }
 
-// Adds a node (under `under`, else at the top level, after everything else). -> node
-function addNode(doc, { text, under, task, origin = 'plan', proposed = false, date }) {
+// Adds a node (under `under`, else at the top level, after everything else). `meta` adds more comment keys. -> node
+function addNode(doc, { text, under, task, origin = 'plan', proposed = false, date, meta: extra }) {
   if (!ORIGINS.includes(origin)) throw new CrewError('plan.badOrigin', { origin: String(origin), origins: ORIGINS.join(', ') });
   if (doc.nodes.length >= MAX_NODES) throw new CrewError('plan.tooMany', { max: MAX_NODES });
   const body = cleanText(text);
@@ -181,6 +188,7 @@ function addNode(doc, { text, under, task, origin = 'plan', proposed = false, da
   if (task) meta.task = task;
   meta.added = date;
   meta.origin = origin;
+  if (extra) for (const [k, v] of Object.entries(extra)) if (!(k in meta)) meta[k] = String(v);
   const tab = parent && parent.indent.includes('\t');
   const node = {
     box: proposed ? '?' : ' ', boxChar: proposed ? '?' : ' ', text: body, meta, junk: [],
@@ -210,6 +218,15 @@ function removeNode(doc, node) {
   if (node.parent) node.parent.children = node.parent.children.filter((c) => c !== node);
 }
 
+// Review metadata of a node, or null when it did not come from a plan review.
+function proposalMeta(n) {
+  if (!ACTIONS.includes(n.meta.action)) return null;
+  return {
+    round: Number(n.meta.round) || null, kind: KINDS.includes(n.meta.kind) ? n.meta.kind : null, action: n.meta.action,
+    done_when: n.meta.done_when ? decodeToken(n.meta.done_when) : null, for: n.meta.for || null, uncertain: n.meta.uncertain === '1',
+  };
+}
+
 // ---------------------------------------------------------------- derived state
 // taskState(id) -> the task's state, or null when the task is unknown.
 // -> { title, goal, truncated, summary, nodes: [tree of { id, line, text, depth, box, state, task, origin, added, done, total, pct, children }] }
@@ -232,6 +249,8 @@ function deriveNode(n, taskState) {
   const base = {
     id: refOf(n), line: n.lineNo, text: n.text, depth: n.depth, box: n.box, origin: originOf(n), added: addedOf(n), children: kids,
   };
+  const pm = proposalMeta(n);
+  if (pm) base.proposal = pm;
   const leaf = leafState(n, taskState);
   const counted = kids.filter((k) => k.state !== 'dropped' && k.state !== 'proposed');
   if (n.box === '~' || n.box === '?' || !counted.length) {
@@ -415,5 +434,6 @@ function deepNodes(root) {
 
 module.exports = {
   SLUG_RE, ORIGINS, MAX_DEPTH, MAX_BYTES, MAX_NODES, planDir, planFile, checkSlug, parse, serialize, assignIds, find, addNode, removeNode,
+  KINDS, ACTIONS, encodeToken, decodeToken, proposalMeta, record, setBox, touch, BOX_STATE, cleanText, MAX_TEXT,
   derive, taskStates, slugs, readCapped, update, create, addTo, linkTo: linkTask, setState, removeFrom, deepNodes, duplicateNodes, duplicateIds, exists, today, refOf,
 };

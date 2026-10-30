@@ -256,6 +256,19 @@ button.older { margin: 0 0 10px; min-height: 36px; }
 .list.nested { margin: 2px 0 0 14px; }
 .list.nested li { border-bottom: 0; padding: 2px 0; }
 .plans li .prow { margin-top: 2px; }
+.pnode.is-proposal { border-left: 2px dashed var(--border); padding-left: 6px; }
+.pnode.is-proposal > .phead .ptext { font-style: italic; }
+.ps-uncertain { color: var(--warn); border-color: var(--warn); border-style: dashed; font-weight: 600; }
+.pk, .pa { color: var(--text-2); }
+.pa { border-style: dashed; }
+.pprops { list-style: none; margin: 0; padding: 0; }
+.pprop { border: 1px dashed var(--border); border-radius: 8px; padding: 8px 10px; margin: 0 0 10px; overflow-wrap: anywhere; }
+.pprop.is-uncertain { border-color: var(--warn); }
+.pprop .phead { margin-bottom: 4px; }
+.prow2 { margin: 2px 0; }
+.pcmds { margin-top: 6px; }
+.pcmds pre { margin: 0 0 6px; }
+.pending { margin: 0 0 6px; }
 @media (max-width: 480px) {
   .pmeta { margin-left: 0; }
   .ptree .ptree { margin-left: 4px; padding-left: 8px; }
