@@ -10,6 +10,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { parseVersion, compareVersions } = require('../lib/core/update-check');
+const { isManaged } = require('../lib/core/update-apply');
 
 const OFFICE_API = 1;   // what office.json must declare; raise it when the page contract in app.js changes
 const NAME = 'crewgate-office';
@@ -35,10 +36,15 @@ function declared(file) {
 function candidates(pluginRoot, env) {
   const claude = env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
   const codex = env.CODEX_HOME || path.join(os.homedir(), '.codex');
+  const inClaude = declared(path.join(claude, 'plugins', 'installed_plugins.json'));
+  const inCodex = declared(path.join(codex, 'config.toml'));
+  // A marketplace clone holds the add-on next to the plugin whether or not it was installed,
+  // so an installed plugin only counts that folder when the tool lists the add-on.
+  const sibling = !isManaged(pluginRoot, env) || inClaude || inCodex ? [path.join(pluginRoot, '..', NAME)] : [];
   return [
-    path.join(pluginRoot, '..', NAME),
-    ...(declared(path.join(claude, 'plugins', 'installed_plugins.json')) ? cachedVersions(claude) : []),
-    ...(declared(path.join(codex, 'config.toml')) ? cachedVersions(codex) : []),
+    ...sibling,
+    ...(inClaude ? cachedVersions(claude) : []),
+    ...(inCodex ? cachedVersions(codex) : []),
   ];
 }
 

@@ -70,6 +70,18 @@ test('an uninstalled add-on leaves its cache folder behind, and that does not co
   assert.equal(find(m).state, 'missing');
 });
 
+test('a plugin running from a marketplace clone does not count the add-on next to it until the tool lists it', () => {
+  const m = machine();
+  const clone = path.join(m.env.CLAUDE_CONFIG_DIR, 'plugins', 'marketplaces', 'crewgate', 'plugins');
+  const pluginRoot = path.join(clone, 'crewgate');
+  fs.mkdirSync(pluginRoot, { recursive: true });
+  makeAddon(path.join(clone, 'crewgate-office'));
+  assert.equal(addon.find({ pluginRoot, env: m.env }).state, 'ok', 'listed');
+  fs.writeFileSync(path.join(m.env.CLAUDE_CONFIG_DIR, 'plugins', 'installed_plugins.json'), JSON.stringify({ plugins: { 'crewgate@crewgate': [] } }));
+  fs.rmSync(path.join(m.env.CODEX_HOME, 'config.toml'));
+  assert.equal(addon.find({ pluginRoot, env: m.env }).state, 'missing', 'not listed');
+});
+
 test('an add-on with another office_api is not loaded and says it needs updating; a matching one wins', () => {
   const m = machine();
   makeAddon(m.claude('0.15.0'), { api: 99 });

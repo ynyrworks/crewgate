@@ -564,7 +564,8 @@ reloads the first page when you come back to it.
 Office add-on. The Office page is a separate optional plugin, `plugins/crewgate-office`, so the main plugin ships nothing of it.
 The board looks for it in three fixed places (`board/office-addon.js`): the folder next to the plugin, and the Claude and Codex
 plugin caches when that tool's own list (`installed_plugins.json`, `config.toml`) still names it, because an uninstall leaves the
-cache folder behind. There is no configured path and no download. `GET /api/addons` tells the page `missing`, `outdated` or `ok`,
+cache folder behind. A plugin installed by a tool counts the neighbouring folder only when that list names the add-on too, since a
+marketplace clone always holds it. There is no configured path and no download. `GET /api/addons` tells the page `missing`, `outdated` or `ok`,
 never the folder. `office.json` in the add-on declares `office_api` and its files; a value other than `OFFICE_API` is not loaded,
 and the page shows the update commands instead. The board serves only the listed `.js` and `.css` files from the add-on's `public`
 folder at `/addon/office/<file>`, and the page loads them in order under the same CSP. `office_api` is the contract: raise it when
