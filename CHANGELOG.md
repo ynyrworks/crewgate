@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- The PostToolUse hook no longer counts a merge twice when `crew task merge` already recorded it and the machine is loaded: it reads the work tree root and branch from the .git files instead of spawning two git processes that could time out (a timeout was read as "not recorded").
+
 ## 0.13.0 — 2026-10-30
 
 ### New

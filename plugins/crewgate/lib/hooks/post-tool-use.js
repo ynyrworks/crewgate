@@ -1,6 +1,8 @@
 'use strict';
 
 // PostToolUse: foreground subagent completion (Agent/Task) and git/PR commands (Bash).
+const fs = require('fs');
+const path = require('path');
 const { spawnSync } = require('child_process');
 const project = require('../core/project');
 const events = require('../core/events');
@@ -65,20 +67,52 @@ function mergeEvents(f, merges, mergeCommands) {
 // Reading the log and asking git only happens for named merges.
 const CLI_MERGE_WINDOW_MS = 60 * 1000;
 const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
-function gitOut(args, cwd) {
-  const r = spawnSync('git', args, { cwd, encoding: 'utf8', timeout: 3000, windowsHide: true });
-  return r.status === 0 ? String(r.stdout).trim() : '';
+// Work tree root and current branch of dir, read from the files git keeps (.git folder or "gitdir:" file, HEAD):
+// no process to spawn, so nothing to time out on a loaded machine (a miss here means a merge counted twice).
+// null when it cannot tell (no .git on the way up, an odd layout): the caller then asks git.
+function headAndTopFromFiles(dir) {
+  let d = path.resolve(dir);
+  for (;;) {
+    const dot = path.join(d, '.git');
+    let st = null;
+    try { st = fs.statSync(dot); } catch { /* none here */ }
+    if (st) {
+      let gitDir = dot;
+      if (st.isFile()) {
+        const m = fs.readFileSync(dot, 'utf8').split(/\r?\n/)[0];
+        if (!m.startsWith('gitdir:')) return null;
+        gitDir = path.resolve(d, m.slice(7).trim());
+      }
+      const head = fs.readFileSync(path.join(gitDir, 'HEAD'), 'utf8').split(/\r?\n/)[0].trim();
+      const ref = 'ref: refs/heads/';
+      return { top: d, target: head.startsWith(ref) ? head.slice(ref.length) : 'HEAD' };
+    }
+    const up = path.dirname(d);
+    if (up === d) return null;
+    d = up;
+  }
 }
+
+// One git call for both values; the fallback when the files do not say. Returns { top, target } or null.
+function gitHeadAndTop(cwd) {
+  const r = spawnSync('git', ['rev-parse', '--show-toplevel', '--abbrev-ref', 'HEAD'], { cwd, encoding: 'utf8', timeout: 5000, windowsHide: true });
+  if (r.status !== 0) return null;
+  const [top, target] = String(r.stdout).split(/\r?\n/).map((x) => x.trim());
+  return top && target ? { top, target } : null;
+}
+
 function cliMergeRecorded(pid, data, dir) {
   if (!Array.isArray(data.branches) || !data.branches.length) return false;
   try {
     const cand = events.read(pid, { types: 'git.merge', since: Date.now() - CLI_MERGE_WINDOW_MS }).filter((e) => e.src === 'cli'
       && e.data && e.data.target && e.data.root && Array.isArray(e.data.branches) && sameSet(e.data.branches, data.branches));
     if (!cand.length) return false;
-    const target = gitOut(['rev-parse', '--abbrev-ref', 'HEAD'], dir);
-    const top = gitOut(['rev-parse', '--show-toplevel'], dir);
-    if (!target || !top) return false;
-    const root = project.normalizePath(top);
+    let here = null;
+    try { here = headAndTopFromFiles(dir); } catch { /* fall back to git */ }
+    if (!here) here = gitHeadAndTop(dir);
+    if (!here) return false;
+    const target = here.target;
+    const root = project.normalizePath(here.top);
     return cand.some((e) => e.data.target === target && e.data.root === root);
   } catch { return false; }
 }
