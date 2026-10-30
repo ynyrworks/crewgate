@@ -12,6 +12,7 @@ const store = require('../core/store');
 const hooklog = require('../core/hooklog');
 const gates = require('../core/gates');
 const plans = require('../core/plans');
+const boardCmd = require('./board');
 
 // GET http://127.0.0.1:<port>/api/health -> { state: 'running'|'down'|'other', detail }
 function probeBoard(port, timeoutMs = 1500) {
@@ -126,7 +127,12 @@ async function run(argv, ctx) {
     if (b.state === 'running') add('board', 'ok', ctx.t('wf.doctor.boardRunning', { port }));
     else if (b.state === 'down') add('board', 'ok', ctx.t('wf.doctor.boardDown', { port }));
     else add('board', 'warn', ctx.t('wf.doctor.boardOther', { port, detail: b.detail }));
+    if (b.state !== 'running') {
+      const stale = boardCmd.staleState();
+      if (stale) add('board', 'warn', ctx.t('board.stale', { pid: stale.pid, started: stale.started || '?', log: boardCmd.logFile() }));
+    }
   }
+  add('autostart', 'ok', ctx.t(config.loadGlobal().config.board.autostart ? 'wf.doctor.autostartOn' : 'wf.doctor.autostartOff'));
 
   try {
     const u = require('../core/update-check').checkState({ current: require('../../board/server').pluginVersion() });

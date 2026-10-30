@@ -153,6 +153,8 @@ Claude Code the skill calls it for you. From a terminal use `node plugins/crewga
    writes a brief, creates the task and worktree, and dispatches a worker. The dispatch is recorded by a hook;
    you did not log anything.
 5. Optional: ask Claude to start the board (`crew board start`) and open `http://127.0.0.1:8781/`.
+   To have each session start it when it is down, set `board.autostart` to `true` in `~/.crewgate/config.json` (off by default).
+   If the board ever disappears, `crew board status` and `crew doctor` say so, and `~/.crewgate/board.log` records why a stopping board stopped (a killed process logs nothing).
 6. When the worker returns, the orchestrator runs the review pipeline, shows you the surviving findings,
    sends back or accepts, and asks before merging (the `merge` gate defaults to `ask`).
 

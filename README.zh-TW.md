@@ -139,6 +139,8 @@ claude --plugin-dir crewgate/plugins/crewgate
 4. 交代工作：`/crewgate:crew 幫 add 指令加上 --due 選項，分工去做`。統籌會寫任務書、建立任務與 worktree，
    並派出實作者。派工由 hook 自動記錄，你不需要手動記任何東西。
 5. 選用：請 Claude 啟動看板（`crew board start`），再開啟 `http://127.0.0.1:8781/`。
+   想讓每個工作階段在看板沒執行時自動啟動，可在 `~/.crewgate/config.json` 把 `board.autostart` 設為 `true`（預設關閉）。
+   看板若不見了，`crew board status` 與 `crew doctor` 會提示；`~/.crewgate/board.log` 會記下看板停止的原因（被強制終止的程序不會留下紀錄）。
 6. 實作者回報後，統籌會跑審查流程、把倖存的發現給你看，決定退回或驗收，並在合併前先問你（`merge` 關卡預設是 `ask`）。
 
 ## 設定

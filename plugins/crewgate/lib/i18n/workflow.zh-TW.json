@@ -183,5 +183,8 @@
   "wf.doctor.name.plans": "計畫",
   "wf.doctor.plansOk": "{n} 個計畫檔",
   "wf.doctor.plansDeep": "巢狀超過 {max} 層：{where}",
-  "wf.doctor.plansDup": "id 重複使用：{where}"
+  "wf.doctor.plansDup": "id 重複使用：{where}",
+  "wf.doctor.name.autostart": "看板自動啟動",
+  "wf.doctor.autostartOn": "已開啟（board.autostart）：工作階段開始時若看板沒在執行就啟動",
+  "wf.doctor.autostartOff": "關閉；在全域設定把 board.autostart 設為 true 即可隨工作階段啟動看板"
 }
