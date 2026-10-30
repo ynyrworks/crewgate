@@ -14,6 +14,7 @@
   "plan.notProposed": "節點 {node} 不是提議中的節點；accept 只適用於 [?]",
   "plan.badTarget": "--plan 格式為 SLUG:NODE（例如 0-14-plan:n3）",
   "plan.created": "計畫 {slug} 已建立：{file}",
+  "plan.noGoal": "警告：這份計畫沒有目標，工作偏離時無從判斷。請在計畫檔的標題下方加上一行目標。",
   "plan.added": "節點 {id} 已加入 {slug}",
   "plan.linked": "節點 {id} 已連到任務 {task}",
   "plan.changed": "節點 {id} 現在是{state}",

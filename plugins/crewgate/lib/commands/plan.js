@@ -143,6 +143,7 @@ function run(argv, ctx) {
     if (!a.title) throw new UsageError('args.missing', { name: '--title' });
     const r = plans.create(root, proj.id, a.slug, { title: a.title, goal: a.goal });
     ctx.emit(r, ctx.t('plan.created', { slug: r.slug, file: r.file }));
+    if (!a.goal || !a.goal.trim()) ctx.err(ctx.t('plan.noGoal'));
   } else if (sub === 'list') {
     const rows = [];
     const states = plans.taskStates(proj.id);

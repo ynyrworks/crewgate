@@ -28,6 +28,15 @@ function caches(claudeVersions, codexVersions = []) {
   return { root, dirs, cb, xb, left };
 }
 
+test('old versions of the Office add-on are found and removed the same way, and named as the add-on', () => {
+  const m = caches(['0.15.0']);
+  const base = cleanup.cacheDir(m.dirs, 'claude', 'crewgate-office');
+  for (const n of ['0.14.0', '0.15.0']) fs.mkdirSync(path.join(base, n), { recursive: true });
+  assert.deepEqual(cleanup.scan({ dirs: m.dirs }).items.map((i) => [i.plugin, i.version]), [['crewgate-office', '0.14.0']]);
+  assert.deepEqual(cleanup.cleanup({ dirs: m.dirs }).removed.map((i) => [i.plugin, i.version]), [['crewgate-office', '0.14.0']]);
+  assert.deepEqual(fs.readdirSync(base), ['0.15.0']);
+});
+
 test('scan and cleanup remove only folders strictly older than the newest, never the current one', () => {
   const m = caches(['0.10.0', '0.11.0', '0.12.1'], ['0.12.0', '0.12.1']);
   const s = cleanup.scan({ dirs: m.dirs });

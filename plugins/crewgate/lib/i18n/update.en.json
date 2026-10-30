@@ -8,6 +8,7 @@
   "update.disabled": "Update check is off. Set updates.check to true in the global config to turn it on.",
   "update.unknown": "crewgate {current}. No release information yet (the check has not succeeded).",
   "update.upToDate": "crewgate {current} is the latest release.",
+  "update.staleUpToDate": "crewgate {current} was the latest release on {date}, but the last check failed ({error}), so a newer one may exist.",
   "update.available": "crewgate {latest} is available ({kind}); you have {current}.",
   "update.kind.patch": "fix",
   "update.kind.minor": "new features",

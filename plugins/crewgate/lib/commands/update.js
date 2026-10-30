@@ -25,6 +25,7 @@ function currentVersion() {
 function describe(ctx, s) {
   if (!s.enabled) return [ctx.t('update.disabled')];
   if (!s.latest) return [ctx.t('update.unknown', { current: s.current })];
+  if (!s.kind && s.check_error) return [ctx.t('update.staleUpToDate', { current: s.current, date: String(s.checked_at).slice(0, 10), error: s.check_error })];
   if (!s.kind) return [ctx.t('update.upToDate', { current: s.current })];
   const lines = [ctx.t('update.available', { latest: s.latest, current: s.current, kind: ctx.t(`update.kind.${s.kind}`) }), ctx.t('update.notes', { url: s.notes_url })];
   if (s.rehook) lines.push(ctx.t('update.rehook'));
@@ -32,8 +33,10 @@ function describe(ctx, s) {
   return lines;
 }
 
-async function check(ctx, a) {
-  const s = await updateCheck.check({ current: currentVersion(), force: a.force === true });
+// Asking on the command line always asks GitHub (still at most once a minute): the 24-hour cache is for
+// the board's background check, and a cached answer would call an outdated version the latest. --force stays accepted.
+async function check(ctx) {
+  const s = await updateCheck.check({ current: currentVersion(), force: true });
   ctx.emit(s, describe(ctx, s));
   return 0;
 }
@@ -91,16 +94,18 @@ async function apply(ctx) {
   return 0;
 }
 
+const itemTool = (i) => `${toolName(i.tool)}${i.plugin ? ` ${i.plugin}` : ''}`;
+
 function cleanup(ctx, a) {
   const o = { dirs: updateApply.configDirs(process.env), pluginRoot: path.resolve(__dirname, '..', '..') };
   if (a.dryRun) {
     const s = updateCleanup.scan(o);
-    ctx.emit(s, s.count ? [ctx.t('update.oldVersions', { count: s.count, mb: mb(s.bytes) }), ...s.items.map((i) => `  ${toolName(i.tool)} ${i.version}`)] : [ctx.t('update.noOld')]);
+    ctx.emit(s, s.count ? [ctx.t('update.oldVersions', { count: s.count, mb: mb(s.bytes) }), ...s.items.map((i) => `  ${itemTool(i)} ${i.version}`)] : [ctx.t('update.noOld')]);
     return 0;
   }
   const r = updateCleanup.cleanup(o);
-  const lines = r.removed.map((i) => ctx.t('update.removed', { tool: toolName(i.tool), version: i.version }));
-  for (const k of r.kept) lines.push(ctx.t(`update.kept.${k.reason}`, { tool: toolName(k.tool), version: k.version }));
+  const lines = r.removed.map((i) => ctx.t('update.removed', { tool: itemTool(i), version: i.version }));
+  for (const k of r.kept) lines.push(ctx.t(`update.kept.${k.reason}`, { tool: itemTool(k), version: k.version }));
   lines.push(r.removed.length || r.kept.length ? ctx.t('update.freed', { mb: mb(r.freed) }) : ctx.t('update.noOld'));
   ctx.emit(r, lines);
   return r.kept.length ? 1 : 0;
@@ -111,7 +116,7 @@ async function run(argv, ctx) {
   if (!Object.prototype.hasOwnProperty.call(SPECS, sub)) throw new UsageError('update.usage');
   const a = parse(argv.slice(1), SPECS[sub]);
   if (sub === 'cleanup') return cleanup(ctx, a);
-  return sub === 'check' ? check(ctx, a) : apply(ctx);
+  return sub === 'check' ? check(ctx) : apply(ctx);
 }
 
 module.exports = {

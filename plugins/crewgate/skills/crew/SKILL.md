@@ -49,10 +49,22 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
 2. **Split the work** into pieces that can be reviewed alone. Prefer pieces that touch different
    files so workers do not collide. Say the split to the user in a few lines. If the job is large,
    the `large_task` gate applies (see Gates). For a job with more than a few pieces keep a **plan**:
-   `crew plan new <slug> --title "..."`, then `crew plan add <slug> "step" [--under <node>]` for each step
-   (the plan is a Markdown tree in `.crew/plans/<slug>.md`, the board shows its completion). A step you
+   `crew plan new <slug> --title "..." --goal "..."`, then `crew plan add <slug> "step" [--under <node>]` for each step
+   (the plan is a Markdown tree in `.crew/plans/<slug>.md`, the board shows its completion). A plan exists to
+   keep the work on its original goal, so always give `--goal`, in the user's terms. A step you
    discover later is added with its source: `--origin user|review|refute|implementation|send-back`
    (`--proposed` for one you are unsure about; `crew plan accept <slug> <node>` once it is agreed).
+   If a new step does not serve the goal, do not fold it in: tell the user, and let them drop it, move it to
+   its own plan, or change the goal.
+   **Clarify before a non-trivial plan** (about 3 steps or more), and skip this for a smaller one or a plan
+   the user dictated step by step. Ask only what would change the plan and what the code cannot answer: read
+   the code first. Ask one question at a time and give your recommended answer. Once the plan file exists, add
+   the questions and answers under a `## Clarified` heading at the end of the file, as plain lines such as
+   `- Q: ... A: ... (user)`, so a later session can read them. Plain lines and headings are not plan steps.
+   Clarify again only when the goal, scope, a constraint or an earlier answer changes (the `plan.large_growth`
+   notice is one such signal), and only about what that change affects. If nobody can answer, such as in an
+   unattended run, do not wait: write your assumption there with `(assumed)` and carry on; the next time the
+   user is present, confirm those lines.
    For a non-trivial plan (about 3 steps or more) run a **plan review** before you dispatch anything:
    `crew plan review run <slug>`, then the reviewer, filter, refuter and finalize steps in
    `references/review-pipeline.md` ("Plan review"). What survives is proposed as `[?]` nodes; accept or reject each
@@ -91,7 +103,8 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
    - When `send-back` refuses (limit `max_returns_before_takeover` reached) it tells you to take the
      task over: do the remaining fix yourself in the task's worktree, say so to the user, and keep
      the change as small as possible. This is the one case where you edit code.
-   - Clean: `crew task accept <id>`.
+   - Clean: `crew task accept <id>`. Finalize the round first, even when you expect to dismiss its
+     findings: accept notes a task with no review round or an unfinalized one.
 10. **Gates, then merge.** Check the gates (below). When allowed, merge with git yourself, then record
     it: `crew task merge <id> --note "<merge commit>"`. Remove the worktree when done
     (`git worktree remove <path>`).
@@ -109,8 +122,8 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
   the user in chat, name the exact action (branch, target, size), and wait for a clear yes. Record the reply with
   `crew gate answer <gate-id> yes|no`. A yes covers that one action only. A hook notices a push, PR or merge under an
   `ask` gate that has no recorded yes in the last 30 minutes and reminds you (`gate.missing` on the board).
-- `never`: refuse and say which gate blocks it (`crew gate ask` exits 1). `crew task merge` itself refuses when
-  `gates.merge` is `never`.
+- `never`: refuse and say which gate blocks it (`crew gate ask` exits 1). A hook denies a push, PR or merge under it
+  before it runs, whatever `gates.enforce` says. `crew task merge` itself refuses when `gates.merge` is `never`.
 
 `gates.enforce` decides when a push, PR or merge under an `ask` gate is checked against your recorded approvals:
 

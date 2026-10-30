@@ -15,7 +15,8 @@ const { parseVersion, compareVersions } = require('./update-check');
 const TOOLS = ['claude', 'codex'];
 const SIZE_LIMIT = 200000;   // entries counted per folder; a bigger tree is reported with what was counted
 
-const cacheDir = (dirs, tool) => path.join(dirs[tool], 'plugins', 'cache', 'crewgate', 'crewgate');
+const PLUGINS = ['crewgate', 'crewgate-office'];   // the plugin and its optional add-on
+const cacheDir = (dirs, tool, plugin = 'crewgate') => path.join(dirs[tool], 'plugins', 'cache', 'crewgate', plugin);
 const same = (a, b) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b);
 
 function folderBytes(dir) {
@@ -39,36 +40,41 @@ function folderBytes(dir) {
   return total;
 }
 
-// Folders that may be removed, per tool: [{ tool, version, dir, base }].
+// Only the add-on is named; a row without `plugin` is crewgate itself.
+const named = (plugin) => (plugin && plugin !== 'crewgate' ? { plugin } : {});
+
+// Folders that may be removed, per tool: [{ tool, version, dir, base, plugin? }].
 function candidates(dirs, pluginRoot) {
   const running = pluginRoot ? paths.canonical(pluginRoot) : null;
   const out = [];
   for (const tool of TOOLS) {
     if (!dirs || !dirs[tool]) continue;
-    const base = cacheDir(dirs, tool);
-    // a cache folder that is a link to somewhere else is not touched
-    if (!same(paths.canonical(base), cacheDir({ [tool]: paths.canonical(dirs[tool]) }, tool))) continue;
-    let names;
-    try { names = fs.readdirSync(base); } catch { continue; }
-    const versions = names.filter((n) => parseVersion(n) && n === n.trim() && !/^v/i.test(n));
-    if (!versions.length) continue;
-    const newest = versions.reduce((a, b) => (compareVersions(b, a) > 0 ? b : a));
-    for (const n of versions) {
-      if (compareVersions(n, newest) >= 0) continue;
-      const dir = path.join(base, n);
-      let st;
-      try { st = fs.lstatSync(dir); } catch { continue; }
-      if (!st.isDirectory() || st.isSymbolicLink()) continue;
-      const real = paths.canonical(dir);
-      if (running && (same(real, running) || !paths.isOutside(path.relative(real, running)))) continue;   // the running code is inside it
-      out.push({ tool, version: n, dir, base });
+    for (const plugin of PLUGINS) {
+      const base = cacheDir(dirs, tool, plugin);
+      // a cache folder that is a link to somewhere else is not touched
+      if (!same(paths.canonical(base), cacheDir({ [tool]: paths.canonical(dirs[tool]) }, tool, plugin))) continue;
+      let names;
+      try { names = fs.readdirSync(base); } catch { continue; }
+      const versions = names.filter((n) => parseVersion(n) && n === n.trim() && !/^v/i.test(n));
+      if (!versions.length) continue;
+      const newest = versions.reduce((a, b) => (compareVersions(b, a) > 0 ? b : a));
+      for (const n of versions) {
+        if (compareVersions(n, newest) >= 0) continue;
+        const dir = path.join(base, n);
+        let st;
+        try { st = fs.lstatSync(dir); } catch { continue; }
+        if (!st.isDirectory() || st.isSymbolicLink()) continue;
+        const real = paths.canonical(dir);
+        if (running && (same(real, running) || !paths.isOutside(path.relative(real, running)))) continue;   // the running code is inside it
+        out.push({ tool, version: n, dir, base, ...named(plugin) });
+      }
     }
   }
   return out;
 }
 
 function scan(o) {
-  const items = candidates(o.dirs, o.pluginRoot).map((c) => ({ tool: c.tool, version: c.version, bytes: folderBytes(c.dir) }));
+  const items = candidates(o.dirs, o.pluginRoot).map((c) => ({ tool: c.tool, version: c.version, bytes: folderBytes(c.dir), ...named(c.plugin) }));
   return { count: items.length, bytes: items.reduce((s, i) => s + i.bytes, 0), items };
 }
 
@@ -82,15 +88,15 @@ function cleanup(o) {
     const real = paths.canonical(c.dir);
     const rel = path.relative(baseReal, real);
     if (paths.isOutside(rel) || rel === '' || rel.includes(path.sep) || rel !== c.version) {
-      kept.push({ tool: c.tool, version: c.version, reason: 'outside' });
+      kept.push({ tool: c.tool, version: c.version, reason: 'outside', ...named(c.plugin) });
       continue;
     }
     const bytes = folderBytes(c.dir);
     try {
       fs.rmSync(c.dir, { recursive: true, force: true, maxRetries: 0 });
-      removed.push({ tool: c.tool, version: c.version, bytes });
+      removed.push({ tool: c.tool, version: c.version, bytes, ...named(c.plugin) });
     } catch (e) {
-      kept.push({ tool: c.tool, version: c.version, reason: BUSY.has(e && e.code) ? 'inUse' : 'error' });
+      kept.push({ tool: c.tool, version: c.version, reason: BUSY.has(e && e.code) ? 'inUse' : 'error', ...named(c.plugin) });
     }
   }
   return { removed, kept, freed: removed.reduce((s, i) => s + i.bytes, 0) };

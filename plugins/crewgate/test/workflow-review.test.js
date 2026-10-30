@@ -225,6 +225,27 @@ test('finalize moves a returned task to reviewing and accepts a stored refutatio
   assert.equal(run(repo, 'task', 'accept', t.id).code, 0, 'reviewing -> accepted');
 });
 
+test('accept notes a task with no review round or an unfinalized one, but not a finalized one', () => {
+  const unfinalized = setup();
+  run(unfinalized.repo, 'task', 'report', unfinalized.t.id, '--report-file', u.reportFiles().report);
+  unfinalized.submit([u.finding('a')]);
+  run(unfinalized.repo, 'review', 'filter', unfinalized.t.id);
+  const acc = u.crewJson(['task', 'accept', unfinalized.t.id], unfinalized.repo);
+  assert.equal(acc.code, 0, acc.err);
+  assert.deepEqual(acc.data.review_gap, { kind: 'unfinalized', round: 1, n: 1 });
+
+  const none = setup();
+  run(none.repo, 'task', 'report', none.t.id, '--report-file', u.reportFiles().report);
+  assert.match(run(none.repo, 'task', 'accept', none.t.id).out, /no review round was recorded/);
+
+  const clean = setup();
+  run(clean.repo, 'task', 'report', clean.t.id, '--report-file', u.reportFiles().report);
+  clean.submit([]);
+  run(clean.repo, 'review', 'filter', clean.t.id);
+  run(clean.repo, 'review', 'finalize', clean.t.id);
+  assert.equal(u.crewJson(['task', 'accept', clean.t.id], clean.repo).data.review_gap, null);
+});
+
 test('finalize with no survivors needs no refutations; missing verdicts become uncertain with a warning', () => {
   const { repo, t, submit } = setup();
   submit([u.finding('weak', { confidence: 0.1 })]);

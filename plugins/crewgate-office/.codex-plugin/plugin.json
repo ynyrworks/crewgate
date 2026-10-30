@@ -1,0 +1,16 @@
+{
+  "name": "crewgate-office",
+  "version": "0.15.0",
+  "description": "Optional Office view for the crewgate board: your sessions as a pixel-art office. Needs the crewgate plugin. Codex support is experimental.",
+  "author": {
+    "name": "Ynyr"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/ynyrworks/crewgate",
+  "homepage": "https://github.com/ynyrworks/crewgate#readme",
+  "keywords": [
+    "crewgate",
+    "board",
+    "office"
+  ]
+}

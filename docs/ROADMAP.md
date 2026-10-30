@@ -17,6 +17,9 @@ One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.m
 
 What is on `main` and will ship in the next version (details under "Unreleased" in the [CHANGELOG](../CHANGELOG.md)).
 
+- **0.15: Office becomes optional.** The pixel-art Office moves into a separate plugin, `crewgate-office`, installed only by those who want it.
+- **0.15: Plans guard the goal.** A warning for a plan without a goal, an `off-goal` plan review finding, and clarifying before a non-trivial plan.
+- **0.15: Gates.** A gate set to `never` is denied before the command runs, and detection covers the PowerShell tool and wrapped commands.
 - **Gates follow the repo and can be enforced.** Git events and gate checks use the repository a command targets (`cd`, `git -C`); `gates.enforce` (`remind`, `confirm`, `block`) with a PreToolUse(Bash) hook; `gates.require_user_turn`; the session id read from `CLAUDE_CODE_SESSION_ID`. `confirm` is unverified in bypass-permissions mode, and Codex stays on `remind`.
 - **History.** `#/history` looks back up to 90 days with the Sessions statistics, by day, with a range and project filter.
 - **Timeline polish.** A search box, tool durations across page edges, and crewgate events older than the board's recent event tail.
@@ -28,12 +31,14 @@ What is on `main` and will ship in the next version (details under "Unreleased" 
 
 - **Per-account labelling of sessions.** Show which Claude account or plan a session used, with an optional "expected account" warning per project. Idea stage: it is not verified that the account can be detected from what Claude Code exposes locally.
 - **Office view: test-result reactions** (a celebration or a slump when checks pass or fail; the result is not in the data the office receives today) and **bigger character sprites**.
+- **Enhanced WebGL Office (planned for the release after 0.15).** In the same optional `crewgate-office` plugin, sharing its data model, with the pixel-art view as the fallback for browsers without WebGL. The main plugin gains no dependency.
+- **Plan tree step 3 (planned for the release after 0.15).** Follow-up work from code review attaches to the plan, always as a proposed `[?]` node that counts only once accepted; work unrelated to the goal is suggested for another plan.
 - **Promoted-rule scoring.** Measure whether a promoted lesson actually reduces repeat corrections.
 - **Codex.** Verification on more platforms and Codex versions, honouring hook `ask` / `deny` if Codex supports it, and Codex subagent workers once their sandbox can commit.
 
 ## Exploring
 
-- **Office view (experimental).** The list view stays the default and the only one that must work everywhere. Still open: feedback from real use, more poses and room decoration, and whether a 3D variant is worth it.
+- **Office view (experimental).** The list view stays the default and the only one that must work everywhere. Still open: feedback from real use, and more poses and room decoration.
 
 ## 1.0 criteria
 

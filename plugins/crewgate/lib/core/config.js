@@ -61,8 +61,8 @@ const GLOBAL_DEFAULTS = Object.freeze({
 
 const GATE = ['auto', 'ask', 'never'];
 const GATE_DESC = {
-  en: 'What to do before this action: auto (just do it), ask (ask the user in chat first) or never.',
-  'zh-TW': '執行此動作前的處理方式：auto（直接做）、ask（先在對話中問使用者）、never（禁止）。',
+  en: 'What to do before this action: auto (just do it), ask (ask the user in chat first) or never (forbidden; a detected push, PR or merge is denied before it runs, whatever gates.enforce says).',
+  'zh-TW': '執行此動作前的處理方式：auto（直接做）、ask（先在對話中問使用者）、never（禁止；偵測到的推送、PR、合併會在執行前被拒絕，與 gates.enforce 無關）。',
 };
 
 // Field description: path ("*" matches any key of a map), type, optional enum/min/max/itemType,
@@ -84,8 +84,8 @@ const SCHEMA = [
   ...['push', 'open_pr', 'merge', 'remote_hosts', 'large_task', 'install_or_download']
     .map((k) => f(`gates.${k}`, 'string', GATE_DESC, { enum: GATE })),
   f('gates.enforce', 'string', d(
-    'When a push, PR or merge under an "ask" gate is checked: remind (after the command, reminder only), confirm (before it, Claude Code asks you to allow it) or block (before it, the command is denied until an approval is recorded).',
-    '「ask」關卡的推送、PR、合併何時檢查：remind（執行後提醒）、confirm（執行前由 Claude Code 詢問你是否允許）、block（執行前拒絕，直到記錄核准）。'), { enum: ['remind', 'confirm', 'block'] }),
+    'When a push, PR or merge under an "ask" gate is checked: remind (after the command, reminder only), confirm (before it, Claude Code asks you to allow it) or block (before it, the command is denied until an approval is recorded). Best effort: detection reads the command text, so a script that pushes is not seen.',
+    '「ask」關卡的推送、PR、合併何時檢查：remind（執行後提醒）、confirm（執行前由 Claude Code 詢問你是否允許）、block（執行前拒絕，直到記錄核准）。這是盡力攔截：偵測只讀指令文字，看不到腳本裡的推送。'), { enum: ['remind', 'confirm', 'block'] }),
   f('gates.require_user_turn', 'boolean', d(
     'An approval counts only when you sent a message between "gate ask" and "gate answer yes", so the model cannot approve itself within one turn.',
     '核准要在「gate ask」與「gate answer yes」之間有使用者送出訊息才算數，避免模型在同一輪自己核准。')),

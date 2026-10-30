@@ -4,7 +4,7 @@
 
 [English](README.md)
 
-**把寫程式的工作交給 AI 子代理，並且有獨立審查、推送前的核准，以及一份真實發生過什麼的紀錄。**
+**把寫程式的工作交給 AI 子代理，成果仍然信得過：工作不偏離目標、由作者以外的人檢查、離開本機的東西由你核准，而且留有一份真實發生過什麼的紀錄。**
 
 ## crewgate 是什麼
 
@@ -39,7 +39,7 @@ crewgate 除了一個設定檔和幾個 markdown 檔之外，不會在你的專�
 - 只在本機：看板只綁定 `127.0.0.1`，沒有遙測，hook 與看板不會呼叫模型，只有一個可關閉的更新檢查。
 
 **可見度**
-- 本機看板的頁面：總覽、專案、工作階段（Claude 與 Codex 的即時工作階段併在同一棵樹）、含搜尋的單一工作階段時間軸、歷史（最多回溯 90 天）、用量（token 與估算費用）、辦公室（實驗性的像素風畫面）、設定（由設定結構產生的表單），以及更新橫幅。支援英文與繁體中文。
+- 本機看板的頁面：總覽、專案、工作階段（Claude 與 Codex 的即時工作階段併在同一棵樹）、含搜尋的單一工作階段時間軸、歷史（最多回溯 90 天）、用量（token 與估算費用）、設定（由設定結構產生的表單），以及更新橫幅。支援英文與繁體中文。像素風的辦公室頁面是[選用的附加元件](#選用辦公室畫面)。
 - 派工、交回、push、merge 與工作階段摘要都由 hook 記錄，你不用手動記任何東西。
 
 **學習**
@@ -53,7 +53,7 @@ crewgate 把這些都變成強制或自動記錄的機制：缺段落就拒收�
 經過過濾的審查流程、尚未審查或仍在背景執行時的收尾提醒，以及只有你點頭才會升格成規則的經驗。
 模型仍然是被「要求」照流程走；crewgate 做的是，一旦沒照做，你看得到。
 
-現況：實驗性的部分都在出現的地方標示出來：Codex 支援、辦公室畫面，以及 `confirm` 模式在 bypass-permissions 模式下的行為（尚未驗證）。
+現況：實驗性的部分都在出現的地方標示出來：Codex 支援、選用的辦公室附加元件，以及 `confirm` 模式在 bypass-permissions 模式下的行為（尚未驗證）。
 沒有任何執行期相依套件，需要 Node.js 18 以上，Windows、macOS、Linux 都能用。唯一的對外連線是看板選用的更新檢查
 （一天向 GitHub 一次，見「隱私與安全」，可用 `updates.check` 關閉）。
 
@@ -104,7 +104,7 @@ SubagentStart/Stop、Stop、PreCompact 與 SessionEnd。它們透過 `crew-task:
 [plugins/crewgate/hooks/README.md](plugins/crewgate/hooks/README.md)。
 
 **看板。** `crew board start` 會啟動本機網頁：所有專案、依狀態排列的任務與退回次數、執行中的子代理、等你處理的事項、
-工作流、紀錄、審查統計、經驗、交接、本機 Claude Code / Codex 工作階段即時清單與單一工作階段時間軸、可回溯 90 天的歷史頁、token 用量、實驗性的辦公室畫面，以及由設定結構產生的設定頁。
+工作流、紀錄、審查統計、經驗、交接、本機 Claude Code / Codex 工作階段即時清單與單一工作階段時間軸、可回溯 90 天的歷史頁、token 用量，以及由設定結構產生的設定頁。
 支援英文與繁體中文。
 
 完整的虛構示範流程請看 [examples/todo-cli/WALKTHROUGH.md](examples/todo-cli/WALKTHROUGH.md)（英文）。
@@ -127,6 +127,8 @@ claude --plugin-dir crewgate/plugins/crewgate
 
 技能要加上外掛名稱來呼叫：`/crewgate:crew`。CLI 位於 `plugins/crewgate/bin/crew.js`；在 Claude Code 裡由技能代你呼叫，
 在終端機則用 `node plugins/crewgate/bin/crew.js <指令>`。
+
+這樣就裝好 crewgate 需要的一切。辦公室頁面是分開的，可以不裝：見[選用：辦公室畫面](#選用辦公室畫面)。
 
 ## 快速開始
 
@@ -165,12 +167,18 @@ claude --plugin-dir crewgate/plugins/crewgate
 
 ## 計畫
 
-計畫是放在專案裡的 Markdown 步驟樹（`.crew/plans/<名稱>.md`）。葉節點連到 crewgate 任務，看板就能顯示整件工作做到哪裡，
-檔案或任務一變動就自動更新。計畫可以一直長大：每個節點都記錄來源（`plan`、`user`、`review`、`refute`、`implementation`、
+計畫是用來避免工作偏離原本要做的事。它記下目標，每個步驟都能拿來對照：新步驟對目標沒有幫助時，統籌者會被要求先提出來問你，
+而不是直接併進去。你可以捨棄它、移到另一份計畫，或修改目標。
+
+技術上，計畫是放在專案裡的 Markdown 步驟樹（`.crew/plans/<名稱>.md`）。葉節點連到 crewgate 任務，看板就能顯示整件工作做到哪裡，
+檔案或任務一變動就自動更新。計畫可以長大，但過程看得見：每個節點都記錄來源（`plan`、`user`、`review`、`refute`、`implementation`、
 `send-back`）與加入日期，計畫頁可以標出最近新增的節點。
 
+大約三步以上的計畫，統籌者會被要求先釐清：只問會改變計畫、且程式碼查不到的事，答案留在計畫檔裡。之後只有目標、範圍、限制或先前的答案變動時才再問。
+這些是給模型的指示，不是 crewgate 會強制檢查的規則。
+
 ```
-crew plan new 0-14 --title "0.14 計畫"
+crew plan new 0-14 --title "0.14 計畫" --goal "這個版本必須達成的事"
 crew plan add 0-14 "計畫樹與完成度檢視"
 crew plan add 0-14 "檔案格式與 CLI" --under n1
 crew task create --title "..." --brief-file brief.md --plan 0-14:n2   # 或：crew plan link 0-14 n2 <任務 id>
@@ -214,13 +222,6 @@ crew plan show 0-14
   <img alt="工作階段：Claude 與 Codex 併在同一棵樹，等你回覆的排最前面。" src="docs/images/sessions-light-zh-TW.png" width="100%">
 </picture>
 
-**辦公室（實驗性）：同樣的工作階段，用像素風小辦公室呈現，每個專案一個房間。** 角色標記（耳麥、安全帽、眼鏡、角）代表角色，衣服顏色代表引擎。角色會照工作內容演出：讀檔拿著文件、搜尋拿放大鏡、編輯時快速打字、執行指令時顯示終端機與進度條、等你回覆時冒出 `!`。做完的子代理會拿著文件走向上層，閒置的工作階段到沙發休息，結束的會從門走出去。全部在 canvas 上自行繪製，沒有外部素材，下方的清單仍可用鍵盤操作。
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/office-dark-zh-TW.png">
-  <img alt="辦公室：工作階段化為像素風角色坐在辦公桌前" src="docs/images/office-light-zh-TW.png" width="100%">
-</picture>
-
 **歷史：超過 24 小時的工作階段，最多回溯 90 天，依日期分組並附同樣的統計；每一列都能點開它的時間軸。**
 
 <picture>
@@ -242,9 +243,32 @@ crew plan show 0-14
   <img alt="設定：每個選項都有說明。" src="docs/images/settings-light-zh-TW.png" width="100%">
 </picture>
 
+## 選用：辦公室畫面
+
+辦公室頁面用像素風小辦公室呈現你的工作階段，好玩，也能一眼看個大概。crewgate 的任何功能都不依賴它，所以它是獨立的外掛，想用的人才安裝；沒裝就不會有辦公室分頁。
+
+```
+/plugin install crewgate-office@crewgate
+```
+
+裝好後重新整理看板頁面即可，看板不用重啟。在終端機則用 `claude plugin install crewgate-office@crewgate`。裝好之後，一鍵更新會一併更新它；萬一兩邊對不上，分頁會說明並顯示更新指令，看板其他部分照常運作。要移除時用 `/plugin uninstall crewgate-office@crewgate`。
+
+**從 0.14 或更舊的版本升級：** 辦公室分頁會消失，安裝附加元件後才會回來。其他都不受影響。
+
+透過 Codex 安裝屬實驗性，尚未驗證。本機複本會自動找到 `plugins/crewgate-office`。
+
+**畫面內容：每個專案一個房間。** 角色標記（耳麥、安全帽、眼鏡、角）代表角色，衣服顏色代表引擎。角色會照工作內容演出：讀檔拿著文件、搜尋拿放大鏡、編輯時快速打字、執行指令時顯示終端機與進度條、等你回覆時冒出 `!`。做完的子代理會拿著文件走向上層，閒置的工作階段到沙發休息，結束的會從門走出去。全部在 canvas 上自行繪製，沒有外部素材，下方的清單仍可用鍵盤操作。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/office-dark-zh-TW.png">
+  <img alt="辦公室：工作階段化為像素風角色坐在辦公桌前" src="docs/images/office-light-zh-TW.png" width="100%">
+</picture>
+
 ## 路線圖
 
 接下來、之後要做的事，以及 1.0 的條件：[docs/ROADMAP.md](docs/ROADMAP.md)（英文）。
+
+加強版的 WebGL 辦公室預計在下一個版本推出，放在同一個選用附加元件裡。目前還沒有推出；瀏覽器不支援 WebGL 時會退回像素版。
 
 ## 隱私與安全
 
@@ -282,9 +306,11 @@ crew plan show 0-14
 | `confirm` | 執行前由 hook 讓 Claude Code 問**你**（它自己的權限提示：允許或拒絕）。你允許就記錄為 `gate.confirmed`，不會被當成漏掉。誤判的代價是多點一下。需要用戶端支援 PreToolUse 的 `ask`；在 bypass-permissions 模式下的行為尚未驗證。 | 互動式工作階段（建議） |
 | `block` | 執行前由 hook 直接拒絕；模型必須 `gate ask`、問你、等你回覆、`gate answer yes` 再重試。誤判會讓工作停下。不是安全邊界：模型仍可自己記錄核准。 | CI、無人值守，搭配 `auto` 關卡 |
 
+設為 `never` 的關卡，其推送、PR、合併在三種模式下都會於執行前被拒絕，任何核准都無法解除。Codex 工作階段只會事後記錄並告知模型。
+
 `gates.require_user_turn`（預設 `true`）對三種模式都多加一條規則：手動記錄的核准，要在 `gate ask` 與 `gate answer yes`
-之間，在發出 ask 的那個工作階段有你送出的訊息才算數（回答被記錄時判斷一次；不知道工作階段 id 時，例如 Codex CLI，專案中任何工作階段有訊息就算，這個判斷較弱）。這能防止模型一口氣自問自答；防不了你寫了不相干的訊息後它回答「yes」。偵測只讀 Bash 指令文字：
-會推送的腳本、alias、變數（`$GIT push`）、其他工具的推送都看不到。`cd`／`git -C` 指到的專案決定採用哪份設定，
+之間，在發出 ask 的那個工作階段有你送出的訊息才算數（回答被記錄時判斷一次；不知道工作階段 id 時，例如 Codex CLI，專案中任何工作階段有訊息就算，這個判斷較弱）。這能防止模型一口氣自問自答；防不了你寫了不相干的訊息後它回答「yes」。三種模式都是盡力攔截，不是硬關卡：偵測讀的是 Bash 與 PowerShell 工具的指令，包在 `bash -c`、`eval`、`powershell -c`、`cmd /c`、`npx` 或行內 `git -c alias.x=y` 裡的也算；
+會推送的腳本、已設定的 alias、變數（`$GIT push`）、其他工具的推送都看不到，hook 當掉或逾時也會放行。要真正擋住，請用伺服器端的分支保護。`cd`／`git -C` 指到的專案決定採用哪份設定，
 未註冊的專案永遠不攔。Codex 工作階段維持 `remind`。逐步流程、限制與建議設定見 [docs/DESIGN.md §8.1](docs/DESIGN.md)。
 
 ## 用 Codex 或其他 CLI 當審查員
@@ -327,10 +353,10 @@ codex plugin add crewgate@crewgate
 - `crew task merge` 只記錄合併，不會執行 git。合併由統籌執行，hook 負責記錄那個指令。
 - 實作者的隔離方式是 worktree 加上指示，不是容器。
 - 看板的工作階段清單是讀取本機 Claude Code 與 Codex 的紀錄；除非在全域設定打開 `board.show_text`，否則不顯示訊息文字。工作階段統計（時長、提示、工具呼叫、token、費用）只有數字，依對話紀錄快取在 `~/.crewgate/cache/sessions`。
-- Git 與關卡偵測只讀 Bash 工具的指令文字。會推送的腳本、alias、變數（`$GIT push`）、`eval`，或其他工具（IDE、Git 圖形介面、MCP 伺服器）的推送都看不到；關卡防的是模型的一般習慣，不是蓄意繞過。
+- Git 與關卡偵測只讀 Bash 與 PowerShell 工具的指令文字。會推送的腳本、已設定的 alias、變數（`$GIT push`）、`-EncodedCommand`，或其他工具（IDE、Git 圖形介面、MCP 伺服器）的推送都看不到；關卡防的是模型的一般習慣，不是蓄意繞過。
 - `gates.enforce: confirm` 依賴 Claude Code 遵守 PreToolUse 的 `ask`；在 bypass-permissions（以及 `dontAsk`）模式下的行為尚未驗證。`gate.confirmed` 的意思是「指令在回傳 ask 之後執行了」，不代表真有人點過。
 - Codex 工作階段維持 `remind`：Codex 是否遵守 hook 回傳的 `ask`／`deny` 尚未確認。不知道工作階段 id 時（Codex CLI），`gates.require_user_turn` 會退回較弱的「專案」判斷：專案中任何工作階段的訊息都算。
-- 辦公室畫面是實驗性的，只呈現活動、不呈現結果：指令是否成功不在它收到的資料裡。以 Codex 當統籌屬實驗性；不支援 Gemini。
+- 選用的辦公室附加元件是實驗性的，只呈現活動、不呈現結果：指令是否成功不在它收到的資料裡。以 Codex 當統籌屬實驗性；不支援 Gemini。
 
 ## 參與貢獻
 

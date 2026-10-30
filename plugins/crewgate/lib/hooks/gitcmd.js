@@ -204,7 +204,8 @@ function optValues(args, names) {
 const GIT_VALUED = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--exec-path', '--super-prefix']);
 const base = (w) => String(w).replace(/\\/g, '/').split('/').pop().replace(/\.exe$/i, '').toLowerCase();
 
-function analyse(seg) {
+// Index of the command word, past `VAR=x` and words such as sudo or env.
+function commandStart(seg) {
   let i = 0;
   while (i < seg.length) {
     const w = seg[i];
@@ -216,15 +217,67 @@ function analyse(seg) {
     }
     break;
   }
+  return i;
+}
+
+// The words after `git` -> { j: index of the subcommand, dirs: every `-C <dir>` in order, aliases: from `-c alias.x=y` }.
+function gitOptions(rest) {
+  let j = 0;
+  const dirs = [];
+  const aliases = new Map();
+  while (j < rest.length && rest[j].startsWith('-')) {
+    if (rest[j] === '-C' && j + 1 < rest.length) dirs.push(rest[j + 1]);
+    if (rest[j] === '-c' && j + 1 < rest.length) {
+      const m = /^alias\.([^=]+)=([\s\S]*)$/.exec(rest[j + 1]);
+      if (m) aliases.set(m[1], m[2]);
+    }
+    j += GIT_VALUED.has(rest[j]) ? 2 : 1;
+  }
+  return { j, dirs, aliases };
+}
+
+const MAX_WRAP_DEPTH = 3;
+const SHELLS = new Set(['bash', 'sh', 'zsh', 'dash', 'ksh']);
+const POWERSHELLS = new Set(['powershell', 'pwsh']);
+const isPsCommandFlag = (w) => w.length >= 2 && '-command'.startsWith(w.toLowerCase());
+
+// The command line a wrapper runs (`bash -c "..."`, `eval ...`, `cmd /c ...`, `npx gh ...`, a `git -c alias.x=y x`);
+// null when the segment is no wrapper. A script file (`bash deploy.sh`) is not read.
+function wrappedCommand(seg) {
+  const i = commandStart(seg);
+  const cmd = base(seg[i] || '');
+  const rest = seg.slice(i + 1);
+  if (SHELLS.has(cmd)) {
+    const j = rest.findIndex((w) => /^-[A-Za-z]*c[A-Za-z]*$/.test(w));
+    return j >= 0 && j + 1 < rest.length ? rest[j + 1] : null;
+  }
+  if (POWERSHELLS.has(cmd)) {
+    const j = rest.findIndex(isPsCommandFlag);
+    return j >= 0 ? rest.slice(j + 1).join(' ') : null;
+  }
+  if (cmd === 'cmd') {
+    const j = rest.findIndex((w) => /^\/[ck]$/i.test(w));
+    return j >= 0 ? rest.slice(j + 1).join(' ') : null;
+  }
+  if (cmd === 'eval') return rest.join(' ');
+  if (cmd === 'iex' || cmd === 'invoke-expression') return rest.filter((w) => !isPsCommandFlag(w)).join(' ');
+  if (cmd === 'npx' || cmd === 'bunx') return rest.filter((w) => !w.startsWith('-')).join(' ');
+  if (cmd === 'git') {
+    const { j, dirs, aliases } = gitOptions(rest);
+    const alias = aliases.get(rest[j]);
+    if (alias === undefined) return null;
+    if (alias.startsWith('!')) return alias.slice(1);
+    return ['git', ...dirs.flatMap((d) => ['-C', `"${d}"`]), alias, ...rest.slice(j + 1)].join(' ');
+  }
+  return null;
+}
+
+function analyse(seg) {
+  const i = commandStart(seg);
   const cmd = base(seg[i] || '');
   const rest = seg.slice(i + 1);
   if (cmd === 'git') {
-    let j = 0;
-    const dirs = []; // every `-C <dir>`, applied in order
-    while (j < rest.length && rest[j].startsWith('-')) {
-      if (rest[j] === '-C' && j + 1 < rest.length) dirs.push(rest[j + 1]);
-      j += GIT_VALUED.has(rest[j]) ? 2 : 1;
-    }
+    const { j, dirs } = gitOptions(rest);
     const sub = rest[j];
     const args = rest.slice(j + 1);
     if (sub === 'push') {
@@ -253,13 +306,15 @@ function analyse(seg) {
   return null;
 }
 
-// `cd X` / `pushd X` segment -> the directory word; null when the target is unknown (`popd`, `cd` alone,
-// `cd -`, `cd ~`, a dynamic word); undefined when the segment is not a directory change.
+const CD_WORDS = new Set(['cd', 'pushd', 'chdir', 'sl', 'set-location', 'push-location']);
+
+// `cd X` / `pushd X` / `Set-Location X` segment -> the directory word; null when the target is unknown (`popd`,
+// `cd` alone, `cd -`, `cd ~`, a dynamic word); undefined when the segment is not a directory change.
 function cdTarget(seg) {
   const c = base(seg[0] || '');
-  if (c === 'popd') return null;
-  if (c !== 'cd' && c !== 'pushd') return undefined;
-  const w = seg.slice(1).filter((x) => x !== '--' && !/^-[LPe@]+$/.test(x))[0];
+  if (c === 'popd' || c === 'pop-location') return null;
+  if (!CD_WORDS.has(c)) return undefined;
+  const w = seg.slice(1).filter((x) => x !== '--' && !/^-[A-Za-z@]/.test(x))[0];
   if (!w || w === '-' || w.startsWith('~') || isDynamic(w)) return null;
   return w;
 }
@@ -267,8 +322,9 @@ function cdTarget(seg) {
 // -> [{ type: 'git.push'|'git.merge', data, cd }]
 // cd: the directory words that lead from the session cwd to the repo the command acts on, in order
 // (earlier `cd` segments of the command line, then `git -C`). [] = the session cwd. A dynamic or
-// unknown directory also gives [] (today's behaviour: the session project).
-function detect(command) {
+// unknown directory also gives [] (today's behaviour: the session project). A wrapper's command line is
+// detected too, up to MAX_WRAP_DEPTH levels.
+function detect(command, depth = 0) {
   const out = [];
   let steps = [];
   const saved = []; // steps at each open "(": a subshell's cd ends with its ")"
@@ -278,6 +334,11 @@ function detect(command) {
     if (t !== undefined) {
       // a cd on either side of | or & runs in a subshell and does not carry on
       if (next !== '|' && next !== '&' && prev !== '|' && prev !== '&') steps = t === null ? [] : [...steps, t];
+      return;
+    }
+    const wrapped = depth < MAX_WRAP_DEPTH ? wrappedCommand(seg) : null;
+    if (wrapped !== null) {
+      for (const r of detect(wrapped, depth + 1)) out.push({ ...r, cd: [...steps, ...r.cd] });
       return;
     }
     const r = analyse(seg);

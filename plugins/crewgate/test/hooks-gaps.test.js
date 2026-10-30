@@ -50,11 +50,12 @@ test('gh pr create is the open_pr gate, git merge the merge gate; a "no" answer 
   assert.match(post(f, 'glab mr create', 'mr1').json.hookSpecificOutput.additionalContext, /"open_pr" gate/, 'a push yes is not an open_pr yes');
 });
 
-test('an approval older than 30 minutes or from another session does not count; auto and never gates stay quiet', () => {
+test('an approval older than 30 minutes or from another session does not count; an auto gate stays quiet, a never gate that ran is reported', () => {
   const f = H.fixture({ config: { gates: { merge: 'auto', open_pr: 'never' } } });
   H.start(f);
   assert.equal(post(f, 'git merge x', 'a1').out, '{}', 'auto');
-  assert.equal(post(f, 'gh pr create', 'a2').out, '{}', 'never is refused by `gate ask`, not by this reminder');
+  assert.match(post(f, 'gh pr create', 'a2').json.hookSpecificOutput.additionalContext, /"open_pr" gate is set to never/);
+  assert.equal(H.evs(f, 'gate.missing').filter((e) => e.data.mode === 'never').length, 1);
 
   const g = gates.ask(f.pid, {}, { gate: 'push' }, { session: 'other-session' });
   gates.answer(f.pid, g.id, 'yes', '', { session: 'other-session' });

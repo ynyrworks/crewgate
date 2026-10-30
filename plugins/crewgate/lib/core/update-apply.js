@@ -17,6 +17,7 @@ const { parseVersion, compareVersions } = require('./update-check');
 const cleanup = require('./update-cleanup');
 
 const ID = 'crewgate@crewgate';
+const OFFICE_ID = 'crewgate-office@crewgate';   // the optional add-on, updated along with the plugin when it is installed
 const COMMANDS = {
   claude: [['plugin', 'marketplace', 'update', 'crewgate'], ['plugin', 'update', ID]],
   codex: [['plugin', 'marketplace', 'upgrade', 'crewgate']],
@@ -109,7 +110,7 @@ async function findCli(tool, env, platform, o = {}) {
 }
 
 // Runs one fixed command. -> { code, timedOut, output, error }. stdin is closed.
-function runCommand(file, args, { env, timeoutMs, platform }) {
+function runCommand(file, args, { env, timeoutMs, platform, outMax = OUT_MAX }) {
   return new Promise((resolve) => {
     let plan;
     try { plan = execx.spawnPlan(file, args, { platform }); } catch (e) { resolve({ code: null, timedOut: false, output: '', error: e.message }); return; }
@@ -122,18 +123,20 @@ function runCommand(file, args, { env, timeoutMs, platform }) {
     const take = (c) => { if (out.length < CAPTURE_MAX) out += c.toString('utf8'); };
     child.stdout.on('data', take);
     child.stderr.on('data', take);
-    const end = (r) => { if (settled) return; settled = true; clearTimeout(timer); resolve({ output: redact.clean(out, OUT_MAX), ...r }); };
+    const end = (r) => { if (settled) return; settled = true; clearTimeout(timer); resolve({ output: redact.clean(out, outMax), ...r }); };
     const timer = setTimeout(() => { try { child.kill(); } catch { /* gone */ } end({ code: null, timedOut: true }); }, timeoutMs);
     child.on('error', (e) => end({ code: null, timedOut: false, error: e.code || 'spawn error' }));
     child.on('close', (code) => end({ code, timedOut: false }));
   });
 }
 
-async function claudeInstalled(file, o) {
-  const r = await runCommand(file, ['plugin', 'list', '--json'], { ...o, timeoutMs: PROBE_TIMEOUT_MS });
-  if (r.code === 0 && r.output.includes(ID)) return true;
-  const t = await runCommand(file, ['plugin', 'list'], { ...o, timeoutMs: PROBE_TIMEOUT_MS });
-  return t.code === 0 && t.output.includes(ID);
+// The full list (a long one must not hide the plugin behind the output limit). -> text naming the installed plugins
+async function claudeListing(file, o) {
+  const probe = { ...o, timeoutMs: PROBE_TIMEOUT_MS, outMax: CAPTURE_MAX };
+  const r = await runCommand(file, ['plugin', 'list', '--json'], probe);
+  if (r.code === 0 && r.output.includes(ID)) return r.output;
+  const t = await runCommand(file, ['plugin', 'list'], probe);
+  return t.code === 0 ? t.output : '';
 }
 
 function codexInstalled(env) {
@@ -176,8 +179,13 @@ async function plan(o) {
   const tools = [];
   const claude = await findCli('claude', o.env, o.platform, o);
   if (claude) {
-    if (await claudeInstalled(claude, o)) {
+    const listing = await claudeListing(claude, o);
+    if (listing.includes(ID)) {
       for (const a of COMMANDS.claude) steps.push({ tool: 'claude', file: claude, args: a, cmd: display('claude', a) });
+      if (listing.includes(OFFICE_ID)) {
+        const a = ['plugin', 'update', OFFICE_ID];
+        steps.push({ tool: 'claude', file: claude, args: a, cmd: display('claude', a), optional: true });
+      }
       tools.push({ tool: 'claude', status: 'run' });
     } else tools.push({ tool: 'claude', status: 'skipped', reason: 'notInstalled' });
   } else if (claudeInstalledOnDisk(o.pluginRoot, o.env)) tools.push({ tool: 'claude', status: 'manual', reason: 'cliNotFound' });
@@ -298,6 +306,7 @@ function createRunner(opts = {}) {
         const r = await runCommand(s.file, s.args, { env, platform, timeoutMs: opts.stepTimeoutMs || STEP_TIMEOUT_MS });
         const ok = r.code === 0 && !r.timedOut && !r.error;
         st.steps.push({ tool: s.tool, cmd: s.cmd, ok, code: r.code, timed_out: r.timedOut, output: r.output || r.error || '' });
+        if (s.optional) continue;   // a failed add-on update does not stop the plugin; its page then says it needs updating
         if (!ok) { allOk = false; Object.assign(result(s.tool), { status: 'failed', reason: null }); break; }
         result(s.tool).status = 'updated';
       }

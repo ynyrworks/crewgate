@@ -28,7 +28,7 @@ const STATE_BOX = { open: ' ', done: 'x', dropped: '~', proposed: '?' };
 // Proposals from a plan review carry round, kind, action, done_when and for (the step they are about) in the comment.
 // A comment token cannot hold whitespace, and "-->" would end the comment: encodeToken escapes %, < > and every
 // whitespace character as %HH (%uHHHH above 0xFF), decodeToken reverses it exactly.
-const KINDS = ['missing-step', 'wrong-order', 'too-big', 'risk', 'vague-done', 'redundant'];
+const KINDS = ['off-goal', 'missing-step', 'wrong-order', 'too-big', 'risk', 'vague-done', 'redundant'];
 const ACTIONS = ['add', 'split', 'change', 'drop'];
 const hex = (c) => { const n = c.codePointAt(0); return n > 0xff ? `%u${n.toString(16).toUpperCase().padStart(4, '0')}` : `%${n.toString(16).toUpperCase().padStart(2, '0')}`; };
 const encodeToken = (s) => String(s).replace(/[%<>\s]/gu, hex);

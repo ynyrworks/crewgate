@@ -28,7 +28,7 @@ Goals
 Non-goals (first release)
 - No LLM calls from hooks or the board. No network access, with one exception: the board's update check
   (section 10), which is on by default and can be turned off.
-- No 3D or game-like board. The live-session list is the default and the only view that must work everywhere; the pixel-art Office page (section 14) is an experimental extra.
+- No 3D or game-like board. The live-session list is the default and the only view that must work everywhere; the pixel-art Office page (section 14) is an experimental, separately installed add-on.
 - Gemini. Codex as orchestrator, worker and reviewer is supported experimentally (section 16).
 
 ## 2. Clean-room rule
@@ -298,8 +298,15 @@ A push (`git push`), a PR (`gh pr create`, `glab mr create`) or a merge (`git me
 | `confirm` | PreToolUse(Bash), then PostToolUse(Bash) | 1. Before the command, the hook finds the push / PR / merge, resolves the target project (below) and checks the approval. 2. No approval: it records `gate.prompted` and answers `permissionDecision: "ask"` with a reason (which command, which project, which gate). Claude Code then shows its own permission prompt. 3. You allow: the command runs; PostToolUse sees the `gate.prompted` of the same `tool_use_id`, records `gate.confirmed` (`via: "permission-prompt"`, plus the `permission_mode` seen) and writes no `gate.missing`. You deny: nothing runs. 4. An approval exists: the hook is silent and the command goes on as it would without crewgate. |
 | `block` | PreToolUse(Bash) | 1. Same detection and approval check. 2. No approval: `gate.blocked` is recorded and the hook answers `permissionDecision: "deny"` with instructions. The command does not run. 3. The model runs `crew gate ask <gate>`, asks you in chat, waits for your reply, runs `crew gate answer <id> yes` and retries; now the check passes. |
 
-Only gates set to `ask` are enforced; `auto` and `never` are not touched by the hook (`crew gate ask` already refuses
-`never`). One command line may touch several gates (`git push && gh pr create`): one reason lists all of them.
+The table is about gates set to `ask`. `auto` is not touched by the hook. A push, PR or merge under `never` is denied before
+it runs in all three modes (`gate.blocked`, `mode: "never"`) and no approval lifts it; `crew gate ask` refuses `never` too.
+Codex has no such check, so one that ran there is recorded afterwards (`gate.missing`, `mode: "never"`) and reported to the
+model. One command line may touch several gates (`git push && gh pr create`): one reason lists all of them.
+
+**Best effort.** Every mode is interception, not a hard stop. The hooks see the Bash and PowerShell tools only and read
+the command text, unwrapping `bash -c`, `eval`, `powershell -c`, `cmd /c`, `iex`, `npx` and an inline `git -c alias.x=y`. A
+script, a configured alias or another tool is not seen, and a hook that crashes or times out lets the command through. With
+`block`, events that cannot be read count as no approval; an unreadable config leaves the modes unknown and nothing is denied.
 
 **Target project.** Detection is the one used for events: `cd` / `pushd` words and `git -C` are resolved from the session
 working directory, a subshell's `cd` does not leak out of it, and redirections, comments and heredoc bodies are not
@@ -554,7 +561,19 @@ remembers a bounded id to file map, and `GET /api/session/<id>` falls back to it
 roots), so ids never name a path the caller chose. The page keeps pages in memory, fetches again a page whose rows are `partial`, and
 reloads the first page when you come back to it.
 
-Office. `#/office` (`board/public/office.js`, `office-model.js`, `office-sprites.js`; experimental) draws the Sessions rows as
+Office add-on. The Office page is a separate optional plugin, `plugins/crewgate-office`, so the main plugin ships nothing of it.
+The board looks for it in three fixed places (`board/office-addon.js`): the folder next to the plugin, and the Claude and Codex
+plugin caches when that tool's own list (`installed_plugins.json`, `config.toml`) still names it, because an uninstall leaves the
+cache folder behind. A plugin installed by a tool counts the neighbouring folder only when that list names the add-on too, since a
+marketplace clone always holds it. There is no configured path and no download. `GET /api/addons` tells the page `missing`, `outdated` or `ok`,
+never the folder. `office.json` in the add-on declares `office_api` and its files; a value other than `OFFICE_API` is not loaded,
+and the page shows the update commands instead. The board serves only the listed `.js` and `.css` files from the add-on's `public`
+folder at `/addon/office/<file>`, and the page loads them in order under the same CSP. `office_api` is the contract: raise it when
+what `app.js` passes to `Office.page` changes. Its strings stay in the board's i18n tables. One-click update runs
+`claude plugin update crewgate-office@crewgate` when it is installed (a failure there does not fail the plugin update), and old
+versions are cleaned up like the plugin's.
+
+Office. `#/office` (`plugins/crewgate-office/public/office.js`, `office-model.js`, `office-sprites.js`; experimental) draws the Sessions rows as
 a pixel-art office on a canvas, from scratch with no assets: one room per project, an orchestrator at the middle desk of a pod
 with its subagents around it. `office-model.js` is pure logic (no DOM, no canvas) and decides, from a row's status and
 activity, which animation a session gets (thinking, tool, writing, waiting, idle, done; the tool decides the prop: document,
@@ -662,7 +681,7 @@ about; only accepted nodes count. Code: `lib/core/plan-review.js`, CLI in `lib/c
 - Files: `<data>/projects/<id>/runtime/plan-review/<slug>/` holds `state.json` (rounds with counters, rejected keys, accepted log,
   notes) and per round `N.packet.md`, `N.raw.json`, `N.filtered.json` (dropped, with reason), `N.kept.json`, `N.refutations.json`,
   `N.json` (survivors with claim, evidence, verdict, node id). Long reasoning stays there, not in the Markdown.
-- Finding: `{ node|null, kind, claim, evidence[], proposal: { action, text, done_when } }`. Kinds: missing-step, wrong-order, too-big,
+- Finding: `{ node|null, kind, claim, evidence[], proposal: { action, text, done_when } }`. Kinds: off-goal (a step that does not serve the goal), missing-step, wrong-order, too-big,
   risk, vague-done, redundant (also the order proposals are kept in under the cap). Actions: add, split (one finding per piece; the big
   step stays until dropped), change, drop. A missing `done_when` is rejected at filter time (`no-done-when`).
 - Filter reasons: `invalid`, `no-done-when`, `unknown-node` (also dropped and proposed steps), `out-of-scope` (`--node`),
