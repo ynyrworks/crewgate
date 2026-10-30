@@ -70,6 +70,7 @@ const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x))
 // Work tree root and current branch of dir, read from the files git keeps (.git folder or "gitdir:" file, HEAD):
 // no process to spawn, so nothing to time out on a loaded machine (a miss here means a merge counted twice).
 // null when it cannot tell (no .git on the way up, an odd layout): the caller then asks git.
+// Out of scope: symbolic-ref chains (HEAD -> alias -> main).
 function headAndTopFromFiles(dir) {
   let d = path.resolve(dir);
   for (;;) {
@@ -108,12 +109,16 @@ function cliMergeRecorded(pid, data, dir) {
       && e.data && e.data.target && e.data.root && Array.isArray(e.data.branches) && sameSet(e.data.branches, data.branches));
     if (!cand.length) return false;
     let here = null;
-    try { here = headAndTopFromFiles(dir); } catch { /* fall back to git */ }
+    // git overrides in the environment can point git at another root or branch than the .git files say: ask git
+    const overridden = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR'].some((k) => process.env[k]);
+    if (!overridden) { try { here = headAndTopFromFiles(dir); } catch { /* fall back to git */ } }
     if (!here) here = gitHeadAndTop(dir);
     if (!here) return false;
     const target = here.target;
     const root = project.normalizePath(here.top);
-    return cand.some((e) => e.data.target === target && e.data.root === root);
+    // git prints `heads/main` when a tag is also called main; the files say `main`: compare without the prefix
+    const bare = (t) => String(t).replace(/^heads[/]/, '');
+    return cand.some((e) => bare(e.data.target) === bare(target) && e.data.root === root);
   } catch { return false; }
 }
 
