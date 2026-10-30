@@ -83,6 +83,19 @@ function findingsSummary(taskDir) {
   };
 }
 
+// What the review of a task lacks at accept time -> { kind: 'none' } when no round was recorded,
+// { kind: 'unfinalized', round, n } when the latest round has findings that never went through
+// the refuter and `review finalize`, or null when nothing is missing.
+function reviewGap(taskDir) {
+  const round = review.latestRound(taskDir, 'raw.json');
+  if (!round) return { kind: 'none' };
+  if (review.latestRound(taskDir, 'json') >= round) return null;
+  const suffix = fs.existsSync(review.roundFile(taskDir, round, 'kept.json')) ? 'kept.json' : 'raw.json';
+  let n = 0;
+  try { n = review.readArray(review.roundFile(taskDir, round, suffix), 'findings').length; } catch { /* unreadable: nothing to count */ }
+  return n ? { kind: 'unfinalized', round, n } : null;
+}
+
 function diffStat(root, branch) {
   const r = common.branchRange(root, branch);
   if (!r) return null;
@@ -259,10 +272,13 @@ function run(argv, ctx) {
     ctx.emit({ task, returns: task.returns, max }, ctx.t('wf.task.sentBack', { id: task.id, n: task.returns, max }));
   } else if (sub === 'accept') {
     const task = tasks.transition(proj.id, a.id, 'accepted', { ...opts, note: a.note || '' });
-    const open = (findingsSummary(paths.taskDir(proj.id, task.id)) || { items: [] }).items.filter((f) => f.severity === 'blocker' || f.severity === 'major');
+    const taskDir = paths.taskDir(proj.id, task.id);
+    const open = (findingsSummary(taskDir) || { items: [] }).items.filter((f) => f.severity === 'blocker' || f.severity === 'major');
+    const gap = reviewGap(taskDir);
     const L = [ctx.t('wf.task.accepted', { id: task.id })];
     if (open.length) L.push(ctx.t('wf.task.acceptedWithFindings', { n: open.length, ids: open.map((f) => f.id).join(', ') }));
-    ctx.emit({ task, open_findings: open }, L);
+    if (gap) L.push(gap.kind === 'none' ? ctx.t('wf.task.acceptedNoReview') : ctx.t('wf.task.acceptedUnfinalized', { round: gap.round, n: gap.n }));
+    ctx.emit({ task, open_findings: open, review_gap: gap }, L);
   } else if (sub === 'merge') {
     if (cfg.gates.merge === 'never') throw new CrewError('wf.task.mergeNever');
     const before = tasks.load(proj.id, a.id);

@@ -91,7 +91,8 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
    - When `send-back` refuses (limit `max_returns_before_takeover` reached) it tells you to take the
      task over: do the remaining fix yourself in the task's worktree, say so to the user, and keep
      the change as small as possible. This is the one case where you edit code.
-   - Clean: `crew task accept <id>`.
+   - Clean: `crew task accept <id>`. Finalize the round first, even when you expect to dismiss its
+     findings: accept notes a task with no review round or an unfinalized one.
 10. **Gates, then merge.** Check the gates (below). When allowed, merge with git yourself, then record
     it: `crew task merge <id> --note "<merge commit>"`. Remove the worktree when done
     (`git worktree remove <path>`).

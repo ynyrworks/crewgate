@@ -115,6 +115,7 @@ function publicState(current, c, on) {
     notes_url: latest ? `${RELEASES_PAGE}v${latest}` : null,
     rehook: kind !== null && c.rehook === true,
     checked_at: typeof c.checked_at === 'string' ? c.checked_at : null,
+    ...(typeof c.error === 'string' && c.error ? { check_error: c.error } : {}),
   };
 }
 

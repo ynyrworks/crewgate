@@ -136,7 +136,7 @@ async function run(argv, ctx) {
 
   try {
     const u = require('../core/update-check').checkState({ current: require('../../board/server').pluginVersion() });
-    const v = { current: u.current, latest: u.latest };
+    const v = { current: u.current, latest: u.latest, date: String(u.checked_at).slice(0, 10) };
     if (!u.enabled) add('update', 'ok', ctx.t('wf.doctor.updateOff'));
     else if (!u.latest) add('update', 'ok', ctx.t('wf.doctor.updateUnknown', v));
     else add('update', u.kind ? 'warn' : 'ok', ctx.t(u.kind ? 'wf.doctor.updateNewer' : 'wf.doctor.updateCurrent', v));

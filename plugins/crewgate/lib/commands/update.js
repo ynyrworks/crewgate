@@ -25,6 +25,7 @@ function currentVersion() {
 function describe(ctx, s) {
   if (!s.enabled) return [ctx.t('update.disabled')];
   if (!s.latest) return [ctx.t('update.unknown', { current: s.current })];
+  if (!s.kind && s.check_error) return [ctx.t('update.staleUpToDate', { current: s.current, date: String(s.checked_at).slice(0, 10), error: s.check_error })];
   if (!s.kind) return [ctx.t('update.upToDate', { current: s.current })];
   const lines = [ctx.t('update.available', { latest: s.latest, current: s.current, kind: ctx.t(`update.kind.${s.kind}`) }), ctx.t('update.notes', { url: s.notes_url })];
   if (s.rehook) lines.push(ctx.t('update.rehook'));
@@ -32,8 +33,10 @@ function describe(ctx, s) {
   return lines;
 }
 
-async function check(ctx, a) {
-  const s = await updateCheck.check({ current: currentVersion(), force: a.force === true });
+// Asking on the command line always asks GitHub (still at most once a minute): the 24-hour cache is for
+// the board's background check, and a cached answer would call an outdated version the latest. --force stays accepted.
+async function check(ctx) {
+  const s = await updateCheck.check({ current: currentVersion(), force: true });
   ctx.emit(s, describe(ctx, s));
   return 0;
 }
@@ -111,7 +114,7 @@ async function run(argv, ctx) {
   if (!Object.prototype.hasOwnProperty.call(SPECS, sub)) throw new UsageError('update.usage');
   const a = parse(argv.slice(1), SPECS[sub]);
   if (sub === 'cleanup') return cleanup(ctx, a);
-  return sub === 'check' ? check(ctx, a) : apply(ctx);
+  return sub === 'check' ? check(ctx) : apply(ctx);
 }
 
 module.exports = {
