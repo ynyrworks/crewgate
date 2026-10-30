@@ -82,6 +82,11 @@ function run(payload) {
       key: h.sid ? `${h.sid}:${C.snippet(p.source, 20)}:${st.started || ''}` : `start:${Date.now()}`,
     });
   } catch { /* logging must not block the brief */ }
+  // Optional (global board.autostart): start the board if it is down. Spawns detached, never waits, never throws.
+  try {
+    const b = h.cfg().board;
+    if (!(b && b.enabled === false)) require('../commands/board').ensureStarted();
+  } catch { /* the brief must not depend on the board */ }
   return C.withContext('SessionStart', brief(h));
 }
 

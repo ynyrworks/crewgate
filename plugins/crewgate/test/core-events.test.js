@@ -96,3 +96,27 @@ test('a torn trailing line does not break the next append', () => {
   events.append(id, { type: 'a.two', key: '2' });
   assert.deepEqual(events.read(id).map((e) => e.type), ['a.one', 'a.two']);
 });
+
+test('cli events take the session from the environment when none is given', () => {
+  const saved = { a: process.env.CLAUDE_CODE_SESSION_ID, b: process.env.CLAUDE_SESSION_ID };
+  const id = pid();
+  try {
+    delete process.env.CLAUDE_CODE_SESSION_ID; delete process.env.CLAUDE_SESSION_ID;
+    assert.equal(events.append(id, { type: 'work.set', key: 'a' }).event.session, null);
+    process.env.CLAUDE_SESSION_ID = 'old-s';
+    assert.equal(events.append(id, { type: 'work.set', key: 'b' }).event.session, 'old-s');
+    process.env.CLAUDE_CODE_SESSION_ID = 'new-s';
+    assert.equal(events.append(id, { type: 'work.set', key: 'c' }).event.session, 'new-s');
+    assert.equal(events.append(id, { type: 'task.created', key: 'd', session: 'given' }).event.session, 'given');
+    assert.equal(events.append(id, { type: 'task.created', src: 'hook', key: 'e' }).event.session, null);
+    // the dedupe id does not depend on the environment
+    const a = events.append(id, { type: 'log.added', key: 'same' });
+    delete process.env.CLAUDE_CODE_SESSION_ID; delete process.env.CLAUDE_SESSION_ID;
+    assert.equal(events.append(id, { type: 'log.added', key: 'same' }).written, false);
+    assert.equal(a.written, true);
+  } finally {
+    for (const [k, v] of [['CLAUDE_CODE_SESSION_ID', saved.a], ['CLAUDE_SESSION_ID', saved.b]]) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  }
+});

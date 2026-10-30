@@ -183,5 +183,8 @@
   "wf.doctor.name.plans": "Plans",
   "wf.doctor.plansOk": "{n} plan file(s)",
   "wf.doctor.plansDeep": "nested deeper than {max} levels: {where}",
-  "wf.doctor.plansDup": "ids used more than once: {where}"
+  "wf.doctor.plansDup": "ids used more than once: {where}",
+  "wf.doctor.name.autostart": "Board autostart",
+  "wf.doctor.autostartOn": "on (board.autostart): a session start launches the board when it is not running",
+  "wf.doctor.autostartOff": "off; set board.autostart to true in the global config to start the board with each session"
 }

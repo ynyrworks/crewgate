@@ -16,10 +16,13 @@ const config = require('../core/config');
 const DEFAULT_PORT = 8781;
 const SEARCH_SPAN = 20;
 const START_WAIT_MS = 15000;
+const LOCK_WAIT_MS = 8000;  // how long a manual start waits for an autostart in progress
+const LOCK_MS = 30000;   // an autostart lock older than this is stale (the board it was for never came up)
 const BIN = path.join(__dirname, '..', '..', 'bin', 'crew.js');
 
 const stateFile = () => path.join(paths.home(), 'board.json');
 const logFile = () => path.join(paths.home(), 'board.log');
+const lockFile = () => path.join(paths.home(), 'board.starting');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const urlOf = (port) => `http://127.0.0.1:${port}/`;
 
@@ -31,6 +34,19 @@ function readState() {
 
 function alive(pid) {
   try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
+}
+
+// One timestamped line in board.log, written synchronously so it survives an exit in progress. Never throws.
+function logLine(text) {
+  try { fs.appendFileSync(logFile(), `${new Date().toISOString()} ${text}
+`); } catch { /* the log is best effort */ }
+}
+
+// The state file when it points at a dead process: the board was killed and could not say why
+// (a clean stop removes the file). Read-only. Null when there is no state file or its pid lives.
+function staleState() {
+  const st = readState();
+  return st && !alive(st.pid) ? st : null;
 }
 
 // GET /api/health -> parsed body or null
@@ -51,6 +67,7 @@ async function running() {
   const st = readState();
   if (!st) return null;
   if (alive(st.pid) && await health(st.port)) return st;
+  if (!alive(st.pid)) logLine(`previous board (pid ${st.pid}, started ${st.started || 'unknown'}) is gone and left no stop line; state file removed`);
   try { fs.unlinkSync(stateFile()); } catch { /* already gone */ }
   return null;
 }
@@ -130,6 +147,22 @@ function spawnServe(bin, port, { search = false } = {}) {
   return child;
 }
 
+// Records why the server stops: one line per signal, crash and exit. A process killed outright (SIGKILL,
+// a job object closing) runs none of this; `board status` and `doctor` report the leftover state file instead.
+function installStopLog() {
+  const pid = process.pid;
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => logLine(`board (pid ${pid}) received ${sig}`));
+  process.on('uncaughtException', (e) => {
+    logLine(`board (pid ${pid}) uncaught exception: ${(e && e.stack) || e}`);
+    process.exit(1);
+  });
+  process.on('unhandledRejection', (e) => {
+    logLine(`board (pid ${pid}) unhandled rejection: ${(e && e.stack) || e}`);
+    process.exit(1);
+  });
+  process.on('exit', (code) => logLine(`board (pid ${pid}) exit, code ${code}`));
+}
+
 // Foreground server. Without `search` the exact port is required; with it the next free ports are tried.
 async function serve(ctx, port, search) {
   const { createBoard } = require('../../board/server');
@@ -154,16 +187,89 @@ async function serve(ctx, port, search) {
   }
   if (bound === null) throw new CrewError(search ? 'board.noPort' : 'board.portBusy', { port, from: port, to: last });
   writeState(bound);
+  try { fs.unlinkSync(lockFile()); } catch { /* no autostart lock */ }
   const cleanup = () => {
     const st = readState();
     if (st && st.pid === process.pid) { try { fs.unlinkSync(stateFile()); } catch { /* ignore */ } }
   };
   process.on('exit', cleanup);
+  installStopLog();
   const stop = () => { board.close().then(() => process.exit(0)); };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
+  // A closing terminal or session sends SIGHUP: shut down cleanly (the stop line above records it).
+  process.on('SIGHUP', stop);
   ctx.out(ctx.t('board.serving', { url: board.url() }));
   return new Promise(() => { /* runs until a signal ends the process */ });
+}
+
+// Takes the start-up lock (board.starting, created exclusively) so two sessions starting at once spawn one board.
+function takeLock() {
+  const f = lockFile();
+  try { fs.mkdirSync(paths.home(), { recursive: true }); } catch { return false; }
+  for (let i = 0; i < 2; i++) {
+    try { fs.writeFileSync(f, String(process.pid), { flag: 'wx' }); return true; } catch (e) {
+      if (e.code !== 'EEXIST') return false;
+      try { if (Date.now() - fs.statSync(f).mtimeMs <= LOCK_MS) return false; fs.unlinkSync(f); } catch { return false; }
+    }
+  }
+  return false;
+}
+
+// Spawns `board serve` for an autostart, holding the start-up lock. -> 'started' | 'busy' | 'error'
+function launch(g, opts) {
+  if (!takeLock()) return 'busy';
+  const port = Number.isInteger(g.port) ? g.port : (g.board && Number.isInteger(g.board.port) ? g.board.port : DEFAULT_PORT);
+  try {
+    (opts.spawn || spawnServe)(BIN, port, { search: false });
+  } catch (e) {
+    try { fs.unlinkSync(lockFile()); } catch { /* ignore */ }
+    logLine(`autostart could not spawn the board: ${e && e.message}`);
+    return 'error';
+  }
+  return 'started';
+}
+
+// Detached `crew board ensure`: does the slow part (does the recorded board answer?) outside the hook.
+function spawnEnsure() {
+  const c = spawn(process.execPath, [BIN, 'board', 'ensure'], { detached: true, stdio: 'ignore', windowsHide: true, env: process.env });
+  c.on('error', () => { /* best effort */ });
+  c.unref();
+}
+
+// SessionStart autostart (global config board.autostart, default off). Synchronous and quick: checks the global switch
+// and the state file, then spawns detached and does not wait. It never throws.
+//   no state file or a dead pid -> spawn the server (under the start lock)
+//   a live pid                  -> the pid may belong to an unrelated process (reused), so a detached `board ensure`
+//                                  checks that the board answers and starts one if not ('checking')
+// The exact port is required (no search), so a board already listening there without a state file makes the new one exit.
+// -> 'off' | 'checking' | 'busy' | 'started' | 'error'
+function ensureStarted(opts = {}) {
+  try {
+    const g = (opts.global || config.loadGlobal().config);
+    if (!(g.board && g.board.autostart === true)) return 'off';
+    const st = readState();
+    if (st && alive(st.pid)) {
+      (opts.spawnEnsure || spawnEnsure)();
+      return 'checking';
+    }
+    return launch(g, opts);
+  } catch { return 'error'; }
+}
+
+// What `board ensure` runs: like ensureStarted, but a live pid only counts when the board answers (300 ms).
+// -> 'off' | 'running' | 'busy' | 'started' | 'error'
+async function ensureChecked(opts = {}) {
+  try {
+    const g = (opts.global || config.loadGlobal().config);
+    if (!(g.board && g.board.autostart === true)) return 'off';
+    const st = readState();
+    if (st && alive(st.pid)) {
+      if (await health(st.port, 300)) return 'running';
+      logLine(`state file names pid ${st.pid} (started ${st.started || 'unknown'}) but no board answers on port ${st.port}; starting one`);
+    }
+    return launch(g, opts);
+  } catch { return 'error'; }
 }
 
 async function start(ctx, a) {
@@ -173,9 +279,30 @@ async function start(ctx, a) {
     if (!a.noOpen) openBrowser(urlOf(cur.port));
     return 0;
   }
+  // An autostart may be bringing a board up right now (the state file is written once it listens): wait for it
+  // and report that board instead of starting a second one.
+  if (!takeLock()) {
+    const end = Date.now() + LOCK_WAIT_MS;
+    while (Date.now() < end && fs.existsSync(lockFile())) {
+      const got = await running();
+      if (got) {
+        ctx.emit({ running: true, started: false, pid: got.pid, port: got.port, url: urlOf(got.port) }, ctx.t('board.alreadyRunning', { url: urlOf(got.port) }));
+        if (!a.noOpen) openBrowser(urlOf(got.port));
+        return 0;
+      }
+      await sleep(100);
+    }
+    const got = await running();
+    if (got) {
+      ctx.emit({ running: true, started: false, pid: got.pid, port: got.port, url: urlOf(got.port) }, ctx.t('board.alreadyRunning', { url: urlOf(got.port) }));
+      if (!a.noOpen) openBrowser(urlOf(got.port));
+      return 0;
+    }
+    // the other start never produced a board: go on (a stale lock is replaced by the next takeLock)
+  }
   const explicit = a.port !== undefined;
   const port = explicit ? a.port : defaultPort();
-  if (explicit && !(await portFree(port))) throw new CrewError('board.portBusy', { port });
+  if (explicit && !(await portFree(port))) { try { fs.unlinkSync(lockFile()); } catch { /* ignore */ } throw new CrewError('board.portBusy', { port }); }
   const child = spawnServe(BIN, port, { search: !explicit });
   let exited = false;
   child.on('exit', () => { exited = true; });
@@ -189,6 +316,7 @@ async function start(ctx, a) {
     }
     await sleep(100);
   }
+  try { fs.unlinkSync(lockFile()); } catch { /* ignore */ }
   throw new CrewError('board.startFailed', { log: logFile() });
 }
 
@@ -208,8 +336,14 @@ async function stop(ctx) {
 }
 
 async function status(ctx) {
+  const stale = staleState();
   const cur = await running();
   if (!cur) {
+    if (stale) {
+      ctx.emit({ running: false, stale: true, pid: stale.pid, started: stale.started || null },
+        [ctx.t('board.notRunning'), ctx.t('board.stale', { pid: stale.pid, started: stale.started || '?', log: logFile() })]);
+      return 1;
+    }
     ctx.emit({ running: false }, ctx.t('board.notRunning'));
     return 1;
   }
@@ -222,6 +356,7 @@ const SPECS = {
   stop: { positionals: [], options: {} },
   status: { positionals: [], options: {} },
   serve: { positionals: [], options: { '--port': { dest: 'port', int: true }, '--search': { dest: 'search', flag: true } } },
+  ensure: { positionals: [], options: {} },   // internal: the detached check behind board.autostart
 };
 
 async function run(argv, ctx) {
@@ -232,6 +367,7 @@ async function run(argv, ctx) {
   if (sub === 'start') return start(ctx, a);
   if (sub === 'stop') return stop(ctx);
   if (sub === 'status') return status(ctx);
+  if (sub === 'ensure') { logLine(`autostart check: ${await ensureChecked()}`); return 0; }
   return serve(ctx, a.port === undefined ? defaultPort() : a.port, a.port === undefined || a.search === true);
 }
 
@@ -245,6 +381,11 @@ module.exports = {
   run,
   openPlan,
   spawnServe,
+  ensureStarted,
+  ensureChecked,
+  installStopLog,
+  staleState,
+  logFile,
   stampLines,
   readState,
   health,

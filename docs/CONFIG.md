@@ -77,10 +77,11 @@ Per user (override the folder with `CREWGATE_HOME`). Not part of any repository.
 | `engines.*` | object |  | One engine. | 單一引擎。 |
 | `engines.*.command` | string |  | Executable to run (resolved through PATH; on Windows .cmd and .bat files work too). | 要執行的程式（依 PATH 尋找；Windows 也支援 .cmd 與 .bat）。 |
 | `engines.*.args` | array of string |  | Arguments; the prompt is passed on stdin. | 參數；提示內容由標準輸入傳入。 |
-| `board` | object | `{"show_text":false,"session_idle_minutes":30,"session_done_hours":6,"detect_closed_transcripts":false}` | Board display options. | 看板顯示選項。 |
+| `board` | object | `{"show_text":false,"session_idle_minutes":30,"session_done_hours":6,"detect_closed_transcripts":false,"autostart":false}` | Board display options. | 看板顯示選項。 |
 | `board.show_text` | boolean | `false` | Show short redacted snippets (last prompt, last reply, session title) and the target of the current tool call (file, command, pattern) in the Sessions list. | 在工作階段清單顯示簡短的已遮罩片段（最後提示、最後回覆、工作階段標題）與目前工具呼叫的目標（檔案、指令、模式）。 |
 | `board.session_idle_minutes` | integer; min 1; max 1440 | `30` | Minutes without activity after which a Sessions entry shows as idle. | 工作階段超過這段分鐘數沒有動靜就顯示為閒置。 |
 | `board.session_done_hours` | integer; min 1; max 720 | `6` | Hours without activity after which a Sessions entry shows as done. | 工作階段超過這段小時數沒有動靜就顯示為已結束。 |
 | `board.detect_closed_transcripts` | boolean | `false` | Treat a transcript that ends in a closing record (last-prompt) as a finished session. Off by default: the record is not verified to mean the session ended, so a live session waiting for you could be shown as done. | 把結尾為關閉記錄（last-prompt）的逐字稿視為已結束的工作階段。預設關閉：該記錄是否代表工作階段結束尚未驗證，開啟後等待您回應的使用中工作階段可能被顯示為已結束。 |
+| `board.autostart` | boolean | `false` | Start the board when a Claude Code or Codex session starts and it is not running (the SessionStart hook spawns it detached and does not wait; a project with board.enabled false is skipped; the exact port is used, no search). Off by default: crewgate does not start a server you did not ask for. | 工作階段開始時若看板沒有在執行就自動啟動（SessionStart hook 以分離程序啟動、不等待；專案設定 board.enabled 為 false 時略過；只用指定的連接埠，不往上找）。預設關閉：crewgate 不會自行啟動你沒要求的伺服器。 |
 | `updates` | object | `{"check":true}` | Update notices. | 更新通知。 |
 | `updates.check` | boolean | `true` | Let the board ask GitHub (api.github.com, at most once a day, nothing about you or your projects is sent) whether a newer crewgate release exists and show a notice. Turn off to make no network request at all. | 讓看板向 GitHub（api.github.com，一天最多一次，不會送出任何關於您或專案的資料）查詢是否有較新的 crewgate 版本並顯示通知。關閉後完全不發出網路請求。 |

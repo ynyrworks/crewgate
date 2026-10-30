@@ -1,10 +1,14 @@
 {
   "cli.usage": "用法：crew <群組> <動作> [選項]\n\n命令群組：",
-  "cli.globals": "全域選項：--project <id|路徑|名稱>  --json  --lang en|zh-TW  --help",
+  "cli.globals": "全域選項：--project <id|路徑|名稱>  --json  --lang en|zh-TW  --help  --version",
   "cli.unknownGroup": "不認得的命令群組：{group}",
   "cli.errorPrefix": "錯誤：",
   "cli.legacyHome": "注意：目前使用舊的資料夾 {old}。crewgate 現在使用 {dir}；請把資料夾改名即可移轉（此提示只顯示一次）。",
   "cli.tryHelp": "用 `crew --help` 或 `crew <群組> --help` 查看用法。",
+  "cli.version": "crewgate {version}",
+  "cli.badAction": "`crew {group}` 沒有「{action}」這個動作。",
+  "cli.noAction": "`crew {group}` 需要指定動作。",
+  "cli.usageOf": "`crew {group}` 的用法：",
 
   "args.notInt": "{what} 要是整數：{value}",
   "args.unknownOption": "不認得的選項：{name}",

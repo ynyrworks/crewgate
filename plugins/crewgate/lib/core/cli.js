@@ -13,9 +13,9 @@ const paths = require('./paths');
 const COMMANDS_DIR = path.join(__dirname, '..', 'commands');
 const GROUP_RE = /^[a-z][a-z0-9-]*$/;
 
-// Removes --project/--json/--lang/--help (and -h) wherever they appear before "--".
+// Removes --project/--json/--lang/--help (and -h)/--version wherever they appear before "--".
 function extractGlobals(argv) {
-  const g = { project: undefined, json: false, lang: undefined, help: false, rest: [] };
+  const g = { project: undefined, json: false, lang: undefined, help: false, version: false, rest: [] };
   let stop = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -23,6 +23,7 @@ function extractGlobals(argv) {
     if (a === '--') { stop = true; g.rest.push(a); continue; }
     if (a === '--json') { g.json = true; continue; }
     if (a === '--help' || a === '-h') { g.help = true; continue; }
+    if (a === '--version') { g.version = true; continue; }
     const m = /^--(project|lang)(?:=(.*))?$/.exec(a);
     if (m) {
       let v = m[2];
@@ -169,16 +170,23 @@ function legacyNotice(ctx, io) {
 // main(argv, io?) -> exit code (0 ok, 1 runtime error, 2 usage error). Never throws.
 async function main(argv, io = { stdout: process.stdout, stderr: process.stderr }) {
   let ctx;
+  let g;
+  let mod = null;
   try {
-    const g = extractGlobals(argv);
+    g = extractGlobals(argv);
     ctx = createContext(g, io);
     legacyNotice(ctx, io);
     const group = g.rest[0];
+    if (g.version || (group === 'version' && g.rest.length === 1)) {
+      const v = require('./hooklog').pluginVersion();
+      ctx.emit({ version: v }, ctx.t('cli.version', { version: v }));
+      return 0;
+    }
     if (!group) {
       printHelp(ctx);
       return g.help ? 0 : 2;
     }
-    const mod = loadGroup(group);
+    mod = loadGroup(group);
     if (!mod) throw new UsageError('cli.unknownGroup', { group });
     if (g.help || g.rest.length === 1 && mod.requiresAction !== false) {
       printGroupHelp(ctx, mod);
@@ -190,9 +198,22 @@ async function main(argv, io = { stdout: process.stdout, stderr: process.stderr 
     const lang = ctx ? ctx.lang : 'en';
     const prefix = t(lang, 'cli.errorPrefix');
     if (e instanceof CrewError) {
+      if (e instanceof UsageError) {
+        const grp = mod ? mod.name : '';
+        const usage = mod && mod.usage && (mod.usage[lang] || mod.usage.en);
+        // A group's own "<group>.usage" error is just its usage text: name the problem (missing or unknown action) instead.
+        if (grp && /\.usage$/.test(e.key)) {
+          const action = g && g.rest[1];
+          io.stderr.write(`${prefix}${t(lang, action ? 'cli.badAction' : 'cli.noAction', { group: grp, action })}\n`);
+        } else {
+          io.stderr.write(`${prefix}${t(lang, e.key, e.vars)}\n`);
+        }
+        if (usage) io.stderr.write(`${t(lang, 'cli.usageOf', { group: grp })}\n${usage}\n`);
+        io.stderr.write(`${t(lang, 'cli.tryHelp')}\n`);
+        return 2;
+      }
       io.stderr.write(`${prefix}${t(lang, e.key, e.vars)}\n`);
-      if (e instanceof UsageError) io.stderr.write(`${t(lang, 'cli.tryHelp')}\n`);
-      return e instanceof UsageError ? 2 : 1;
+      return 1;
     }
     io.stderr.write(`${prefix}${e && e.message}\n`);
     if (process.env.CREWGATE_DEBUG && e && e.stack) io.stderr.write(`${e.stack}\n`);

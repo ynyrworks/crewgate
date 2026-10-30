@@ -1,10 +1,14 @@
 {
   "cli.usage": "Usage: crew <group> <action> [options]\n\nCommand groups:",
-  "cli.globals": "Global options: --project <id|path|name>  --json  --lang en|zh-TW  --help",
+  "cli.globals": "Global options: --project <id|path|name>  --json  --lang en|zh-TW  --help  --version",
   "cli.unknownGroup": "Unknown command group: {group}",
   "cli.errorPrefix": "Error: ",
   "cli.legacyHome": "Note: using the old data folder {old}. crewgate now uses {dir}; rename the folder to move over (this notice is shown once).",
   "cli.tryHelp": "Run `crew --help` or `crew <group> --help` for usage.",
+  "cli.version": "crewgate {version}",
+  "cli.badAction": "Unknown action \"{action}\" for `crew {group}`.",
+  "cli.noAction": "`crew {group}` needs an action.",
+  "cli.usageOf": "Usage of `crew {group}`:",
 
   "args.notInt": "{what} must be an integer: {value}",
   "args.unknownOption": "Unknown option: {name}",

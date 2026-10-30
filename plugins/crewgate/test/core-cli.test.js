@@ -188,3 +188,26 @@ test('import refuses bad input before writing anything', () => {
   assert.ok(!fs.existsSync(path.join(HOME, 'projects', id, 'work.json')));
   assert.ok(!fs.existsSync(path.join(HOME, 'projects', id, 'needs.json')));
 });
+
+test('usage errors name the problem and show the group usage; --version and version print the plugin version', () => {
+  const flag = crew(['board', 'status', '--note', 'x']);
+  assert.equal(flag.code, 2);
+  assert.match(flag.err, /Unknown option: --note/);
+  assert.match(flag.err, /Usage of `crew board`:\n\s+crew board start/);
+  const act = crew(['board', 'frobnicate']);
+  assert.equal(act.code, 2);
+  assert.match(act.err, /Unknown action "frobnicate" for `crew board`/);
+  assert.match(act.err, /crew board serve/);
+  const zh = h.crew(['--lang', 'zh-TW', 'board', 'frobnicate'], work, env);
+  assert.equal(zh.code, 2);
+  assert.match(zh.err, /沒有「frobnicate」這個動作/);
+  assert.match(zh.err, /的用法：/);
+  assert.equal(crew(['frobnicate']).code, 2);
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', '..', 'package.json'), 'utf8'));
+  for (const args of [['--version'], ['version']]) {
+    const v = crew(args);
+    assert.equal(v.code, 0);
+    assert.equal(v.out.trim(), `crewgate ${pkg.version}`);
+  }
+  assert.deepEqual(JSON.parse(crew(['version', '--json']).out), { version: pkg.version });
+});

@@ -6,6 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 const paths = require('./paths');
 const { clean } = require('./redact');
+const { currentSession } = require('./sessionid');
 
 const MAX_FIELD = 2000;        // chars per free-text field, after redaction
 const MAX_LINE_BYTES = 4000;   // keep each line under 4 KiB
@@ -110,13 +111,17 @@ function append(projectId, event) {
   const ev = event || {};
   if (!ev.type || typeof ev.type !== 'string') throw new TypeError('event.type is required');
   const file = paths.eventsFile(projectId);
+  const src = ev.src || 'cli';
+  // CLI events (task.*, work.set, log.added, ...) belong to the session that ran the command; hooks pass their own.
+  // The id is computed from what the caller gave, so dedupe keys do not depend on the environment.
+  const session = str(ev.session) || (src === 'cli' ? str(currentSession()) : null);
   const obj = {
     v: 1,
     ts: new Date().toISOString(),
     id: eventId(ev),
     type: ev.type,
-    src: ev.src || 'cli',
-    session: str(ev.session),
+    src,
+    session,
     task: str(ev.task),
     agent: str(ev.agent),
     data: cleanValue(ev.data === undefined ? {} : ev.data),
