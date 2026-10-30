@@ -52,7 +52,12 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
    `crew plan new <slug> --title "..."`, then `crew plan add <slug> "step" [--under <node>]` for each step
    (the plan is a Markdown tree in `.crew/plans/<slug>.md`, the board shows its completion). A step you
    discover later is added with its source: `--origin user|review|refute|implementation|send-back`
-   (`--proposed` for one you are unsure about; `crew plan set <slug> <node> accept` once it is agreed).
+   (`--proposed` for one you are unsure about; `crew plan accept <slug> <node>` once it is agreed).
+   For a non-trivial plan (about 3 steps or more) run a **plan review** before you dispatch anything:
+   `crew plan review run <slug>`, then the reviewer, filter, refuter and finalize steps in
+   `references/review-pipeline.md` ("Plan review"). What survives is proposed as `[?]` nodes; accept or reject each
+   one (`crew plan accept|reject`). You may skip it for a small plan (under about 3 steps) or a plan the user
+   dictated step by step.
 3. **Brief each piece.** Write a brief file with exactly five sections: Goal, Scope (allowed and
    forbidden files), Must not regress (and who fixes out-of-scope fallout), Acceptance (commands and
    observable behaviour), Context (paths and line ranges, never pasted dumps). Template and a worked

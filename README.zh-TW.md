@@ -175,6 +175,9 @@ crew task create --title "..." --brief-file brief.md --plan 0-14:n2   # 或：cr
 crew plan show 0-14
 ```
 
+派工前可以先做計畫審查：審查者批評計畫、反駁者嘗試推翻每一點，留下來的變成掛在對應步驟底下的提議中 `[?]` 節點（`crew plan review run|filter|finalize`）。
+你逐一接受或拒絕（`crew plan accept|reject`），只有接受的節點才計入進度；看板會列出等待決定的提議與可複製的指令。
+
 你也可以直接手改檔案（`- [ ] 步驟`、兩格縮排、`[x]` 完成、`[~]` 放棄）；CLI 會保留你的文字與順序，只補上 id。
 細節見 [references/commands.md](plugins/crewgate/skills/crew/references/commands.md#plans)。
 

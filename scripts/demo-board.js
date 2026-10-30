@@ -37,6 +37,8 @@ const events = require(path.join(PLUGIN, 'lib', 'core', 'events'));
 const paths = require(path.join(PLUGIN, 'lib', 'core', 'paths'));
 const json = require(path.join(PLUGIN, 'lib', 'core', 'json'));
 const config = require(path.join(PLUGIN, 'lib', 'core', 'config'));
+const plans = require(path.join(PLUGIN, 'lib', 'core', 'plans'));
+const planReview = require(path.join(PLUGIN, 'lib', 'core', 'plan-review'));
 const { createBoard } = require(path.join(PLUGIN, 'board', 'server'));
 
 const MIN = 60 * 1000;
@@ -181,6 +183,7 @@ json.save(paths.handoffFile(PID, 'open', hand.id), hand);
 
 // a plan: leaves linked to the tasks above, grown over several days by different sources
 const planDay = (back) => { const d = new Date(NOW - back * 24 * 60 * MIN); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
+const tok = plans.encodeToken;
 write(path.join(repo, '.crew', 'plans', 'todo-cli-0-2.md'), [
   '# todo-cli 0.2',
   'Due dates, ordering and a few quality-of-life features for the example CLI.',
@@ -189,18 +192,53 @@ write(path.join(repo, '.crew', 'plans', 'todo-cli-0-2.md'), [
   `  - [ ] Add due dates to todos <!-- id:n2 task:${tDue.id} added:${planDay(9)} origin:plan -->`,
   `  - [ ] Sort the list by due date <!-- id:n3 task:${tSort.id} added:${planDay(9)} origin:plan -->`,
   `  - [ ] Parse relative dates such as "tomorrow" <!-- id:n4 added:${planDay(2)} origin:user -->`,
-  `  - [?] Reject due dates in the past <!-- id:n5 added:${planDay(1)} origin:refute -->`,
+  `    - [?] Parse "in 3 days" and "next week" as well as "tomorrow" <!-- id:n15 added:${planDay(1)} origin:refute round:2 kind:vague-done action:change done_when:${tok('Three relative phrases parse to the expected dates in a table test')} for:n4 -->`,
+  `  - [?] Reject due dates in the past <!-- id:n5 added:${planDay(4)} origin:review round:1 kind:missing-step action:add done_when:${tok('Adding a todo due yesterday fails with a clear message, covered by a test')} for:n2 -->`,
   `- [ ] Quality of life <!-- id:n6 added:${planDay(9)} origin:plan -->`,
   `  - [ ] Add a priority flag <!-- id:n7 task:${tPrio.id} added:${planDay(9)} origin:plan -->`,
   `  - [ ] Export todos as CSV <!-- id:n8 task:${tCsv.id} added:${planDay(9)} origin:plan -->`,
+  `    - [?] Quote commas and newlines in the CSV fields <!-- id:n16 added:${planDay(1)} origin:review round:2 kind:too-big action:split uncertain:1 done_when:${tok('A title with a comma and a newline round-trips through the export, covered by a test')} for:n8 -->`,
   `  - [ ] Archive completed todos <!-- id:n9 task:${tArch.id} added:${planDay(5)} origin:user -->`,
   `  - [ ] Colour the list output <!-- id:n10 task:${tColor.id} added:${planDay(5)} origin:user -->`,
   `- [ ] Robustness <!-- id:n11 added:${planDay(3)} origin:review -->`,
   `  - [ ] Fix crash on an empty todos file <!-- id:n12 task:${tCrash.id} added:${planDay(3)} origin:review -->`,
   `  - [ ] Keep the old todos file format loading <!-- id:n13 added:${planDay(1)} origin:send-back -->`,
+  `    - [?] Run the migration before the format change <!-- id:n17 added:${planDay(1)} origin:review round:2 kind:wrong-order action:add done_when:${tok('A todos file in the old format loads after the upgrade, covered by a fixture test')} for:n13 -->`,
   `- [~] Sync todos to a server <!-- id:n14 added:${planDay(9)} origin:plan -->`,
   '',
 ].join('\n'));
+
+// plan review: two rounds, with the reasoning kept in the round files (the board shows it with board.show_text)
+const prDir = planReview.dirOf(PID, 'todo-cli-0-2');
+json.save(path.join(prDir, 'state.json'), {
+  rounds: [
+    { round: 1, date: planDay(4), scope: null, status: 'finalized', raised: 6, filtered: { invalid: 1 }, refuted: 1, kept: 4, cut: 0, accepted: 2, rejected: 1 },
+    { round: 2, date: planDay(1), scope: null, status: 'finalized', raised: 5, filtered: { 'repeat-rejected': 1 }, refuted: 1, kept: 3, cut: 0, accepted: 0, rejected: 0 },
+  ],
+  rejected: [], accepted: [], notes: {}, growth_flagged: 0,
+});
+json.save(path.join(prDir, '1.json'), [{
+  id: 'f1', node_id: 'n5', verdict: 'upheld', claim: 'Nothing stops a due date in the past, so an overdue todo can be created by mistake.',
+  evidence: ['n2', 'examples/todo-cli/src/todos.js:21'], refutation: 'n2 does not mention validation; checked the add path, no date check.', better: null,
+  proposal: { action: 'add', text: 'Reject due dates in the past', done_when: 'Adding a todo due yesterday fails with a clear message, covered by a test' },
+}]);
+json.save(path.join(prDir, '2.json'), [
+  {
+    id: 'f1', node_id: 'n15', verdict: 'upheld', claim: 'The step names one phrase only, so "done" cannot be judged.',
+    evidence: ['n4'], refutation: 'n4 lists only "tomorrow"; no other step covers the rest.', better: 'Parse "in 3 days" and "next week" as well as "tomorrow"',
+    proposal: { action: 'change', text: 'Parse more relative dates', done_when: 'Three relative phrases parse to the expected dates in a table test' },
+  },
+  {
+    id: 'f2', node_id: 'n16', verdict: 'uncertain', claim: 'CSV export without quoting breaks on titles that contain a comma.',
+    evidence: ['n8', 'examples/todo-cli/src/export.js:12'], refutation: 'The export may be planned to escape later; the plan does not say.', better: null,
+    proposal: { action: 'split', text: 'Quote commas and newlines in the CSV fields', done_when: 'A title with a comma and a newline round-trips through the export, covered by a test' },
+  },
+  {
+    id: 'f3', node_id: 'n17', verdict: 'upheld', claim: 'The format change is planned before anything keeps the old file loading.',
+    evidence: ['n13', 'n12'], refutation: 'n13 is added after the format step; the order is wrong.', better: null,
+    proposal: { action: 'add', text: 'Run the migration before the format change', done_when: 'A todos file in the old format loads after the upgrade, covered by a fixture test' },
+  },
+]);
 
 // two more small projects so the overview has more than one row
 function miniProject(name, items, needs) {

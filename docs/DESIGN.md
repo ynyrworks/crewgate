@@ -646,9 +646,34 @@ Optional free text (goal).
   `[x]`; a parent whose children are all dropped or proposed counts as an open leaf (one step, to do until its own box or task says otherwise).
 - Ids: a new node gets `n<k>` above the largest safe numeric part of the existing ids and never one already in use (a huge hand-written id
   cannot collide). When two nodes share an id the first wins for commands, `plan show` and `crew doctor` warn, and the next write renames the later ones.
-- Growth: each node carries `origin` and `added`; the plan page groups additions by day and origin. A later plan review
-  (reviewer/refuter propose `[?]` nodes the orchestrator accepts) and follow-ups from code review use the same fields,
-  `crew plan add --origin ... --proposed` and `crew plan set ... accept`; neither flow exists yet.
+- Growth: each node carries `origin` and `added`; the plan page groups additions by day and origin. Plan review (§17.1:
+  reviewer/refuter propose `[?]` nodes the orchestrator accepts) and, later, follow-ups from code review use the same fields,
+  `crew plan add --origin ... --proposed`; follow-ups from code review do not exist yet.
 - Events: `plan.created`, `plan.node_added` (origin, proposed, task), `plan.node_changed` (`linked`, `open`, `done`,
   `dropped`, `accept`, `removed`); ids only, never node text.
 - Board: `GET /api/project/<id>/plans` and `GET /api/project/<id>/plan/<slug>`, the Plans card and the plan page (§14).
+
+### 17.1 Plan review
+
+Before dispatch a reviewer criticises the plan and a refuter tries to disprove each criticism (the three stages of §9, same
+helpers: `applyRefutations`, prompts built the same way). Survivors become proposed nodes (`[?]`) under the step they are
+about; only accepted nodes count. Code: `lib/core/plan-review.js`, CLI in `lib/commands/plan.js`.
+
+- Files: `<data>/projects/<id>/runtime/plan-review/<slug>/` holds `state.json` (rounds with counters, rejected keys, accepted log,
+  notes) and per round `N.packet.md`, `N.raw.json`, `N.filtered.json` (dropped, with reason), `N.kept.json`, `N.refutations.json`,
+  `N.json` (survivors with claim, evidence, verdict, node id). Long reasoning stays there, not in the Markdown.
+- Finding: `{ node|null, kind, claim, evidence[], proposal: { action, text, done_when } }`. Kinds: missing-step, wrong-order, too-big,
+  risk, vague-done, redundant (also the order proposals are kept in under the cap). Actions: add, split (one finding per piece; the big
+  step stays until dropped), change, drop. A missing `done_when` is rejected at filter time (`no-done-when`).
+- Filter reasons: `invalid`, `no-done-when`, `unknown-node` (also dropped and proposed steps), `out-of-scope` (`--node`),
+  `repeat-rejected` (normalised text + same step, from rejected `[~]` nodes and the ledger, which keeps the reviewer's wording and the
+  refuter's), `duplicate`. Finalize applies `plan.max_proposals_per_round` (reason `cap`) and `plan.max_rounds` is checked by `run`.
+- Node metadata (comment keys): `round`, `kind`, `action`, `done_when` (space and % escaped as %20, %25), `for` (the step it is about),
+  `uncertain:1`; a rejected node gets `rejected:<date>`. A proposal is a child of its step, or its sibling when the step is already at
+  depth 3; a finding with `node: null` is a top-level node.
+- Decide: `accept` (add/split: open; change: reword the target and remove the proposal; drop: drop the target and remove the proposal;
+  the target must still exist) and `reject` (dropped, note stored in `state.json`). Growth: accepted proposals since the last
+  `large_task` `gate.answered yes` above `plan.large_growth` print the gate hint and add one need per crossing; nothing blocks.
+- Events: `plan.review_started`, `plan.review_finalized` (counts), `plan.proposal_accepted`, `plan.proposal_rejected`; ids only.
+- Board: `GET /api/project/<id>/plan/<slug>` adds `proposals`, `rounds`, `show_text`; claim, evidence and refuter text follow
+  `board.show_text`. The page lists pending proposals first with copyable commands (read-only), shows the round history under Show growth.
