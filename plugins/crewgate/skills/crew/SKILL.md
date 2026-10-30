@@ -110,8 +110,8 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
   the user in chat, name the exact action (branch, target, size), and wait for a clear yes. Record the reply with
   `crew gate answer <gate-id> yes|no`. A yes covers that one action only. A hook notices a push, PR or merge under an
   `ask` gate that has no recorded yes in the last 30 minutes and reminds you (`gate.missing` on the board).
-- `never`: refuse and say which gate blocks it (`crew gate ask` exits 1). `crew task merge` itself refuses when
-  `gates.merge` is `never`.
+- `never`: refuse and say which gate blocks it (`crew gate ask` exits 1). A hook denies a push, PR or merge under it
+  before it runs, whatever `gates.enforce` says. `crew task merge` itself refuses when `gates.merge` is `never`.
 
 `gates.enforce` decides when a push, PR or merge under an `ask` gate is checked against your recorded approvals:
 

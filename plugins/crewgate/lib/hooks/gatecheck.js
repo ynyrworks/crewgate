@@ -60,20 +60,29 @@ function wantedGates(found) {
   return wanted;
 }
 
+// Gates of `wanted` that are set to never: [{ gate, command, text }]. No approval lifts these.
+// Config unreadable = none (the modes are unknown).
+function forbidden(h, wanted) {
+  let cfg;
+  try { cfg = h.cfg(); } catch { return []; }
+  return [...wanted].filter(([gate]) => gates.modeOf(cfg, gate) === 'never').map(([gate, w]) => ({ gate, ...w }));
+}
+
 // Gates of `wanted` that are set to ask and have no usable approval from this session:
-// [{ gate, command, text }]. Cannot tell (config or events unreadable) = nothing missing.
-function unapproved(h, wanted) {
+// [{ gate, command, text }]. Config unreadable = nothing missing (the modes are unknown). Events unreadable =
+// nothing missing, unless o.failClosed (gates.enforce block): an approval that cannot be seen does not count.
+function unapproved(h, wanted, o = {}) {
   const out = [];
   let cfg;
   try { cfg = h.cfg(); } catch { return out; }
   const opts = { requireUserTurn: gates.requiresUserTurn(cfg) };
   for (const [gate, w] of wanted) {
     if (gates.modeOf(cfg, gate) !== 'ask') continue;
-    let approved = true;
-    try { approved = gates.hasApproval(h.pid, gate, h.sid, Date.now(), opts); } catch { /* cannot tell: stay quiet */ }
+    let approved = !o.failClosed;
+    try { approved = gates.hasApproval(h.pid, gate, h.sid, Date.now(), opts); } catch { /* cannot tell */ }
     if (!approved) out.push({ gate, ...w });
   }
   return out;
 }
 
-module.exports = { GIT_WORDS, targetDir, makeHandleFor, isCodex, wantedGates, unapproved };
+module.exports = { GIT_WORDS, targetDir, makeHandleFor, isCodex, wantedGates, forbidden, unapproved };

@@ -96,11 +96,26 @@ test('block: unapproved is denied with instructions, approved passes', () => {
   assert.equal(pre(f, 'git push origin main', 'b2').out, '{}');
 });
 
-test('a gate set to auto or never is not enforced; only ask is', () => {
-  const f = fixture('block', { push: 'auto', merge: 'never' });
+test('a gate set to auto is not enforced; ask is', () => {
+  const f = fixture('block', { push: 'auto' });
   assert.equal(pre(f, 'git push', 'm1').out, '{}');
-  assert.equal(pre(f, 'git merge x', 'm2').out, '{}');
   assert.equal(decision(pre(f, 'gh pr create', 'm3')), 'deny');
+});
+
+test('a gate set to never is denied in every mode, and an approval does not lift it', () => {
+  for (const mode of ['remind', 'confirm', 'block']) {
+    const f = fixture(mode, { push: 'never' });
+    const r = pre(f, 'git push origin main', `nv-${mode}`);
+    assert.equal(decision(r), 'deny', mode);
+    assert.match(reason(r), /"push" gate is set to never/);
+    const ev = events.read(f.pid, { types: 'gate.blocked' });
+    assert.equal(ev.length, 1);
+    assert.equal(ev[0].data.mode, 'never');
+    events.append(f.pid, { type: 'gate.answered', src: 'cli', session: f.sid, data: { id: 'g-x', gate: 'push', answer: 'yes', auto: true }, key: `g-x-${mode}` });
+    assert.equal(decision(pre(f, 'git push origin main', `nv2-${mode}`)), 'deny', 'an approval changes nothing');
+  }
+  const mixed = fixture('confirm', { push: 'never' });
+  assert.equal(decision(pre(mixed, 'gh pr create --fill && git push', 'nv-mix')), 'deny', 'never outranks ask');
 });
 
 test('one command with a push and a PR names both gates', () => {
@@ -157,6 +172,39 @@ test('hooks.json registers PreToolUse for Bash; the Codex table does not', () =>
   const codex = JSON.parse(fs.readFileSync(path.join(dir, 'codex-hooks.json'), 'utf8')).hooks;
   assert.ok(claude.PreToolUse.some((g) => g.matcher === 'Bash'));
   assert.ok(!codex.PreToolUse.some((g) => g.matcher === 'Bash'));
+  for (const ev of ['PreToolUse', 'PostToolUse']) assert.ok(claude[ev].some((g) => g.matcher === 'PowerShell'), ev);
+});
+
+test('the PowerShell tool goes through the same gates as Bash', () => {
+  const f = fixture('block');
+  const shell = (id, command) => H.base(f, { tool_name: 'PowerShell', tool_use_id: id, tool_input: { command } });
+  assert.equal(decision(H.runHook('pre-tool-use', shell('ps1', 'git -C . push origin main 2>&1 | Select-Object -Last 3'), { cwd: f.repo })), 'deny');
+  assert.equal(events.read(f.pid, { types: 'gate.blocked' }).length, 1);
+  assert.equal(H.runHook('pre-tool-use', shell('ps2', 'Get-ChildItem'), { cwd: f.repo }).out, '{}');
+  H.runHook('post-tool-use', { ...shell('ps3', 'git push origin main'), tool_response: { stdout: '' } }, { cwd: f.repo });
+  assert.equal(events.read(f.pid, { types: 'git.push' }).length, 1);
+});
+
+test('a wrapped push is caught: bash -c, eval, PowerShell, cmd, npx and an inline git alias', () => {
+  const f = fixture('block');
+  const wrapped = ['bash -c "git push"', "sh -lc 'git push origin x'", 'eval "git push"', 'powershell -c "git push"', 'pwsh -NoProfile -Command git push',
+    'cmd /c git push', 'iex "git push"', 'Invoke-Expression "git push"', 'git -c alias.p=push p', 'git -c "alias.p=!git push" p', 'bash -c "bash -c \'git push\'"'];
+  wrapped.forEach((c, i) => assert.equal(decision(pre(f, c, `w${i}`)), 'deny', c));
+  const seen = H.runHook('pre-tool-use', bash(f, 'npx gh pr create --fill', 'w-npx'), { cwd: f.repo });
+  assert.equal(decision(seen), 'deny');
+  for (const c of ['bash -c "echo git push"', 'bash deploy-push.sh', 'git -c alias.p=status p', 'eval "echo merge"']) assert.equal(pre(f, c, `n-${c}`).out, '{}', c);
+});
+
+test('block: an approval that cannot be read does not count; the other modes stay quiet', () => {
+  const G = require('../lib/hooks/gatecheck');
+  const h = { pid: 'x', sid: 's', cfg: () => ({ gates: { push: 'ask' } }) };
+  const wanted = new Map([['push', { command: 'git push', text: 'git push' }]]);
+  const real = gates.hasApproval;
+  gates.hasApproval = () => { throw new Error('unreadable'); };
+  try {
+    assert.equal(G.unapproved(h, wanted, { failClosed: true }).length, 1);
+    assert.equal(G.unapproved(h, wanted).length, 0);
+  } finally { gates.hasApproval = real; }
 });
 
 // ---------------------------------------------------------------- user-turn rule

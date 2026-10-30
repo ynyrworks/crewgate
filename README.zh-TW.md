@@ -282,9 +282,11 @@ crew plan show 0-14
 | `confirm` | 執行前由 hook 讓 Claude Code 問**你**（它自己的權限提示：允許或拒絕）。你允許就記錄為 `gate.confirmed`，不會被當成漏掉。誤判的代價是多點一下。需要用戶端支援 PreToolUse 的 `ask`；在 bypass-permissions 模式下的行為尚未驗證。 | 互動式工作階段（建議） |
 | `block` | 執行前由 hook 直接拒絕；模型必須 `gate ask`、問你、等你回覆、`gate answer yes` 再重試。誤判會讓工作停下。不是安全邊界：模型仍可自己記錄核准。 | CI、無人值守，搭配 `auto` 關卡 |
 
+設為 `never` 的關卡，其推送、PR、合併在三種模式下都會於執行前被拒絕，任何核准都無法解除。Codex 工作階段只會事後記錄並告知模型。
+
 `gates.require_user_turn`（預設 `true`）對三種模式都多加一條規則：手動記錄的核准，要在 `gate ask` 與 `gate answer yes`
-之間，在發出 ask 的那個工作階段有你送出的訊息才算數（回答被記錄時判斷一次；不知道工作階段 id 時，例如 Codex CLI，專案中任何工作階段有訊息就算，這個判斷較弱）。這能防止模型一口氣自問自答；防不了你寫了不相干的訊息後它回答「yes」。偵測只讀 Bash 指令文字：
-會推送的腳本、alias、變數（`$GIT push`）、其他工具的推送都看不到。`cd`／`git -C` 指到的專案決定採用哪份設定，
+之間，在發出 ask 的那個工作階段有你送出的訊息才算數（回答被記錄時判斷一次；不知道工作階段 id 時，例如 Codex CLI，專案中任何工作階段有訊息就算，這個判斷較弱）。這能防止模型一口氣自問自答；防不了你寫了不相干的訊息後它回答「yes」。三種模式都是盡力攔截，不是硬關卡：偵測讀的是 Bash 與 PowerShell 工具的指令，包在 `bash -c`、`eval`、`powershell -c`、`cmd /c`、`npx` 或行內 `git -c alias.x=y` 裡的也算；
+會推送的腳本、已設定的 alias、變數（`$GIT push`）、其他工具的推送都看不到，hook 當掉或逾時也會放行。要真正擋住，請用伺服器端的分支保護。`cd`／`git -C` 指到的專案決定採用哪份設定，
 未註冊的專案永遠不攔。Codex 工作階段維持 `remind`。逐步流程、限制與建議設定見 [docs/DESIGN.md §8.1](docs/DESIGN.md)。
 
 ## 用 Codex 或其他 CLI 當審查員
@@ -327,7 +329,7 @@ codex plugin add crewgate@crewgate
 - `crew task merge` 只記錄合併，不會執行 git。合併由統籌執行，hook 負責記錄那個指令。
 - 實作者的隔離方式是 worktree 加上指示，不是容器。
 - 看板的工作階段清單是讀取本機 Claude Code 與 Codex 的紀錄；除非在全域設定打開 `board.show_text`，否則不顯示訊息文字。工作階段統計（時長、提示、工具呼叫、token、費用）只有數字，依對話紀錄快取在 `~/.crewgate/cache/sessions`。
-- Git 與關卡偵測只讀 Bash 工具的指令文字。會推送的腳本、alias、變數（`$GIT push`）、`eval`，或其他工具（IDE、Git 圖形介面、MCP 伺服器）的推送都看不到；關卡防的是模型的一般習慣，不是蓄意繞過。
+- Git 與關卡偵測只讀 Bash 與 PowerShell 工具的指令文字。會推送的腳本、已設定的 alias、變數（`$GIT push`）、`-EncodedCommand`，或其他工具（IDE、Git 圖形介面、MCP 伺服器）的推送都看不到；關卡防的是模型的一般習慣，不是蓄意繞過。
 - `gates.enforce: confirm` 依賴 Claude Code 遵守 PreToolUse 的 `ask`；在 bypass-permissions（以及 `dontAsk`）模式下的行為尚未驗證。`gate.confirmed` 的意思是「指令在回傳 ask 之後執行了」，不代表真有人點過。
 - Codex 工作階段維持 `remind`：Codex 是否遵守 hook 回傳的 `ask`／`deny` 尚未確認。不知道工作階段 id 時（Codex CLI），`gates.require_user_turn` 會退回較弱的「專案」判斷：專案中任何工作階段的訊息都算。
 - 辦公室畫面是實驗性的，只呈現活動、不呈現結果：指令是否成功不在它收到的資料裡。以 Codex 當統籌屬實驗性；不支援 Gemini。

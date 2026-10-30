@@ -12,6 +12,7 @@ const sess = require('./session');
 const gitcmd = require('./gitcmd');
 const gates = require('../core/gates');
 const G = require('./gatecheck');
+const { SHELL_TOOLS } = require('./prefilter');
 
 function onAgent(payload) {
   if (payload.agent_id) return null;
@@ -129,7 +130,18 @@ function cliMergeRecorded(pid, data, dir) {
 function gateLines(h, found, tuid) {
   const lines = [];
   let prompted = null;
-  for (const m of G.unapproved(h, G.wantedGates(found))) {
+  const wanted = G.wantedGates(found);
+  // PreToolUse denies these; one that ran anyway (Codex has no such check) is recorded and reported.
+  for (const m of G.forbidden(h, wanted)) {
+    try {
+      events.append(h.pid, {
+        type: 'gate.missing', src: 'hook', session: h.sid, tool_use_id: tuid,
+        data: { gate: m.gate, mode: 'never', command: m.command }, key: `${tuid || Date.now()}:${m.gate}`,
+      });
+    } catch { /* ignore */ }
+    lines.push(h.t('gate.neverRan', { what: m.command, gate: m.gate }));
+  }
+  for (const m of G.unapproved(h, wanted)) {
     if (tuid && gates.enforceOf(h.cfg()) === 'confirm') {
       if (!prompted) {
         try { prompted = events.read(h.pid, { types: 'gate.prompted', since: Date.now() - 30 * 60 * 1000 }).filter((e) => e.data && e.data.tool_use_id === tuid); } catch { prompted = []; }
@@ -161,7 +173,7 @@ function onBash(payload) {
   const gitish = G.GIT_WORDS.test(command.slice(0, 20000));
   // Ordinary commands only use the session file (no git); git-like ones may resolve the project.
   const h = C.open(payload, { fastOnly: !gitish });
-  if (h) sess.bumpTool(h, 'Bash');
+  if (h) sess.bumpTool(h, C.str(payload.tool_name));
   if (!gitish) return null;
   const tuid = C.str(payload.tool_use_id);
   const merges = gitcmd.mergesIn(responseText(payload.tool_response));
@@ -196,7 +208,7 @@ function onBash(payload) {
 function run(payload) {
   const tool = C.str(payload.tool_name);
   if (C.AGENT_TOOLS.has(tool)) return onAgent(payload);
-  if (tool === 'Bash') return onBash(payload);
+  if (SHELL_TOOLS.has(tool)) return onBash(payload);
   return null;
 }
 

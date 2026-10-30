@@ -298,8 +298,15 @@ A push (`git push`), a PR (`gh pr create`, `glab mr create`) or a merge (`git me
 | `confirm` | PreToolUse(Bash), then PostToolUse(Bash) | 1. Before the command, the hook finds the push / PR / merge, resolves the target project (below) and checks the approval. 2. No approval: it records `gate.prompted` and answers `permissionDecision: "ask"` with a reason (which command, which project, which gate). Claude Code then shows its own permission prompt. 3. You allow: the command runs; PostToolUse sees the `gate.prompted` of the same `tool_use_id`, records `gate.confirmed` (`via: "permission-prompt"`, plus the `permission_mode` seen) and writes no `gate.missing`. You deny: nothing runs. 4. An approval exists: the hook is silent and the command goes on as it would without crewgate. |
 | `block` | PreToolUse(Bash) | 1. Same detection and approval check. 2. No approval: `gate.blocked` is recorded and the hook answers `permissionDecision: "deny"` with instructions. The command does not run. 3. The model runs `crew gate ask <gate>`, asks you in chat, waits for your reply, runs `crew gate answer <id> yes` and retries; now the check passes. |
 
-Only gates set to `ask` are enforced; `auto` and `never` are not touched by the hook (`crew gate ask` already refuses
-`never`). One command line may touch several gates (`git push && gh pr create`): one reason lists all of them.
+The table is about gates set to `ask`. `auto` is not touched by the hook. A push, PR or merge under `never` is denied before
+it runs in all three modes (`gate.blocked`, `mode: "never"`) and no approval lifts it; `crew gate ask` refuses `never` too.
+Codex has no such check, so one that ran there is recorded afterwards (`gate.missing`, `mode: "never"`) and reported to the
+model. One command line may touch several gates (`git push && gh pr create`): one reason lists all of them.
+
+**Best effort.** Every mode is interception, not a hard stop. The hooks see the Bash and PowerShell tools only and read
+the command text, unwrapping `bash -c`, `eval`, `powershell -c`, `cmd /c`, `iex`, `npx` and an inline `git -c alias.x=y`. A
+script, a configured alias or another tool is not seen, and a hook that crashes or times out lets the command through. With
+`block`, events that cannot be read count as no approval; an unreadable config leaves the modes unknown and nothing is denied.
 
 **Target project.** Detection is the one used for events: `cd` / `pushd` words and `git -C` are resolved from the session
 working directory, a subshell's `cd` does not leak out of it, and redirections, comments and heredoc bodies are not

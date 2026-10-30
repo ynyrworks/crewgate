@@ -305,10 +305,16 @@ and record your answer with `crew gate answer`. `gates.enforce` decides when cre
 | `confirm` | Before it runs, the hook makes Claude Code ask **you** (its own permission prompt: allow or deny). If you allow, it is recorded as `gate.confirmed` and nothing is reported missing. A false detection costs one click. Needs a client that honours PreToolUse `ask`; behaviour in bypass-permissions mode is not verified. | Interactive sessions (recommended) |
 | `block` | Before it runs, the hook denies it. The model must `gate ask`, ask you, wait for your reply, `gate answer yes` and retry. A false detection stops work. Not a security boundary: the model can still record an approval itself. | CI and headless runs, together with `auto` gates |
 
+A push, PR or merge under a `never` gate is denied before it runs in all three modes, and no approval lifts it. Codex sessions
+only record it and tell the model afterwards.
+
 `gates.require_user_turn` (default `true`) adds one rule to all three modes: a hand-recorded approval counts only if you sent
 a message in the asking session between its `gate ask` and its `gate answer yes` (judged once, when the answer is recorded; where the session id is unknown, as in the Codex CLI, a message in any session of the project counts, which is weaker). That stops the model from asking and approving in one go; it
-does not stop it from answering "yes" after you wrote something unrelated. Detection only reads the Bash command: a script
-that pushes, an alias, a variable (`$GIT push`) or a push by another tool is not seen. The target repo of `cd` / `git -C`
+does not stop it from answering "yes" after you wrote something unrelated. All three modes are best-effort interception, not a
+hard stop: detection reads the command of the Bash and PowerShell tools, including one wrapped in `bash -c`, `eval`, `powershell -c`,
+`cmd /c`, `npx` or an inline `git -c alias.x=y`. A script that pushes, a configured alias, a variable (`$GIT push`) or a push by
+another tool is not seen, and a hook that crashes or times out lets the command through. For a hard stop use branch protection on
+the server. The target repo of `cd` / `git -C`
 decides which project's config applies, and an unregistered repo is never enforced. Codex sessions stay on `remind`.
 Step by step, limits and recommended settings: [docs/DESIGN.md §8.1](docs/DESIGN.md).
 
@@ -357,7 +363,7 @@ codex plugin add crewgate@crewgate
 - The board lists sessions by reading local Claude Code and Codex logs; message text is hidden unless you set
   `board.show_text` in the global config. Session statistics (duration, prompts, tool calls, tokens, cost) are numbers only;
   they are cached per transcript under `~/.crewgate/cache/sessions`.
-- Git and gate detection reads only the command text of the Bash tool. A script that pushes, an alias, a variable (`$GIT push`), `eval` or a push by another tool (IDE, Git GUI, MCP server) is not seen; the gates guard against the model's ordinary habits, not against a determined bypass.
+- Git and gate detection reads only the command text of the Bash and PowerShell tools. A script that pushes, a configured alias, a variable (`$GIT push`), `-EncodedCommand` or a push by another tool (IDE, Git GUI, MCP server) is not seen; the gates guard against the model's ordinary habits, not against a determined bypass.
 - `gates.enforce: confirm` relies on Claude Code honouring a PreToolUse `ask`; its behaviour in bypass-permissions mode (and `dontAsk`) is not verified. `gate.confirmed` means the command ran after an ask was returned, not that a human clicked.
 - Codex sessions stay on `remind`: whether Codex honours `ask` / `deny` from a hook is not established. Where the session id is unknown (Codex CLI), `gates.require_user_turn` falls back to the weaker `"project"` check: a message in any session of the project counts.
 - The Office view is experimental and shows activity, not results: whether a command passed is not in the data it receives. A Codex orchestrator is experimental; there is no Gemini support.

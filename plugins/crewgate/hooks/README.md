@@ -40,7 +40,7 @@ Files written
 - Events and needs through the core (`events.append`, `store.needAdd`).
 
 Notes
-- Tool counts in the digest cover the tools that have a hook entry (Agent/Task, Edit family, Read, Bash).
+- Tool counts in the digest cover the tools that have a hook entry (Agent/Task, Edit family, Read, Bash, PowerShell).
 - Hooks after SessionStart use the session file to find the project without spawning git; the Edit
   guard always asks git, because it has to tell the main checkout from a linked worktree.
 - Env knobs: `CREWGATE_HOOK_GUARD_MS`, `CREWGATE_LOCK_WAIT_MS`. `CREWGATE_HOOK_TEST_SLEEP_MS` (simulates a stuck handler)

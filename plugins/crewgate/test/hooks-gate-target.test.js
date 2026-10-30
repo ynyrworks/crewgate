@@ -43,6 +43,9 @@ test('detect: cd / pushd / git -C words are returned per command', () => {
   assert.deepEqual(cds('git -C "$D" push'), [[]]);
   assert.deepEqual(cds('cd /a && cd "$D" && git push'), [[]]);
   assert.equal(gitcmd.detect('cd /x && git push')[0].data.command, 'git push');
+  assert.deepEqual(cds('Set-Location -Path /x; git push'), [['/x']], 'PowerShell directory words');
+  assert.deepEqual(cds('cd /x && bash -c "cd y && git push"'), [['/x', 'y']], 'a wrapper keeps the outer and inner cd');
+  assert.deepEqual(cds('git -C /x -c alias.p=push p'), [['/x']], 'an alias keeps -C');
 });
 
 test('cd into another registered project: events, gate.missing and approval live in that project', () => {

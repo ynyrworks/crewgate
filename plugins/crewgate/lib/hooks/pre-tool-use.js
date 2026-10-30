@@ -13,6 +13,7 @@ const glob = require('./glob');
 const gitcmd = require('./gitcmd');
 const gates = require('../core/gates');
 const G = require('./gatecheck');
+const { SHELL_TOOLS } = require('./prefilter');
 
 const MAX_READ_BYTES = 20 * 1024 * 1024;
 
@@ -136,9 +137,10 @@ function onRead(payload) {
 }
 
 // ---------------------------------------------------------------- Bash (gates.enforce)
-// A push, PR or merge under an "ask" gate without a usable approval, in a project whose gates.enforce is
-// confirm (Claude Code asks the user) or block (denied). remind (the default) is handled after the command by
-// PostToolUse. Only registered projects are looked at; a cd / git -C target outside them is never enforced.
+// A push, PR or merge under a "never" gate is denied in every gates.enforce mode. Under an "ask" gate without a
+// usable approval, in a project whose gates.enforce is confirm (Claude Code asks the user) or block (denied).
+// remind (the default) is handled after the command by PostToolUse. Only registered projects are looked at;
+// a cd / git -C target outside them is never enforced.
 function onBash(payload) {
   if (G.isCodex(payload)) return null; // Codex: "ask" support unverified, stays on remind
   const command = C.str(C.obj(payload.tool_input).command);
@@ -161,10 +163,22 @@ function onBash(payload) {
   const reasons = [];
   let verdict = null; // 'ask' unless some project says block
   for (const g of byProject.values()) {
+    const wanted = G.wantedGates(g.found);
+    for (const m of G.forbidden(g.h, wanted)) {
+      reasons.push(g.h.t('gate.neverBlock', { what: m.text, gate: m.gate, project: path.basename(g.h.root) }));
+      verdict = 'block';
+      try {
+        events.append(g.h.pid, {
+          type: 'gate.blocked', src: 'hook', session: g.h.sid, tool_use_id: tuid,
+          data: { gate: m.gate, command: m.command, mode: 'never', tool_use_id: C.snippet(tuid, 80) || null, permission_mode: C.snippet(payload.permission_mode, 40) || null },
+          key: `${tuid || Date.now()}:${m.gate}:never`,
+        });
+      } catch { /* ignore */ }
+    }
     let enforce;
     try { enforce = gates.enforceOf(g.h.cfg()); } catch { continue; }
     if (enforce === 'remind') continue;
-    for (const m of G.unapproved(g.h, G.wantedGates(g.found))) {
+    for (const m of G.unapproved(g.h, wanted, { failClosed: enforce === 'block' })) {
       const vars = { what: m.text, gate: m.gate, project: path.basename(g.h.root), cmd: C.crewCmd() };
       reasons.push(g.h.t(enforce === 'block' ? 'gate.block' : 'gate.confirm', vars));
       verdict = enforce === 'block' || verdict === 'block' ? 'block' : 'ask';
@@ -187,7 +201,7 @@ function run(payload) {
   if (C.AGENT_TOOLS.has(tool)) return onAgent(payload);
   if (C.EDIT_TOOLS.has(tool)) return onEdit(payload);
   if (tool === 'Read') return onRead(payload);
-  if (tool === 'Bash') return onBash(payload);
+  if (SHELL_TOOLS.has(tool)) return onBash(payload);
   return null;
 }
 
