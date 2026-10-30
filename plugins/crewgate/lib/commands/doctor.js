@@ -74,9 +74,11 @@ async function run(argv, ctx) {
     const nPlans = plans.slugs(dir).length;
     if (nPlans) {
       const deep = plans.deepNodes(dir);
-      add('plans', deep.length ? 'warn' : 'ok', deep.length
-        ? ctx.t('wf.doctor.plansDeep', { max: plans.MAX_DEPTH, where: deep.slice(0, 5).map((x) => `${x.slug}:${x.line}`).join(', ') })
-        : ctx.t('wf.doctor.plansOk', { n: nPlans }));
+      const dups = plans.duplicateNodes(dir);
+      const bits = [];
+      if (deep.length) bits.push(ctx.t('wf.doctor.plansDeep', { max: plans.MAX_DEPTH, where: deep.slice(0, 5).map((x) => `${x.slug}:${x.line}`).join(', ') }));
+      if (dups.length) bits.push(ctx.t('wf.doctor.plansDup', { where: dups.slice(0, 5).map((x) => `${x.slug} (${x.ids.join(', ')})`).join('; ') }));
+      add('plans', bits.length ? 'warn' : 'ok', bits.length ? bits.join('; ') : ctx.t('wf.doctor.plansOk', { n: nPlans }));
     }
   }
 

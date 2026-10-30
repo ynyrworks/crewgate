@@ -75,6 +75,7 @@ function run(argv, ctx) {
       ctx.t('plan.head', { slug: a.slug, title: d.title, pct: d.summary.pct, done: d.summary.done, total: d.summary.total }),
       ...(d.goal ? [d.goal] : []),
       ...treeLines(ctx, d.nodes),
+      ...(d.duplicates.length ? [ctx.t('plan.dupIds', { ids: d.duplicates.join(', ') })] : []),
       ...(d.truncated ? [ctx.t('plan.truncated')] : []),
     ]);
   } else if (sub === 'add') {

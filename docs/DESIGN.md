@@ -643,7 +643,9 @@ Optional free text (goal).
   `merged`/`accepted`; `review` if the task is `returned`/`reviewing`; `doing` if `dispatched`; `blocked` (needs attention)
   if `cancelled`; otherwise `todo`. An unknown task id is shown as such and the state comes from the box. A parent counts
   the leaves below it that are not dropped or proposed: progress = done / counted, done when all are done or its own box is
-  `[x]`; a parent whose children are all excluded counts as a leaf.
+  `[x]`; a parent whose children are all dropped or proposed counts as an open leaf (one step, to do until its own box or task says otherwise).
+- Ids: a new node gets `n<k>` above the largest safe numeric part of the existing ids and never one already in use (a huge hand-written id
+  cannot collide). When two nodes share an id the first wins for commands, `plan show` and `crew doctor` warn, and the next write renames the later ones.
 - Growth: each node carries `origin` and `added`; the plan page groups additions by day and origin. A later plan review
   (reviewer/refuter propose `[?]` nodes the orchestrator accepts) and follow-ups from code review use the same fields,
   `crew plan add --origin ... --proposed` and `crew plan set ... accept`; neither flow exists yet.

@@ -182,5 +182,6 @@
   "wf.doctor.gates.turnOff": "off",
   "wf.doctor.name.plans": "Plans",
   "wf.doctor.plansOk": "{n} plan file(s)",
-  "wf.doctor.plansDeep": "nested deeper than {max} levels: {where}"
+  "wf.doctor.plansDeep": "nested deeper than {max} levels: {where}",
+  "wf.doctor.plansDup": "ids used more than once: {where}"
 }

@@ -31,5 +31,6 @@
   "plan.state.todo": "to do",
   "plan.state.doing": "in progress",
   "plan.state.review": "in review",
-  "plan.state.blocked": "needs attention"
+  "plan.state.blocked": "needs attention",
+  "plan.dupIds": "Warning: these ids are used more than once (the first one wins; the next write gives the others new ids): {ids}"
 }

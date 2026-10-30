@@ -294,3 +294,38 @@ test('doctor warns about nodes nested deeper than the limit', () => {
   fs.writeFileSync(path.join(repo, '.crew', 'plans', 'deep.md'), '- [ ] a\n');
   assert.equal(crewJ(repo, 'doctor').data.checks.find((x) => x.name === 'plans').status, 'ok');
 });
+
+test('ids: a huge hand-written id cannot collide with a generated one, and generated ids skip every used id', () => {
+  const doc = plans.parse('- [ ] a <!-- id:n9007199254740992 -->\n- [ ] b <!-- id:n9007199254740993 -->\n- [ ] c <!-- id:n1 -->\n- [ ] d\n');
+  const added = plans.addNode(doc, { text: 'new', date: '2026-10-30' });
+  const ids = doc.nodes.map((n) => n.meta.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.equal(added.meta.id, 'n3', 'd got n2 first, then the new node');
+  assert.equal(doc.nodes[3].meta.id, 'n2');
+  // a generated id never equals a hand-written id that appears later in the file
+  const late = plans.parse('- [ ] x\n- [ ] y <!-- id:n1 -->\n');
+  plans.assignIds(late);
+  assert.deepEqual(late.nodes.map((n) => n.meta.id), ['n2', 'n1']);
+});
+
+test('ids: a duplicate hand-written id is found first, warned about by show and doctor, and renamed on the next write', () => {
+  const repo = u.initRepo();
+  h.crew(['plan', 'new', 'dup', '--title', 'x'], repo);
+  const file = path.join(repo, '.crew', 'plans', 'dup.md');
+  fs.appendFileSync(file, '- [ ] first <!-- id:n1 -->\n- [ ] second <!-- id:n1 -->\n');
+  const doc = plans.parse(fs.readFileSync(file, 'utf8'));
+  assert.equal(plans.find(doc, 'n1').text, 'first');
+  assert.deepEqual(plans.duplicateIds(doc), ['n1']);
+  const show = crewJ(repo, 'plan', 'show', 'dup');
+  assert.deepEqual(show.data.duplicates, ['n1']);
+  assert.match(h.crew(['plan', 'show', 'dup'], repo).out, /n1/);
+  assert.match(h.crew(['plan', 'show', 'dup'], repo).out, /Warning/);
+  const c = crewJ(repo, 'doctor').data.checks.find((x) => x.name === 'plans');
+  assert.equal(c.status, 'warn');
+  assert.match(c.detail, /dup \(n1\)/);
+  assert.equal(crewJ(repo, 'plan', 'set', 'dup', 'n1', 'done').code, 0);
+  const out = fs.readFileSync(file, 'utf8');
+  assert.match(out, /- \[x\] first <!-- id:n1 -->/);
+  assert.match(out, /- \[ \] second <!-- id:n2 -->/);
+  assert.equal(crewJ(repo, 'doctor').data.checks.find((x) => x.name === 'plans').status, 'ok');
+});

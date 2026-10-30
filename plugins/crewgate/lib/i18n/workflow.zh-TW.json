@@ -182,5 +182,6 @@
   "wf.doctor.gates.turnOff": "關",
   "wf.doctor.name.plans": "計畫",
   "wf.doctor.plansOk": "{n} 個計畫檔",
-  "wf.doctor.plansDeep": "巢狀超過 {max} 層：{where}"
+  "wf.doctor.plansDeep": "巢狀超過 {max} 層：{where}",
+  "wf.doctor.plansDup": "id 重複使用：{where}"
 }

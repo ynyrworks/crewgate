@@ -31,5 +31,6 @@
   "plan.state.todo": "待辦",
   "plan.state.doing": "進行中",
   "plan.state.review": "審查中",
-  "plan.state.blocked": "需要處理"
+  "plan.state.blocked": "需要處理",
+  "plan.dupIds": "警告：這些 id 重複使用（以第一個為準；下次寫入會替其他節點換新 id）：{ids}"
 }

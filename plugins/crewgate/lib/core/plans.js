@@ -117,19 +117,30 @@ function setBox(node, box) {
   touch(node);
 }
 
-// Gives every node without a (unique) id the next free n<number>. Returns true when something changed.
-function assignIds(doc) {
-  const seen = new Set();
+// Free ids: n<k> above the largest safe numeric part, never one already used (a hand-written id may be huge).
+function idPool(doc) {
+  const used = new Set(doc.nodes.map((n) => n.meta.id).filter(Boolean));
   let top = 0;
-  for (const n of doc.nodes) {
-    const m = /^n(\d+)$/.exec(n.meta.id || '');
-    if (m) top = Math.max(top, Number(m[1]));
-  }
+  for (const id of used) { const m = /^n(\d{1,15})$/.exec(id); if (m) top = Math.max(top, Number(m[1])); }
+  return { next() { let id; do { id = `n${++top}`; } while (used.has(id)); used.add(id); return id; } };
+}
+
+// Ids used by more than one node (the first one wins for commands): [id].
+function duplicateIds(doc) {
+  const seen = new Set();
+  const dup = new Set();
+  for (const n of doc.nodes) { if (!n.meta.id) continue; if (seen.has(n.meta.id)) dup.add(n.meta.id); seen.add(n.meta.id); }
+  return [...dup];
+}
+
+// Gives every node without a (unique) id a new one. Returns true when something changed.
+function assignIds(doc) {
+  const pool = idPool(doc);
+  const seen = new Set();
   let changed = false;
   for (const n of doc.nodes) {
     if (n.meta.id && !seen.has(n.meta.id)) { seen.add(n.meta.id); continue; }
-    let id;
-    do { id = `n${++top}`; } while (seen.has(id));
+    const id = pool.next();
     seen.add(id);
     n.meta = { id, ...Object.fromEntries(Object.entries(n.meta).filter(([k]) => k !== 'id')) };
     touch(n);
@@ -166,9 +177,7 @@ function addNode(doc, { text, under, task, origin = 'plan', proposed = false, da
   const parent = under ? find(doc, under) : null;
   if (parent && parent.depth >= MAX_DEPTH) throw new CrewError('plan.tooDeep', { max: MAX_DEPTH });
   assignIds(doc);
-  let top = 0;
-  for (const n of doc.nodes) { const m = /^n(\d+)$/.exec(n.meta.id); if (m) top = Math.max(top, Number(m[1])); }
-  const meta = { id: `n${top + 1}` };
+  const meta = { id: idPool(doc).next() };
   if (task) meta.task = task;
   meta.added = date;
   meta.origin = origin;
@@ -252,7 +261,7 @@ function derive(doc, taskState) {
   const total = counted.reduce((s, k) => s + k.total, 0);
   const count = (st) => flat.filter((x) => x.state === st).length;
   return {
-    title: doc.title, goal: doc.goal, truncated: doc.truncated,
+    title: doc.title, goal: doc.goal, truncated: doc.truncated, duplicates: duplicateIds(doc),
     summary: { done, total, pct: total ? Math.round((100 * done) / total) : 0, nodes: flat.length, proposed: count('proposed'), dropped: count('dropped'), blocked: count('blocked') },
     nodes,
   };
@@ -383,6 +392,17 @@ function today(now = new Date()) {
   return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
 }
 
+// Plans (slug) with ids used twice: [{ slug, ids }] for doctor.
+function duplicateNodes(root) {
+  const out = [];
+  for (const slug of slugs(root)) {
+    const doc = readCapped(root, slug);
+    const ids = doc ? duplicateIds(doc) : [];
+    if (ids.length) out.push({ slug, ids });
+  }
+  return out;
+}
+
 // Hand-edited files may nest deeper than MAX_DEPTH: [{ slug, line, depth }] for doctor.
 function deepNodes(root) {
   const out = [];
@@ -395,5 +415,5 @@ function deepNodes(root) {
 
 module.exports = {
   SLUG_RE, ORIGINS, MAX_DEPTH, MAX_BYTES, MAX_NODES, planDir, planFile, checkSlug, parse, serialize, assignIds, find, addNode, removeNode,
-  derive, taskStates, slugs, readCapped, update, create, addTo, linkTo: linkTask, setState, removeFrom, deepNodes, exists, today, refOf,
+  derive, taskStates, slugs, readCapped, update, create, addTo, linkTo: linkTask, setState, removeFrom, deepNodes, duplicateNodes, duplicateIds, exists, today, refOf,
 };
