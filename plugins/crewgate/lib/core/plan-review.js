@@ -151,10 +151,12 @@ function start(root, projectId, cfg, slug, opts = {}) {
   const scope = plans.update(root, slug, (d) => { const n = opts.node ? plans.find(d, opts.node) : null; plans.assignIds(d); return n ? n.meta.id : null; });
   const doc = plans.readCapped(root, slug);
   const dir = dirOf(projectId, slug);
+  // what each step said when the reviewer read it: filter, finalize and accept compare against this, never the file as it is later
+  const texts = Object.fromEntries(doc.nodes.map((n) => [plans.refOf(n), n.text]));
   const entry = updateState(dir, (st) => {
     if (st.rounds.length >= caps.max_rounds && !opts.force) throw new CrewError('planReview.maxRounds', { slug, max: caps.max_rounds });
     const round = st.rounds.length ? Math.max(...st.rounds.map((r) => r.round)) + 1 : 1;
-    const e = { round, date: plans.today(), scope, status: 'started', raised: 0, filtered: {}, refuted: 0, kept: 0, cut: 0, accepted: 0, rejected: 0 };
+    const e = { round, date: plans.today(), scope, texts, status: 'started', raised: 0, filtered: {}, refuted: 0, kept: 0, cut: 0, accepted: 0, rejected: 0 };
     st.rounds.push(e);
     return e;
   });
@@ -230,12 +232,17 @@ function problemOf(f, ctx) {
   if (!nonEmpty(p.done_when)) return { reason: 'no-done-when', detail: 'proposal.done_when: a way to tell it is finished is required' };
   const node = f.node ? String(f.node).trim() : null;
   if (!node && p.action !== 'add') return bad(`proposal.action ${p.action} needs a node`);
-  if (/^L\d+$/.test(node || '')) return { reason: 'unknown-node', detail: `${node}: a line number is not stable, use the step id` };
   if (node) {
     let n = null;
     try { n = plans.find(ctx.doc, node); } catch { n = null; }
     if (!n) return { reason: 'unknown-node', detail: node };
+    // a real id (even a hand-written "L12") is fine; a line number that only matches a line without an id is not stable
+    if (n.meta.id !== node) return { reason: 'unknown-node', detail: `${node}: a line number is not stable, use the step id` };
     if (n.box === '~' || n.box === '?') return { reason: 'unknown-node', detail: `${node} is not an active step` };
+  }
+  if (node && ctx.texts) {
+    if (!Object.prototype.hasOwnProperty.call(ctx.texts, node)) return { reason: 'unknown-node', detail: `${node}: not in the plan the reviewer was given` };
+    if (ctx.texts[node] !== plans.find(ctx.doc, node).text) return { reason: 'target-changed', detail: `${node}: the step changed since the round started` };
   }
   if (ctx.scopeIds && !(node && ctx.scopeIds.has(plans.refOf(plans.find(ctx.doc, node))))) return { reason: 'out-of-scope', detail: node || 'whole plan' };
   const target = node ? plans.refOf(plans.find(ctx.doc, node)) : '';
@@ -256,13 +263,13 @@ function filter(root, projectId, cfg, slug, round) {
   const entry = st.rounds.find((x) => x.round === r);
   const list = sanitizeFindings(rv.readArray(roundFile(dir, r, 'raw.json'), 'raw findings'));
   const scopeNode = entry && entry.scope ? plans.find(doc, entry.scope) : null;
-  const ctx = { doc, scopeIds: scopeNode ? subtreeIds(scopeNode) : null, rejected: rejectedKeys(doc, st), seen: new Set() };
+  const ctx = { doc, scopeIds: scopeNode ? subtreeIds(scopeNode) : null, rejected: rejectedKeys(doc, st), seen: new Set(), texts: entry && entry.texts ? entry.texts : null };
   const kept = [];
   const dropped = [];
   const reasons = {};
   for (const f of list) {
     const p = problemOf(f, ctx);
-    if (p) { dropped.push({ finding: f, ...p }); reasons[p.reason] = (reasons[p.reason] || 0) + 1; } else kept.push({ ...f, node_text: f.node ? plans.find(doc, f.node).text : null });
+    if (p) { dropped.push({ finding: f, ...p }); reasons[p.reason] = (reasons[p.reason] || 0) + 1; } else kept.push({ ...f, node_text: !f.node ? null : (ctx.texts ? ctx.texts[f.node] : plans.find(doc, f.node).text) });
   }
   json.save(roundFile(dir, r, 'filtered.json'), dropped);
   json.save(roundFile(dir, r, 'kept.json'), kept);

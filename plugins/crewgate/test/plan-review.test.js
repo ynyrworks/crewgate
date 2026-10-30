@@ -502,3 +502,32 @@ test('a step that changed after filtering is never attached to or overwritten', 
   assert.equal(node(repo, proj, 'n3').text, 'Order by due date', 'never overwritten on a mismatch');
   assert.equal(node(repo, proj, f2.created[0].node_id).state, 'proposed');
 });
+
+test('the reviewed text is the one the reviewer read at run: an edit between run and filter is not taken as the baseline', () => {
+  const { repo, proj } = setup();
+  const run = cli(repo, ['plan', 'review', 'run', 'demo']).data;
+  assert.equal(pr.readState(pr.dirOf(proj.id, 'demo')).rounds[0].texts.n5, 'Release');
+  fs.writeFileSync(path.join(repo, '.crew', 'plans', 'demo.md'), planText(repo).replace('Release <!--', 'Ship it <!--'));
+  cli(repo, ['plan', 'review', 'submit', 'demo', '--round', String(run.round)], [
+    F('n5', 'risk', 'change', 'Release with a signed tag'), F('n2', 'risk', 'add', 'Reject past dates'),
+  ]);
+  const flt = cli(repo, ['plan', 'review', 'filter', 'demo']).data;
+  assert.deepEqual(flt.dropped.map((d) => d.reason), ['target-changed']);
+  assert.deepEqual(flt.kept.map((f) => f.id), ['f2']);
+  assert.equal(flt.kept[0].node_text, 'Add due dates');
+  close(repo, run.round, verdicts(['f2', 'upheld']));
+  assert.equal(node(repo, proj, 'n5').text, 'Ship it', 'never overwritten');
+});
+
+test('a hand-written id such as L12 is a real id; a line number that only matches a line without an id is refused', () => {
+  const { repo } = setup();
+  fs.writeFileSync(path.join(repo, '.crew', 'plans', 'demo.md'), '# Hand\n\n- [ ] First <!-- id:L12 -->\n- [ ] Second\n');
+  const run = cli(repo, ['plan', 'review', 'run', 'demo']).data;
+  fs.appendFileSync(path.join(repo, '.crew', 'plans', 'demo.md'), '- [ ] Added by hand after the run\n');
+  cli(repo, ['plan', 'review', 'submit', 'demo', '--round', String(run.round)], [
+    F('L12', 'risk', 'add', 'Under the L12 step'), F('L5', 'risk', 'add', 'Under a line that has no id'),
+  ]);
+  const flt = cli(repo, ['plan', 'review', 'filter', 'demo']).data;
+  assert.deepEqual(flt.kept.map((f) => f.node), ['L12']);
+  assert.deepEqual(flt.dropped.map((d) => d.reason), ['unknown-node']);
+});
