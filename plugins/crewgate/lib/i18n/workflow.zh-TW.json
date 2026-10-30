@@ -179,5 +179,9 @@
   "wf.doctor.gates.confirm": "enforce confirm：沒有核准的推送、PR、合併會先由 Claude Code 詢問你；使用者回合規則 {turn}；ask 關卡：{ask}。Codex 工作階段退回 remind（Codex PreToolUse 的 ask 尚未驗證）",
   "wf.doctor.gates.block": "enforce block：沒有核准的推送、PR、合併在執行前被拒絕；使用者回合規則 {turn}；ask 關卡：{ask}。Codex 工作階段退回 remind（Codex PreToolUse 的 deny 尚未驗證）",
   "wf.doctor.gates.turnOn": "開",
-  "wf.doctor.gates.turnOff": "關"
+  "wf.doctor.gates.turnOff": "關",
+  "wf.doctor.name.plans": "計畫",
+  "wf.doctor.plansOk": "{n} 個計畫檔",
+  "wf.doctor.plansDeep": "巢狀超過 {max} 層：{where}",
+  "wf.doctor.plansDup": "id 重複使用：{where}"
 }

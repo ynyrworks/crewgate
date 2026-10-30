@@ -161,10 +161,27 @@ claude --plugin-dir crewgate/plugins/crewgate
 
 修改程式裡的設定結構後，請執行 `node scripts/gen-config-docs.js` 重新產生對照表；已提交的檔案若過期，測試會失敗。
 
+## 計畫
+
+計畫是放在專案裡的 Markdown 步驟樹（`.crew/plans/<名稱>.md`）。葉節點連到 crewgate 任務，看板就能顯示整件工作做到哪裡，
+檔案或任務一變動就自動更新。計畫可以一直長大：每個節點都記錄來源（`plan`、`user`、`review`、`refute`、`implementation`、
+`send-back`）與加入日期，計畫頁可以標出最近新增的節點。
+
+```
+crew plan new 0-14 --title "0.14 計畫"
+crew plan add 0-14 "計畫樹與完成度檢視"
+crew plan add 0-14 "檔案格式與 CLI" --under n1
+crew task create --title "..." --brief-file brief.md --plan 0-14:n2   # 或：crew plan link 0-14 n2 <任務 id>
+crew plan show 0-14
+```
+
+你也可以直接手改檔案（`- [ ] 步驟`、兩格縮排、`[x]` 完成、`[~]` 放棄）；CLI 會保留你的文字與順序，只補上 id。
+細節見 [references/commands.md](plugins/crewgate/skills/crew/references/commands.md#plans)。
+
 ## CLI 參考
 
 所有指令、選項與檔案位置：[plugins/crewgate/skills/crew/references/commands.md](plugins/crewgate/skills/crew/references/commands.md)。
-指令群組：`init`、`doctor`、`project`、`task`、`review`、`handoff`、`lesson`、`need`、`work`、`log`、`mr`、
+指令群組：`init`、`doctor`、`project`、`task`、`plan`、`review`、`handoff`、`lesson`、`need`、`work`、`log`、`mr`、
 `validate`、`board`、`update`、`import`。讀取類指令都支援 `--json`。
 
 ## 看板截圖

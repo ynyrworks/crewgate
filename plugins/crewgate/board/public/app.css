@@ -224,3 +224,40 @@ button.older { margin: 0 0 10px; min-height: 36px; }
   .cap thead th { position: static; box-shadow: none; }
   .card.cap .proj.head { position: static; }
 }
+
+/* plans */
+.prow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 4px 0 2px; }
+.prow.big { margin: 0 0 12px; }
+.pbar { width: 160px; max-width: 100%; height: 10px; accent-color: var(--good); }
+.prow.big .pbar { width: 280px; height: 14px; }
+.pct { font-variant-numeric: tabular-nums; font-weight: 600; }
+.cmd { margin: 6px 0 0; padding: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; overflow-x: auto; font: 12px/1.5 ui-monospace, Consolas, monospace; }
+.ptree { list-style: none; margin: 0; padding: 0; }
+.ptree .ptree { margin: 2px 0 0 12px; padding-left: 12px; border-left: 2px solid var(--border); }
+.pnode { padding: 4px 0; overflow-wrap: anywhere; }
+.pnode.is-new > .phead .ptext { font-weight: 650; }
+.pnode.is-new { box-shadow: -3px 0 0 var(--accent); padding-left: 6px; }
+.pnode.is-dropped .ptext { text-decoration: line-through; color: var(--muted); }
+.phead { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+.phead .toggle.spacer { display: inline-block; }
+.phead .toggle { width: 24px; text-align: center; }
+.ptext { flex: 1 1 12em; min-width: 0; }
+.pmeta { margin: 0 0 0 32px; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
+.ps .glyph { display: inline-block; min-width: 1em; margin-right: 3px; text-align: center; }
+.ps-doing { color: var(--accent); border-color: var(--accent); }
+.ps-review { color: var(--warn); border-color: var(--warn); font-weight: 600; }
+.ps-done { color: var(--good); border-color: var(--good); }
+.ps-blocked { color: var(--crit); border-color: var(--crit); font-weight: 600; }
+.ps-todo, .ps-dropped { color: var(--muted); }
+.ps-dropped { border-style: dotted; }
+.ps-proposed { color: var(--text-2); border-style: dashed; }
+.ps-new { color: var(--accent); border-color: var(--accent); }
+.po { color: var(--text-2); border-style: dashed; }
+.list.nested { margin: 2px 0 0 14px; }
+.list.nested li { border-bottom: 0; padding: 2px 0; }
+.plans li .prow { margin-top: 2px; }
+@media (max-width: 480px) {
+  .pmeta { margin-left: 0; }
+  .ptree .ptree { margin-left: 4px; padding-left: 8px; }
+  .pbar, .prow.big .pbar { width: 100%; }
+}

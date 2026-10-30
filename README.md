@@ -177,10 +177,28 @@ default language) in `~/.crewgate/config.json`. The full, generated key referenc
 After changing the schema in code, regenerate the reference with `node scripts/gen-config-docs.js`; a test
 fails if the committed file is out of date.
 
+## Plans
+
+A plan is a tree of steps kept as Markdown in your repo (`.crew/plans/<name>.md`). Leaves link to crewgate tasks, so
+the board can show how far the whole job is and updates by itself when the file or a task changes. The plan may keep
+growing: every node records where it came from (`plan`, `user`, `review`, `refute`, `implementation`, `send-back`)
+and when it was added, and the plan page can highlight what was added recently.
+
+```
+crew plan new 0-14 --title "0.14 plan"
+crew plan add 0-14 "Plan tree and completion view"
+crew plan add 0-14 "File format and CLI" --under n1
+crew task create --title "..." --brief-file brief.md --plan 0-14:n2   # or: crew plan link 0-14 n2 <task-id>
+crew plan show 0-14
+```
+
+Hand-edit the file whenever you like (`- [ ] step`, two-space indentation, `[x]` done, `[~]` dropped); the CLI keeps
+your text and order and only adds ids. Details: [references/commands.md](plugins/crewgate/skills/crew/references/commands.md#plans).
+
 ## CLI reference
 
 Every command, option and file location: [plugins/crewgate/skills/crew/references/commands.md](plugins/crewgate/skills/crew/references/commands.md).
-Groups: `init`, `doctor`, `project`, `task`, `review`, `handoff`, `lesson`, `need`, `work`, `log`, `mr`,
+Groups: `init`, `doctor`, `project`, `task`, `plan`, `review`, `handoff`, `lesson`, `need`, `work`, `log`, `mr`,
 `validate`, `board`, `update`, `import`. Read commands accept `--json`.
 
 ## Board screenshots

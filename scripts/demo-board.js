@@ -179,6 +179,29 @@ store.validateSet(PID, { templateId: 'cli-smoke', date: '2026-10-28', host: 'lab
 const hand = { id: 'h-20261029-demo', title: 'Continue the due-date work in a fresh session', task: tSort.id, created: ago(9), note: 'Review round 1 is done; send back F-1 and F-2.' };
 json.save(paths.handoffFile(PID, 'open', hand.id), hand);
 
+// a plan: leaves linked to the tasks above, grown over several days by different sources
+const planDay = (back) => { const d = new Date(NOW - back * 24 * 60 * MIN); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
+write(path.join(repo, '.crew', 'plans', 'todo-cli-0-2.md'), [
+  '# todo-cli 0.2',
+  'Due dates, ordering and a few quality-of-life features for the example CLI.',
+  '',
+  `- [ ] Due dates <!-- id:n1 added:${planDay(9)} origin:plan -->`,
+  `  - [ ] Add due dates to todos <!-- id:n2 task:${tDue.id} added:${planDay(9)} origin:plan -->`,
+  `  - [ ] Sort the list by due date <!-- id:n3 task:${tSort.id} added:${planDay(9)} origin:plan -->`,
+  `  - [ ] Parse relative dates such as "tomorrow" <!-- id:n4 added:${planDay(2)} origin:user -->`,
+  `  - [?] Reject due dates in the past <!-- id:n5 added:${planDay(1)} origin:refute -->`,
+  `- [ ] Quality of life <!-- id:n6 added:${planDay(9)} origin:plan -->`,
+  `  - [ ] Add a priority flag <!-- id:n7 task:${tPrio.id} added:${planDay(9)} origin:plan -->`,
+  `  - [ ] Export todos as CSV <!-- id:n8 task:${tCsv.id} added:${planDay(9)} origin:plan -->`,
+  `  - [ ] Archive completed todos <!-- id:n9 task:${tArch.id} added:${planDay(5)} origin:user -->`,
+  `  - [ ] Colour the list output <!-- id:n10 task:${tColor.id} added:${planDay(5)} origin:user -->`,
+  `- [ ] Robustness <!-- id:n11 added:${planDay(3)} origin:review -->`,
+  `  - [ ] Fix crash on an empty todos file <!-- id:n12 task:${tCrash.id} added:${planDay(3)} origin:review -->`,
+  `  - [ ] Keep the old todos file format loading <!-- id:n13 added:${planDay(1)} origin:send-back -->`,
+  `- [~] Sync todos to a server <!-- id:n14 added:${planDay(9)} origin:plan -->`,
+  '',
+].join('\n'));
+
 // two more small projects so the overview has more than one row
 function miniProject(name, items, needs) {
   const dir = path.join(work, name);

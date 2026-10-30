@@ -11,6 +11,7 @@ const hookseen = require('../core/hookseen');
 const store = require('../core/store');
 const hooklog = require('../core/hooklog');
 const gates = require('../core/gates');
+const plans = require('../core/plans');
 
 // GET http://127.0.0.1:<port>/api/health -> { state: 'running'|'down'|'other', detail }
 function probeBoard(port, timeoutMs = 1500) {
@@ -70,6 +71,15 @@ async function run(argv, ctx) {
     const expected = ['.claude/agents/crew-worker.md', '.claude/agents/crew-reviewer.md', '.claude/agents/crew-refuter.md', '.crew/REVIEW.md', '.crew/LESSONS.md'];
     const missing = expected.filter((f) => !fs.existsSync(path.join(dir, ...f.split('/'))));
     add('files', missing.length ? 'warn' : 'ok', missing.length ? ctx.t('wf.doctor.filesMissing', { files: missing.join(', ') }) : ctx.t('wf.doctor.filesOk'));
+    const nPlans = plans.slugs(dir).length;
+    if (nPlans) {
+      const deep = plans.deepNodes(dir);
+      const dups = plans.duplicateNodes(dir);
+      const bits = [];
+      if (deep.length) bits.push(ctx.t('wf.doctor.plansDeep', { max: plans.MAX_DEPTH, where: deep.slice(0, 5).map((x) => `${x.slug}:${x.line}`).join(', ') }));
+      if (dups.length) bits.push(ctx.t('wf.doctor.plansDup', { where: dups.slice(0, 5).map((x) => `${x.slug} (${x.ids.join(', ')})`).join('; ') }));
+      add('plans', bits.length ? 'warn' : 'ok', bits.length ? bits.join('; ') : ctx.t('wf.doctor.plansOk', { n: nPlans }));
+    }
   }
 
   let seen = null;

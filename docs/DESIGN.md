@@ -485,6 +485,7 @@ to override detection. Exit codes: 0 ok, 1 runtime error, 2 usage error.
 - `crew review run|filter|finalize|dismiss|show`
 - `crew handoff create|list|show|accept|cancel`
 - `crew lesson add|list|suggest|promote|retire`
+- `crew plan new|list|show|add|link|set|rm` — §17.
 - `crew gate ask <gate> [--task ID] [--detail T]` / `crew gate answer <gate-id> yes|no [--note T]` — §5, §6, §8.
 - `crew need add|done|list`, `crew work set|rm|list` (`work set STREAM "title" state` updates the item with the same
   normalised title in that stream — trimmed, spaces collapsed, case-insensitive; `--id ID` targets an item by the id
@@ -615,3 +616,39 @@ after a command changes) and approves the `crew` commands because they write `~/
 
 **Board.** Events carry the engine; Codex sessions are listed from their rollout files and linked to roles and tasks through
 `subagent.start` events like Claude sessions.
+
+## 17. Plans
+
+A plan is a tree of steps above tasks and work items, kept as Markdown in the repo so it is reviewed and versioned
+like code: `<work tree>/.crew/plans/<slug>.md` (slug `[a-z0-9-]{1,40}`). The CLI resolves the work tree the same way as
+for `LESSONS.md`; the board reads the project root, so a plan edited in a linked worktree shows after it is merged.
+
+```
+# 0.14 plan
+Optional free text (goal).
+
+- [ ] Plan tree and completion view <!-- id:n1 added:2026-10-30 origin:plan -->
+  - [x] File format and CLI <!-- id:n2 task:t-20261030-abcd added:2026-10-30 origin:plan -->
+- [?] Proposed by refuter <!-- id:n5 origin:refute added:2026-10-31 -->
+```
+
+- Boxes: `[ ]` open, `[x]` done by hand, `[~]` dropped (excluded from progress), `[?]` proposed (shown, excluded until
+  accepted). The comment holds `id`, `task` (one task id), `added` (YYYY-MM-DD) and `origin` (`plan | user | review |
+  refute | implementation | send-back`, default `plan`); unknown keys are kept. Depth is at most 3 (the CLI refuses a
+  deeper add; a hand-edited deeper line is shown and `crew doctor` warns). The board reads at most 256 KiB and 500 nodes.
+- Parsing is tolerant and never throws: non-list lines are kept as they are, lines without a comment are valid, tabs and
+  2-4 space indents are accepted, a heading restarts the nesting. A rewrite re-renders only the lines it changed (new
+  ids, state, link) and leaves every other byte alone; writes are atomic and held under a lock.
+- Derived state (`lib/core/plans.js`): a leaf is `dropped`/`proposed` from its box; else `done` if `[x]` or the task is
+  `merged`/`accepted`; `review` if the task is `returned`/`reviewing`; `doing` if `dispatched`; `blocked` (needs attention)
+  if `cancelled`; otherwise `todo`. An unknown task id is shown as such and the state comes from the box. A parent counts
+  the leaves below it that are not dropped or proposed: progress = done / counted, done when all are done or its own box is
+  `[x]`; a parent whose children are all dropped or proposed counts as an open leaf (one step, to do until its own box or task says otherwise).
+- Ids: a new node gets `n<k>` above the largest safe numeric part of the existing ids and never one already in use (a huge hand-written id
+  cannot collide). When two nodes share an id the first wins for commands, `plan show` and `crew doctor` warn, and the next write renames the later ones.
+- Growth: each node carries `origin` and `added`; the plan page groups additions by day and origin. A later plan review
+  (reviewer/refuter propose `[?]` nodes the orchestrator accepts) and follow-ups from code review use the same fields,
+  `crew plan add --origin ... --proposed` and `crew plan set ... accept`; neither flow exists yet.
+- Events: `plan.created`, `plan.node_added` (origin, proposed, task), `plan.node_changed` (`linked`, `open`, `done`,
+  `dropped`, `accept`, `removed`); ids only, never node text.
+- Board: `GET /api/project/<id>/plans` and `GET /api/project/<id>/plan/<slug>`, the Plans card and the plan page (§14).
