@@ -16,6 +16,7 @@ const config = require('../core/config');
 const DEFAULT_PORT = 8781;
 const SEARCH_SPAN = 20;
 const START_WAIT_MS = 15000;
+const LOCK_WAIT_MS = 8000;  // how long a manual start waits for an autostart in progress
 const LOCK_MS = 30000;   // an autostart lock older than this is stale (the board it was for never came up)
 const BIN = path.join(__dirname, '..', '..', 'bin', 'crew.js');
 
@@ -215,26 +216,59 @@ function takeLock() {
   return false;
 }
 
-// SessionStart autostart (global config board.autostart, default off). Synchronous and quick: checks the global switch,
-// the state file and its pid, then spawns the server detached and does not wait for it. It never throws.
+// Spawns `board serve` for an autostart, holding the start-up lock. -> 'started' | 'busy' | 'error'
+function launch(g, opts) {
+  if (!takeLock()) return 'busy';
+  const port = Number.isInteger(g.port) ? g.port : (g.board && Number.isInteger(g.board.port) ? g.board.port : DEFAULT_PORT);
+  try {
+    (opts.spawn || spawnServe)(BIN, port, { search: false });
+  } catch (e) {
+    try { fs.unlinkSync(lockFile()); } catch { /* ignore */ }
+    logLine(`autostart could not spawn the board: ${e && e.message}`);
+    return 'error';
+  }
+  return 'started';
+}
+
+// Detached `crew board ensure`: does the slow part (does the recorded board answer?) outside the hook.
+function spawnEnsure() {
+  const c = spawn(process.execPath, [BIN, 'board', 'ensure'], { detached: true, stdio: 'ignore', windowsHide: true, env: process.env });
+  c.on('error', () => { /* best effort */ });
+  c.unref();
+}
+
+// SessionStart autostart (global config board.autostart, default off). Synchronous and quick: checks the global switch
+// and the state file, then spawns detached and does not wait. It never throws.
+//   no state file or a dead pid -> spawn the server (under the start lock)
+//   a live pid                  -> the pid may belong to an unrelated process (reused), so a detached `board ensure`
+//                                  checks that the board answers and starts one if not ('checking')
 // The exact port is required (no search), so a board already listening there without a state file makes the new one exit.
-// -> 'off' | 'running' | 'busy' | 'started' | 'error'
+// -> 'off' | 'checking' | 'busy' | 'started' | 'error'
 function ensureStarted(opts = {}) {
   try {
     const g = (opts.global || config.loadGlobal().config);
     if (!(g.board && g.board.autostart === true)) return 'off';
     const st = readState();
-    if (st && alive(st.pid)) return 'running';
-    if (!takeLock()) return 'busy';
-    const port = Number.isInteger(g.port) ? g.port : (g.board && Number.isInteger(g.board.port) ? g.board.port : DEFAULT_PORT);
-    try {
-      (opts.spawn || spawnServe)(BIN, port, { search: false });
-    } catch (e) {
-      try { fs.unlinkSync(lockFile()); } catch { /* ignore */ }
-      logLine(`autostart could not spawn the board: ${e && e.message}`);
-      return 'error';
+    if (st && alive(st.pid)) {
+      (opts.spawnEnsure || spawnEnsure)();
+      return 'checking';
     }
-    return 'started';
+    return launch(g, opts);
+  } catch { return 'error'; }
+}
+
+// What `board ensure` runs: like ensureStarted, but a live pid only counts when the board answers (300 ms).
+// -> 'off' | 'running' | 'busy' | 'started' | 'error'
+async function ensureChecked(opts = {}) {
+  try {
+    const g = (opts.global || config.loadGlobal().config);
+    if (!(g.board && g.board.autostart === true)) return 'off';
+    const st = readState();
+    if (st && alive(st.pid)) {
+      if (await health(st.port, 300)) return 'running';
+      logLine(`state file names pid ${st.pid} (started ${st.started || 'unknown'}) but no board answers on port ${st.port}; starting one`);
+    }
+    return launch(g, opts);
   } catch { return 'error'; }
 }
 
@@ -245,9 +279,30 @@ async function start(ctx, a) {
     if (!a.noOpen) openBrowser(urlOf(cur.port));
     return 0;
   }
+  // An autostart may be bringing a board up right now (the state file is written once it listens): wait for it
+  // and report that board instead of starting a second one.
+  if (!takeLock()) {
+    const end = Date.now() + LOCK_WAIT_MS;
+    while (Date.now() < end && fs.existsSync(lockFile())) {
+      const got = await running();
+      if (got) {
+        ctx.emit({ running: true, started: false, pid: got.pid, port: got.port, url: urlOf(got.port) }, ctx.t('board.alreadyRunning', { url: urlOf(got.port) }));
+        if (!a.noOpen) openBrowser(urlOf(got.port));
+        return 0;
+      }
+      await sleep(100);
+    }
+    const got = await running();
+    if (got) {
+      ctx.emit({ running: true, started: false, pid: got.pid, port: got.port, url: urlOf(got.port) }, ctx.t('board.alreadyRunning', { url: urlOf(got.port) }));
+      if (!a.noOpen) openBrowser(urlOf(got.port));
+      return 0;
+    }
+    // the other start never produced a board: go on (a stale lock is replaced by the next takeLock)
+  }
   const explicit = a.port !== undefined;
   const port = explicit ? a.port : defaultPort();
-  if (explicit && !(await portFree(port))) throw new CrewError('board.portBusy', { port });
+  if (explicit && !(await portFree(port))) { try { fs.unlinkSync(lockFile()); } catch { /* ignore */ } throw new CrewError('board.portBusy', { port }); }
   const child = spawnServe(BIN, port, { search: !explicit });
   let exited = false;
   child.on('exit', () => { exited = true; });
@@ -261,6 +316,7 @@ async function start(ctx, a) {
     }
     await sleep(100);
   }
+  try { fs.unlinkSync(lockFile()); } catch { /* ignore */ }
   throw new CrewError('board.startFailed', { log: logFile() });
 }
 
@@ -300,6 +356,7 @@ const SPECS = {
   stop: { positionals: [], options: {} },
   status: { positionals: [], options: {} },
   serve: { positionals: [], options: { '--port': { dest: 'port', int: true }, '--search': { dest: 'search', flag: true } } },
+  ensure: { positionals: [], options: {} },   // internal: the detached check behind board.autostart
 };
 
 async function run(argv, ctx) {
@@ -310,6 +367,7 @@ async function run(argv, ctx) {
   if (sub === 'start') return start(ctx, a);
   if (sub === 'stop') return stop(ctx);
   if (sub === 'status') return status(ctx);
+  if (sub === 'ensure') { await ensureChecked(); return 0; }
   return serve(ctx, a.port === undefined ? defaultPort() : a.port, a.port === undefined || a.search === true);
 }
 
@@ -324,6 +382,7 @@ module.exports = {
   openPlan,
   spawnServe,
   ensureStarted,
+  ensureChecked,
   installStopLog,
   staleState,
   logFile,
