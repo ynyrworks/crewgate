@@ -320,12 +320,15 @@ test('PreToolUse Bash fast path: a non-git command is answered before any lib mo
   const dir = require('./helpers').tmpDir('crew-preload-');
   const out = path.join(dir, 'seen.json');
   const preload = path.join(dir, 'preload.js');
-  fs.writeFileSync(preload, `const Module = require('module'); const seen = new Set(); const orig = Module._load;
-Module._load = function (req, parent) { const r = orig.apply(this, arguments); try { seen.add(Module._resolveFilename(req, parent)); } catch (e) {} return r; };
-process.on('exit', () => require('fs').writeFileSync(process.env.SEEN_FILE + require('worker_threads').threadId, JSON.stringify([...seen])));`);
+  // Each loaded module is appended synchronously, at load time, to a per-thread file. Nothing depends on an exit
+  // handler: the hook's main thread calls process.exit as soon as the worker answers, which can kill the worker
+  // before its own 'exit' event fires. The worker answers only after it has loaded everything, so the list is complete.
+  fs.writeFileSync(preload, `const Module = require('module'); const fs = require('fs'); const seen = new Set(); const orig = Module._load;
+const file = process.env.SEEN_FILE + require('worker_threads').threadId;
+Module._load = function (req, parent) { const r = orig.apply(this, arguments); try { const n = Module._resolveFilename(req, parent); if (!seen.has(n)) { seen.add(n); fs.appendFileSync(file, n + '\\n'); } } catch (e) {} return r; };`);
   const f = H.fixture();
   const env = { NODE_OPTIONS: `--require=${fwd(preload)}`, SEEN_FILE: out };
-  const libs = () => fs.readdirSync(dir).filter((n) => n.startsWith('seen.json')).flatMap((n) => JSON.parse(fs.readFileSync(path.join(dir, n), 'utf8'))).map(fwd).filter((x) => /\/plugins\/crewgate\/lib\//.test(x));
+  const libs = () => fs.readdirSync(dir).filter((n) => n.startsWith('seen.json')).flatMap((n) => fs.readFileSync(path.join(dir, n), 'utf8').split('\n').filter(Boolean)).map(fwd).filter((x) => /\/plugins\/crewgate\/lib\//.test(x));
   const r = H.runHook('pre-tool-use', bash(f, 'ls -la', 'fp1'), { cwd: f.repo, env });
   assert.equal(r.out, '{}');
   assert.deepEqual(libs().map((x) => path.basename(x)).sort(), ['prefilter.js', 'timeouts.js']);
