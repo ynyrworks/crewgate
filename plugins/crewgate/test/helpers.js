@@ -22,6 +22,9 @@ function setupHome() {
   const home = tmpDir('crew-home-');
   process.env.CREWGATE_HOME = home;
   process.env.CREWGATE_LOCK_WAIT_MS = '3000';
+  // tests may run inside a Claude Code session: its id must not leak into CLI events written by the tests
+  delete process.env.CLAUDE_CODE_SESSION_ID;
+  delete process.env.CLAUDE_SESSION_ID;
   // temp folders may sit inside a repository (e.g. a git-tracked home dir): stop git's upward search there
   process.env.GIT_CEILING_DIRECTORIES = fs.realpathSync.native(os.tmpdir());
   return home;
