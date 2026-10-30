@@ -461,6 +461,37 @@ function reject(root, projectId, slug, ref, note) {
   return { id: info.id, action: info.action, note: why };
 }
 
+// ---------------------------------------------------------------- follow-ups from code review
+// The plan and step a task is linked to, or null. The link lives in the plan file.
+function planOfTask(root, taskId) {
+  for (const slug of plans.slugs(root)) {
+    const doc = plans.readCapped(root, slug);
+    const n = doc && doc.nodes.find((x) => x.meta.task === taskId);
+    if (n) return { slug, node: n.meta.id };
+  }
+  return null;
+}
+
+// Work a code review found but the task will not fix. It is always a proposal: it counts only once accepted, and an
+// accepted one counts towards plan.large_growth like any other. It goes next to the task's step, not under it: a
+// child would replace the step in the percentage and hide the task's finished work. Asking twice for one finding of a
+// round returns the node it already made, so a rejected follow-up does not come back.
+function addFollowup(root, projectId, { slug, node, task, finding, round, text, doneWhen }) {
+  const fid = enc(finding);
+  const out = plans.update(root, slug, (doc) => {
+    const have = doc.nodes.find((n) => n.meta.from_task === task && n.meta.finding === fid && n.meta.review_round === String(round));
+    if (have) return { node: have, existing: true, goal: doc.goal };
+    const target = node ? plans.find(doc, node) : null;
+    const meta = { action: 'add', from_task: task, finding: fid, review_round: round, done_when: enc(clean(doneWhen, DONE_MAX)) };
+    if (target) meta.for = target.meta.id;
+    const under = target && target.parent ? target.parent.meta.id : undefined;
+    return { node: plans.addNode(doc, { text, under, origin: 'review', proposed: true, date: plans.today(), meta }), existing: false, goal: doc.goal };
+  });
+  const id = plans.refOf(out.node);
+  if (!out.existing) plans.record(projectId, 'plan.node_added', { slug, node: id, origin: 'review', proposed: true, task });
+  return { slug, id, existing: out.existing, state: plans.BOX_STATE[out.node.box], goal: out.goal || '', for: out.node.meta.for || null };
+}
+
 // ---------------------------------------------------------------- reading (board API and `show`)
 function roundsOf(projectId, slug) {
   return readState(dirOf(projectId, slug)).rounds.map((r) => ({
@@ -490,7 +521,7 @@ function proposalsOf(projectId, slug, doc) {
       action: ACTIONS.includes(n.meta.action) ? n.meta.action : null, done_when: n.meta.done_when ? dec(n.meta.done_when) : null,
       uncertain: n.meta.uncertain === '1', target: target ? { id: target.meta.id, text: target.text } : (n.meta.for ? { id: n.meta.for, text: '' } : null),
       verdict: f ? f.verdict : null, claim: f ? f.claim : null, evidence: f && Array.isArray(f.evidence) ? f.evidence : [],
-      refutation: f && f.refutation !== undefined ? f.refutation : null, better: f ? f.better : null,
+      refutation: f && f.refutation !== undefined ? f.refutation : null, better: f ? f.better : null, from_task: n.meta.from_task || null,
       accept_cmd: `crew plan accept ${slug} ${id}`, reject_cmd: `crew plan reject ${slug} ${id} --note "why"`,
     });
   }
@@ -499,6 +530,6 @@ function proposalsOf(projectId, slug, doc) {
 const ORIGIN = (n) => (plans.ORIGINS.includes(n.meta.origin) ? n.meta.origin : 'plan');
 
 module.exports = {
-  KINDS, ACTIONS, dirOf, readState, limits, start, submit, filter, finalize, accept, reject, roundsOf, proposalsOf,
+  KINDS, ACTIONS, dirOf, readState, limits, start, submit, filter, finalize, accept, reject, roundsOf, proposalsOf, planOfTask, addFollowup,
   sanitizeFindings, reviewerPrompt, refuterPrompt, roundFile, latestRound, keyOf, enc, dec,
 };

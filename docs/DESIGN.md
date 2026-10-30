@@ -666,8 +666,14 @@ Optional free text (goal).
 - Ids: a new node gets `n<k>` above the largest safe numeric part of the existing ids and never one already in use (a huge hand-written id
   cannot collide). When two nodes share an id the first wins for commands, `plan show` and `crew doctor` warn, and the next write renames the later ones.
 - Growth: each node carries `origin` and `added`; the plan page groups additions by day and origin. Plan review (§17.1:
-  reviewer/refuter propose `[?]` nodes the orchestrator accepts) and, later, follow-ups from code review use the same fields,
-  `crew plan add --origin ... --proposed`; follow-ups from code review do not exist yet.
+  reviewer/refuter propose `[?]` nodes the orchestrator accepts) and follow-ups from code review use the same fields, as does
+  `crew plan add --origin ... --proposed`.
+- Follow-ups: `crew review followup` turns a finding of a finalized code review round into a `[?]` node (`origin:review action:add
+  from_task finding review_round done_when for`). It never adds one by itself, and it is never accepted by itself: a plan exists to keep the
+  work on its goal, so growth stays a visible decision and an accepted one counts towards `plan.large_growth`. The node goes next to the task's step, under the
+  same parent: a child would replace the step in the percentage and hide the task's finished work. It has no `round` because that
+  field names a plan review round. The node stays in the file when rejected (`[~]`), and that is what stops the same finding from coming
+  back. The CLI cannot judge whether work serves the goal, so it prints the goal and `--plan SLUG` is the way out.
 - Events: `plan.created`, `plan.node_added` (origin, proposed, task), `plan.node_changed` (`linked`, `open`, `done`,
   `dropped`, `accept`, `removed`); ids only, never node text.
 - Board: `GET /api/project/<id>/plans` and `GET /api/project/<id>/plan/<slug>`, the Plans card and the plan page (§14).

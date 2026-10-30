@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- Plan tree step 3: `crew review followup <task> <finding-id> --done-when "..." [--text "..."] [--plan SLUG] [--round N]` proposes work a code review found but the task will not fix. Only a finding of a finalized round qualifies. It becomes a `[?]` step next to the task's plan step, or at the top of `--plan SLUG` for work that does not serve the goal: it does not count until accepted, an accepted one counts towards `plan.large_growth`, and asking again for the same finding changes nothing, so a rejected one does not come back. The command prints the plan's goal, and the plan page shows which task it came from. Nothing is added by itself: the skill tells the orchestrator when to use it.
+
+### Fixed
+
+- The detached autostart check gives a running board 2 s to answer instead of 300 ms, so a busy machine does not take it for a dead one and start another (which exits because the port is taken). This is also the likely cause of an occasional `board-autostart` test failure; the failure could not be reproduced on demand, so that part is unconfirmed.
+
 ## 0.15.0 — 2026-10-30
 
 ### Behaviour changes

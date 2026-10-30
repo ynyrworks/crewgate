@@ -18,6 +18,7 @@ One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.m
 
 What is on `main` and will ship in the next version (details under "Unreleased" in the [CHANGELOG](../CHANGELOG.md)).
 
+- **Plan tree step 3.** `crew review followup` proposes work a code review found as a `[?]` step that counts only once accepted, next to the task's step or in another plan.
 - **Gates follow the repo and can be enforced.** Git events and gate checks use the repository a command targets (`cd`, `git -C`); `gates.enforce` (`remind`, `confirm`, `block`) with a PreToolUse(Bash) hook; `gates.require_user_turn`; the session id read from `CLAUDE_CODE_SESSION_ID`. `confirm` is unverified in bypass-permissions mode, and Codex stays on `remind`.
 - **History.** `#/history` looks back up to 90 days with the Sessions statistics, by day, with a range and project filter.
 - **Timeline polish.** A search box, tool durations across page edges, and crewgate events older than the board's recent event tail.
@@ -30,7 +31,6 @@ What is on `main` and will ship in the next version (details under "Unreleased" 
 - **Per-account labelling of sessions.** Show which Claude account or plan a session used, with an optional "expected account" warning per project. Idea stage: it is not verified that the account can be detected from what Claude Code exposes locally.
 - **Office view: test-result reactions** (a celebration or a slump when checks pass or fail; the result is not in the data the office receives today) and **bigger character sprites**.
 - **Enhanced WebGL Office (planned for the next release).** In the same optional `crewgate-office` plugin, sharing its data model, with the pixel-art view as the fallback for browsers without WebGL. The main plugin gains no dependency.
-- **Plan tree step 3 (planned for the next release).** Follow-up work from code review attaches to the plan, always as a proposed `[?]` node that counts only once accepted; work unrelated to the goal is suggested for another plan.
 - **Promoted-rule scoring.** Measure whether a promoted lesson actually reduces repeat corrections.
 - **Codex.** Verification on more platforms and Codex versions, honouring hook `ask` / `deny` if Codex supports it, and Codex subagent workers once their sandbox can commit.
 

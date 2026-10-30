@@ -95,7 +95,9 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
    `crew review filter <id>` → dispatch the refuter with the printed prompt →
    `crew review finalize <id>` → `crew review show <id>`. You only ever read the survivors.
    Dismiss findings you judge wrong or irrelevant with `crew review dismiss` and a reason, so they do
-   not come back.
+   not come back. A real finding that this task will not fix is a **follow-up**: propose it with
+   `crew review followup <id> <finding-id> --done-when "..."`, which adds a `[?]` step next to the task's plan
+   step. It counts only once accepted. If it does not serve the plan's goal, use `--plan <other>` or just tell the user.
 9. **Decide.**
    - Real problems: `crew task send-back <id> --note "<what to fix, file:line>"`, then dispatch the
      worker again with the note in the prompt. Record why with `crew lesson add` (kind `send-back`)

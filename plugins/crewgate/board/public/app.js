@@ -589,6 +589,7 @@
     li.appendChild(propRow(t('plan.prop.about'), p.target ? PM.targetText(p, S.mask) : t('plan.prop.whole')));
     li.appendChild(propRow(t('plan.prop.proposal'), PM.proposalText(p, S.mask)));
     if (p.done_when && !S.mask) li.appendChild(propRow(t('plan.prop.doneWhen'), p.done_when));
+    if (p.from_task) li.appendChild(propRow(t('plan.prop.fromTask'), p.from_task));
     if (!S.mask && p.claim) {
       li.appendChild(propRow(t('plan.prop.claim'), p.claim));
       if (p.evidence && p.evidence.length) li.appendChild(propRow(t('plan.prop.evidence'), p.evidence.join(' · ')));

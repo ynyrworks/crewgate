@@ -59,6 +59,7 @@ usable verdict stays as `uncertain` with a warning. Finalize also moves a `retur
   the claim in your note.
 - `uncertain`: check the cited `file:line` yourself, in a line range, before deciding.
 - `minor`/`nit`: batch them into one send-back note, or accept and mention them to the user.
+- Real, but not for this task: `crew review followup <task> <finding-id> --done-when "..." [--text "..."] [--plan SLUG]`. It adds a `[?]` step that counts only once accepted, next to the task's plan step or at the top of `--plan SLUG`. Do not send back work outside the brief to fit it in. Use another plan, or tell the user, when it does not serve the goal the command prints.
 - Wrong or irrelevant: `crew review dismiss <task> <finding-id> --scope once|always --reason "..."`.
   - `once`: this occurrence only; it stops matching when the snippet no longer exists in the file (the ledger stores only a hash of the snippet, never its text, because `.crew/dismissed.jsonl` is committed).
   - `always`: this pattern is accepted in this project; it also adds a lesson candidate suggesting a

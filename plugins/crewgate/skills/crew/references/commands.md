@@ -42,6 +42,7 @@ A plan is a tree of steps in `.crew/plans/<slug>.md` (slug `[a-z0-9-]{1,40}`, at
 - `crew review finalize <task> [--refutations-file F] [--round N]`
 - `crew review show <task> [--round N]`
 - `crew review dismiss <task> <finding-id> --scope once|always --reason "..."`
+- `crew review followup <task> <finding-id> --done-when "..." [--text "..."] [--plan SLUG] [--round N]`: proposes a finding of a finalized round as a `[?]` step next to the task's plan step (or at the top of `--plan SLUG`)
 
 ## Handoff and lessons
 - `crew handoff create --title T --body-file F [--task <id>]`, `list [--all]`, `show <id>`, `accept <id>`, `cancel <id>`

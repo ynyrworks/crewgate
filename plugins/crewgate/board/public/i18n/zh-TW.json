@@ -319,6 +319,7 @@
   "plan.prop.whole": "整份計畫",
   "plan.prop.proposal": "提議",
   "plan.prop.doneWhen": "完成條件",
+  "plan.prop.fromTask": "來自這個任務的審查",
   "plan.prop.claim": "主張",
   "plan.prop.evidence": "證據",
   "plan.prop.refuter": "反駁者",
