@@ -25,8 +25,8 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
 - **init**: run `crew init` (add `--lang zh-TW` if the user writes Chinese). Then `crew doctor` and
   show the user anything that is not OK. Never pass `--force` unless the user asks; it backs up and
   refreshes the generated files.
-- **status**: `crew task list`, `crew handoff list`, `crew lesson suggest`, `crew need list`.
-  Summarise in a few lines: tasks by state with return counts, open handoffs, lessons ready, things
+- **status**: `crew task list`, `crew handoff list`, `crew lesson suggest`, `crew need list`, `crew plan list`.
+  Summarise in a few lines: tasks by state with return counts, plan progress, open handoffs, lessons ready, things
   waiting for the user. Read `references/commands.md` if a command is unfamiliar.
 - **wrap-up**: see "Wrap-up" below.
 - **handoff**: see "Handoff" below.
@@ -48,13 +48,18 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
    need: `max_parallel_workers`, `max_returns_before_takeover`, `report_max_tokens`, `gates`.
 2. **Split the work** into pieces that can be reviewed alone. Prefer pieces that touch different
    files so workers do not collide. Say the split to the user in a few lines. If the job is large,
-   the `large_task` gate applies (see Gates).
+   the `large_task` gate applies (see Gates). For a job with more than a few pieces keep a **plan**:
+   `crew plan new <slug> --title "..."`, then `crew plan add <slug> "step" [--under <node>]` for each step
+   (the plan is a Markdown tree in `.crew/plans/<slug>.md`, the board shows its completion). A step you
+   discover later is added with its source: `--origin user|review|refute|implementation|send-back`
+   (`--proposed` for one you are unsure about; `crew plan set <slug> <node> accept` once it is agreed).
 3. **Brief each piece.** Write a brief file with exactly five sections: Goal, Scope (allowed and
    forbidden files), Must not regress (and who fixes out-of-scope fallout), Acceptance (commands and
    observable behaviour), Context (paths and line ranges, never pasted dumps). Template and a worked
    example: `references/brief-template.md`.
 4. **Create the task.** `crew task create --title "..." --brief-file brief.md --branch feat/x
-   --worktree <path> --allow "src/**" --deny "docs/**"`. It refuses an incomplete brief, prints the
+   --worktree <path> --allow "src/**" --deny "docs/**" [--plan <slug>:<node>]` (`--plan` links the new task to a
+   plan step; a task already created is linked with `crew plan link <slug> <node> <task-id>`). It refuses an incomplete brief, prints the
    task id, the exact `crew-task: <id>` marker line and a ready Agent prompt.
 5. **Create the worktree and branch** (the CLI does not run git for you):
    `git worktree add <path> -b feat/x` from the main checkout. Use a sibling folder, never a path

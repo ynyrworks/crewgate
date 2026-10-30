@@ -13,6 +13,7 @@ const common = require('../features/common');
 const review = require('../features/review');
 const lessons = require('../features/lessons');
 const codexrun = require('../features/codexrun');
+const plans = require('../core/plans');
 
 const STATES = tasks.STATES;
 const NOTE = { '--note': { dest: 'note' } };
@@ -23,6 +24,7 @@ const SPECS = {
       '--title': { dest: 'title' }, '--brief-file': { dest: 'briefFile' }, '--role': { dest: 'role' },
       '--branch': { dest: 'branch' }, '--worktree': { dest: 'worktree' },
       '--allow': { dest: 'allow', multi: true }, '--deny': { dest: 'deny', multi: true },
+      '--plan': { dest: 'plan' },
     },
   },
   list: { positionals: [], options: { '--state': { dest: 'state', choices: STATES } } },
@@ -171,10 +173,21 @@ function run(argv, ctx) {
     need(a.briefFile, '--brief-file');
     const brief = common.readText(a.briefFile, 'brief');
     const role = a.role || 'worker';
+    // check the plan target before the task exists, so a typo leaves no orphan task
+    let planRef = null;
+    if (a.plan) {
+      const m = /^([a-z0-9-]{1,40}):(\S+)$/.exec(a.plan);
+      if (!m) throw new UsageError('plan.badTarget');
+      const doc = plans.readCapped(ctx.workTree(), m[1]);
+      if (!doc) throw new CrewError('plan.notFound', { slug: m[1] });
+      plans.find(doc, m[2]);
+      planRef = { slug: m[1], node: m[2] };
+    }
     const task = tasks.createTask(proj.id, {
       title: a.title, brief, role, branch: common.checkBranch(a.branch || ''), worktree: a.worktree || '',
       scope: { allow: common.splitList(a.allow), deny: common.splitList(a.deny) },
     }, { src: 'cli' });
+    if (planRef) planRef.node = plans.linkTo(ctx.workTree(), proj.id, planRef.slug, planRef.node, task.id).id;
     const briefPath = path.join(paths.taskDir(proj.id, task.id), 'brief.md');
     const prompt = dispatchPrompt(task, cfg, briefPath);
     const roleCfg = cfg.roles[role] || {};
@@ -183,6 +196,7 @@ function run(argv, ctx) {
       task, marker: `crew-task: ${task.id}`, brief_path: briefPath, cli: common.cliCommand(), prompt,
       subagent_type: roleCfg.agent || 'crew-worker', model: roleCfg.model || 'sonnet',
       in_flight: busy, max_parallel_workers: cfg.limits.max_parallel_workers,
+      ...(planRef ? { plan: planRef } : {}),
     };
     const L = [
       ctx.t('wf.task.created', { id: task.id }),
@@ -190,6 +204,7 @@ function run(argv, ctx) {
       ctx.t('wf.task.agentHint', { agent: data.subagent_type, model: data.model }),
       '--- prompt ---', prompt, '--- end ---',
     ];
+    if (planRef) L.splice(1, 0, ctx.t('plan.taskLinked', planRef));
     if (busy >= cfg.limits.max_parallel_workers) L.push(ctx.t('wf.task.parallelWarn', { n: busy, max: cfg.limits.max_parallel_workers }));
     ctx.emit(data, L);
   } else if (sub === 'run') {
@@ -268,7 +283,7 @@ module.exports = {
   summary: { en: 'Create, track, review-gate and merge delegated tasks', 'zh-TW': '建立、追蹤、驗收與合併分派出去的任務' },
   usage: {
     en: [
-      '  crew task create --title T --brief-file F [--role worker] [--branch B] [--worktree W] [--allow G] [--deny G]',
+      '  crew task create --title T --brief-file F [--role worker] [--branch B] [--worktree W] [--allow G] [--deny G] [--plan SLUG:NODE]',
       '  crew task list [--state S]',
       '  crew task show <id>',
       '  crew task report <id> --report-file F [--packet-file F]   (used by the worker)',
@@ -279,7 +294,7 @@ module.exports = {
       '  crew task run <id> [--engine codex] [--timeout 1800] [--model M]   (run a Codex CLI worker in the task worktree)',
     ].join('\n'),
     'zh-TW': [
-      '  crew task create --title T --brief-file F [--role worker] [--branch B] [--worktree W] [--allow G] [--deny G]',
+      '  crew task create --title T --brief-file F [--role worker] [--branch B] [--worktree W] [--allow G] [--deny G] [--plan SLUG:NODE]',
       '  crew task list [--state S]',
       '  crew task show <id>',
       '  crew task report <id> --report-file F [--packet-file F]   （worker 使用）',

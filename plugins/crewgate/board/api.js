@@ -10,6 +10,7 @@ const config = require('../lib/core/config');
 const tasks = require('../lib/core/tasks');
 const store = require('../lib/core/store');
 const gates = require('../lib/core/gates');
+const plans = require('../lib/core/plans');
 const hookseen = require('../lib/core/hookseen');
 const { CrewError } = require('../lib/core/errors');
 const { t } = require('../lib/core/i18n');
@@ -135,6 +136,26 @@ function lessonsOf(root, promoteAfterDays) {
   out.candidates = out.keys.filter((k) => k.candidate).length;
   out.recent = entries.slice(-10).reverse();
   return out;
+}
+
+// Plans from <repo>/.crew/plans/*.md, read on every request (small, capped; see plans.js).
+function plansOf(root, projectId) {
+  const states = plans.taskStates(projectId);
+  const out = [];
+  for (const slug of plans.slugs(root)) {
+    const doc = plans.readCapped(root, slug);
+    if (!doc) continue;
+    const d = plans.derive(doc, states);
+    out.push({ slug, title: d.title, ...d.summary, updated: doc.mtime, truncated: d.truncated });
+  }
+  return out;
+}
+
+function planOf(root, projectId, slug) {
+  if (!plans.SLUG_RE.test(String(slug))) throw new ApiError(404, 'api.notFound');
+  const doc = plans.readCapped(root, slug);
+  if (!doc) throw new ApiError(404, 'api.notFound');
+  return { slug, ...plans.derive(doc, plans.taskStates(projectId)), updated: doc.mtime };
 }
 
 function handoffsOf(projectId) {
@@ -344,6 +365,7 @@ function createApi(opts = {}) {
       validation: store.validateList(p.id),
       handoffs: handoffsOf(p.id),
       lessons: lessonsOf(p.path, days),
+      plans: plansOf(p.path, p.id),
       gates: gates.history(p.id, 30),
       hook_seen: hookseen.read(p.id),
       show_text: showText(),
@@ -471,6 +493,8 @@ function createApi(opts = {}) {
     ['GET', /^\/api\/meta$/, () => meta()],
     ['GET', /^\/api\/overview$/, () => overview()],
     ['GET', /^\/api\/project\/([^/]+)$/, (a) => projectDetail({ id: a[0] })],
+    ['GET', /^\/api\/project\/([^/]+)\/plans$/, (a) => { const p = projectOr404(a[0]); return { plans: plansOf(p.path, p.id) }; }],
+    ['GET', /^\/api\/project\/([^/]+)\/plan\/([^/]+)$/, (a) => { const p = projectOr404(a[0]); return planOf(p.path, p.id, a[1]); }],
     ['GET', /^\/api\/sessions$/, () => sessionsList()],
     ['GET', /^\/api\/session\/([^/]+)$/, (a, q) => sessionDetail({ id: a[0], query: q })],
     ['GET', /^\/api\/history$/, (a, q) => historyList({ query: q })],
@@ -525,4 +549,4 @@ function createApi(opts = {}) {
   return { handle, meta, resolveProject, watcher };
 }
 
-module.exports = { createApi, ApiError, lessonsOf, reviewStats, tailEvents };
+module.exports = { createApi, ApiError, lessonsOf, plansOf, planOf, reviewStats, tailEvents };

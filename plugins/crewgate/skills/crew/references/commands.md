@@ -14,7 +14,7 @@ Call as `node "${CLAUDE_PLUGIN_ROOT}/bin/crew.js" ...`. Global options: `--json`
 ## Tasks
 States: `created -> dispatched -> returned -> reviewing -> accepted -> merged`; any open state -> `cancelled`;
 a send-back goes back to `dispatched`.
-- `crew task create --title T --brief-file F [--role worker] [--branch B] [--worktree W] [--allow G] [--deny G]`
+- `crew task create --title T --brief-file F [--role worker] [--branch B] [--worktree W] [--allow G] [--deny G] [--plan SLUG:NODE]` (`--plan` links the new task to that plan node; a bad plan or node is refused before the task is created)
 - `crew task list [--state S]`
 - `crew task show <id>`: state, returns, capped report, diff stat, packet path, latest findings summary.
 - `crew task report <id> --report-file F [--packet-file F]`: the worker's call; validates sections and the size cap.
@@ -22,6 +22,15 @@ a send-back goes back to `dispatched`.
 - `crew task accept <id> [--note]`, `crew task merge <id> [--note]` (records only, runs no git merge; refused if `gates.merge` is
   `never`; also records `git.merge` with the real branch when git shows it merged into HEAD), `crew task cancel <id> [--note]`.
 - `crew task run <id> [--engine codex] [--timeout 1800] [--model M]`: runs the Codex CLI as the worker in the task's worktree (created from HEAD when missing), then commits as the repository user (trailer `Co-Authored-By: Codex`), files report and packet and moves the task to `returned`. Failure (bad output, timeout, non-zero exit, no changes): nothing committed, `task.failed` event, a need, task stays `dispatched`. Log: `codex.log` in the task folder.
+
+## Plans
+A plan is a tree of steps in `.crew/plans/<slug>.md` (slug `[a-z0-9-]{1,40}`, at most 3 levels, 500 nodes, 256 KiB). Leaves link to tasks; progress is computed from the linked tasks and shown on the board (Plans card, page `#/p/<project>/plan/<slug>`).
+- `crew plan new <slug> --title T [--goal T]`, `crew plan list`, `crew plan show <slug>` (tree with state and percentage; `--json` on both reads).
+- `crew plan add <slug> "text" [--under <node>] [--task <task-id>] [--origin plan|user|review|refute|implementation|send-back] [--proposed]`: records origin and date on the node; `--proposed` adds a `[?]` node that does not count until accepted. Refuses a fourth level.
+- `crew plan link <slug> <node> <task-id>`, `crew plan set <slug> <node> open|done|dropped|accept` (`accept` turns `[?]` into open), `crew plan rm <slug> <node>` (a leaf only).
+- `<node>` is an id such as `n2`; a hand-written line without an id is `L<line>` (ids are assigned on the first CLI write).
+- File: `- [ ] text <!-- id:n1 task:<id> added:YYYY-MM-DD origin:plan -->`; box `[ ]` open, `[x]` done, `[~]` dropped (not counted), `[?]` proposed (not counted). A leaf is done when `[x]` or its task is `merged`/`accepted`; `returned`/`reviewing` show as in review, `dispatched` as in progress, `cancelled` as needs attention. Hand-written lines are valid; unknown comment keys are kept.
+- Events: `plan.created`, `plan.node_added` (with origin), `plan.node_changed`.
 
 ## Review
 - `crew review run <task> [--engine claude|<name>] [--round N]`

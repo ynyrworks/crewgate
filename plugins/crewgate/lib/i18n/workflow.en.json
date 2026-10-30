@@ -179,5 +179,8 @@
   "wf.doctor.gates.confirm": "enforce confirm: Claude Code asks you before a push, PR or merge without approval; user-turn rule {turn}; ask gates: {ask}. Codex sessions fall back to remind (Codex PreToolUse \"ask\" is unverified)",
   "wf.doctor.gates.block": "enforce block: a push, PR or merge without approval is denied before it runs; user-turn rule {turn}; ask gates: {ask}. Codex sessions fall back to remind (Codex PreToolUse deny is unverified)",
   "wf.doctor.gates.turnOn": "on",
-  "wf.doctor.gates.turnOff": "off"
+  "wf.doctor.gates.turnOff": "off",
+  "wf.doctor.name.plans": "Plans",
+  "wf.doctor.plansOk": "{n} plan file(s)",
+  "wf.doctor.plansDeep": "nested deeper than {max} levels: {where}"
 }

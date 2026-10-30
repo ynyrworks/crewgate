@@ -4,7 +4,7 @@
   // ------------------------------------------------------------------ state and helpers
   var $ = function (id) { return document.getElementById(id); };
   var TOKEN = (document.querySelector('meta[name="crew-token"]') || {}).content || '';
-  var S = { lang: 'en', mask: false, sf: null, sopen: {}, tables: {}, meta: null, timer: null, last: '', route: null, busy: false, offline: false };
+  var S = { lang: 'en', mask: false, sf: null, sopen: {}, tables: {}, meta: null, timer: null, last: '', route: null, busy: false, offline: false, pcollapsed: {}, pgrowth: false };
 
   function store(key, val) {
     try { if (val === undefined) return window.localStorage.getItem(key); window.localStorage.setItem(key, val); } catch (e) { /* storage unavailable */ }
@@ -328,7 +328,7 @@
   function parseHash(hash) {
     var p = (hash || '#/').replace(/^#/, '').split('/').filter(Boolean);
     if (!p.length) return { page: 'overview' };
-    if (p[0] === 'p' && p[1]) return p[2] === 'settings' ? { page: 'psettings', id: p[1] } : { page: 'project', id: p[1] };
+    if (p[0] === 'p' && p[1]) return p[2] === 'settings' ? { page: 'psettings', id: p[1] } : p[2] === 'plan' && /^[a-z0-9-]{1,40}$/.test(p[3] || '') ? { page: 'plan', id: p[1], slug: p[3] } : { page: 'project', id: p[1] };
     if (p[0] === 's' && p[1]) return { page: 'session', id: p[1] };
     if (['sessions', 'office', 'history', 'usage', 'settings'].indexOf(p[0]) >= 0) return { page: p[0] };
     return { page: 'overview' };
@@ -344,7 +344,7 @@
     var nav = $('nav');
     nav.textContent = '';
     items.forEach(function (it) {
-      var cur = it[0] === page || (it[0] === 'overview' && (page === 'project' || page === 'psettings')) || (it[0] === 'sessions' && page === 'session');
+      var cur = it[0] === page || (it[0] === 'overview' && (page === 'project' || page === 'psettings' || page === 'plan')) || (it[0] === 'sessions' && page === 'session');
       nav.appendChild(h('a', { href: it[1], 'aria-current': cur ? 'page' : false, text: it[2] }));
     });
     var tools = $('tools');
@@ -456,6 +456,8 @@
     root.appendChild(card(t('project.tasks'), d.tasks.length
       ? table([t('task.title'), t('task.state'), t('task.returns'), t('task.role'), t('task.review'), t('task.updated')], rows, [2], 'tasks', t('project.tasks'), 'tall') : empty('task.none'), '', d.tasks.length));
 
+    root.appendChild(plansCard(d));
+
     var grid = h('div', { class: 'grid' });
     // live sessions
     grid.appendChild(card(t('project.sessions'), d.sessions.length ? cap('sessions', t('project.sessions'), sessionTree(d.sessions, false, null)) : empty('sessions.none'), '', d.sessions.length));
@@ -521,6 +523,96 @@
     root.appendChild(card(t('project.events'), d.events.length
       ? cap('events', t('project.events'), h('ul', { class: 'list' }, d.events.slice(0, 25).map(function (e) { return h('li', null, h('span', { class: 'muted', text: ago(e.ts) + ' · ' }), h('code', { text: e.type }), e.task ? ' ' + e.task : '', eventNote(e, d.show_text)); })), 'tall')
       : empty('events.none'), '', Math.min(d.events.length, 25)));
+    return root;
+  }
+
+  // ------------------------------------------------------------------ plans
+  var PM = window.PlanModel;
+
+  function planChip(state) {
+    return h('span', { class: 'badge ps ps-' + state }, h('span', { class: 'glyph', 'aria-hidden': 'true', text: PM.mark(state) }), t('plan.state.' + state));
+  }
+  function planBar(pct, label) {
+    return h('progress', { class: 'pbar', max: 100, value: pct, 'aria-label': label, title: pct + '%' });
+  }
+  function planCounts(s) {
+    var bits = [];
+    if (s.blocked) bits.push(planChip('blocked'));
+    if (s.proposed) bits.push(h('span', { class: 'badge ps ps-proposed', text: t('plan.proposedN', { count: s.proposed }) }));
+    if (s.dropped) bits.push(h('span', { class: 'badge ps ps-dropped', text: t('plan.droppedN', { count: s.dropped }) }));
+    return bits;
+  }
+
+  // Project page card: one row per plan with a progress bar.
+  function plansCard(d) {
+    var list = d.plans || [];
+    var body = list.length ? cap('plans', t('project.plans'), h('ul', { class: 'list plans' }, list.map(function (p) {
+      var name = PM.planTitle(p, S.mask);
+      return h('li', null,
+        h('a', { href: '#/p/' + encodeURIComponent(d.project.id) + '/plan/' + encodeURIComponent(p.slug), text: name }),
+        h('div', { class: 'prow' }, planBar(p.pct, name), h('span', { class: 'pct', text: p.pct + '%' }), h('span', { class: 'muted', text: t('plan.steps', { done: p.done, total: p.total }) }), planCounts(p)));
+    }))) : h('div', null, empty('plan.none'), h('pre', { class: 'cmd', text: 'crew plan new SLUG --title "..."' }));
+    return card(t('project.plans'), body, '', list.length ? list.length : null);
+  }
+
+  function toggleCollapsed(key) {
+    if (S.pcollapsed[key]) delete S.pcollapsed[key]; else S.pcollapsed[key] = true;
+    store('crew.planCollapsed', JSON.stringify(S.pcollapsed));
+    S.last = '';
+    refresh(true);
+  }
+
+  function planNode(n, pid, slug, recent) {
+    var key = PM.collapseKey(pid, slug, n.id);
+    var kids = n.children.length;
+    var open = !S.pcollapsed[key];
+    var text = PM.nodeText(n, S.mask);
+    var li = h('li', { class: 'pnode' + (recent[n.id] ? ' is-new' : '') + (n.state === 'dropped' ? ' is-dropped' : '') });
+    var head = h('div', { class: 'phead' },
+      kids ? h('button', { type: 'button', class: 'toggle', 'data-fid': 'pt-' + n.id, 'aria-expanded': open ? 'true' : 'false', 'aria-label': t(open ? 'plan.collapse' : 'plan.expand') + ': ' + text, onclick: function () { toggleCollapsed(key); }, text: open ? '▾' : '▸' }) : h('span', { class: 'toggle spacer' }),
+      planChip(n.state),
+      h('span', { class: 'ptext', text: text }),
+      kids && n.state !== 'dropped' && n.state !== 'proposed' ? h('span', { class: 'pct', text: n.pct + '% · ' + n.done + '/' + n.total }) : null);
+    li.appendChild(head);
+    var meta = h('div', { class: 'pmeta muted' });
+    if (!S.mask) meta.appendChild(h('code', { text: n.id }));
+    if (n.task && PM.validTask(n.task.id)) {
+      meta.appendChild(h('span', null, ' · ' + t('plan.task') + ' ', h('code', { text: n.task.id }), ' ', n.task.missing ? h('span', { class: 'badge s-failed', text: t('plan.taskMissing') }) : badge(n.task.state)));
+    }
+    if (n.origin !== 'plan') meta.appendChild(h('span', { class: 'badge po po-' + n.origin, text: t('plan.origin.' + n.origin) }));
+    if (n.added) meta.appendChild(h('span', { text: ' · ' + t('plan.added', { date: n.added }) }));
+    if (recent[n.id]) meta.appendChild(h('span', { class: 'badge ps ps-new', text: t('plan.new') }));
+    li.appendChild(meta);
+    if (kids && open) li.appendChild(h('ul', { class: 'ptree' }, n.children.map(function (c) { return planNode(c, pid, slug, recent); })));
+    return li;
+  }
+
+  function growthCard(g) {
+    var body = g.groups.length ? cap('growth', t('plan.growth'), h('ul', { class: 'list' }, g.groups.map(function (day) {
+      return h('li', null, h('strong', { text: day.date }), day.recent ? ' ' + t('plan.new') : '',
+        h('ul', { class: 'list nested' }, day.origins.map(function (o) {
+          return h('li', null, h('span', { class: 'badge po po-' + o.origin, text: t('plan.origin.' + o.origin) }), ' ' + o.items.map(function (n) { return PM.nodeText(n, S.mask); }).join(' · '));
+        })));
+    }))) : empty('plan.growthNone');
+    return card(t('plan.growth'), body);
+  }
+
+  function planPage(d, pid) {
+    var title = PM.planTitle(d, S.mask);
+    var g = PM.growth(d.nodes, Date.now(), PM.GROWTH_DAYS);
+    var s = d.summary;
+    var root = h('div', null,
+      h('p', null, h('a', { href: '#/p/' + encodeURIComponent(pid), text: '← ' + t('plan.back') })),
+      h('h1', { text: title }));
+    if (d.goal && !S.mask) root.appendChild(h('p', { class: 'muted', text: d.goal }));
+    root.appendChild(h('div', { class: 'prow big' }, planBar(s.pct, title), h('span', { class: 'pct', text: s.pct + '%' }), h('span', { class: 'muted', text: t('plan.steps', { done: s.done, total: s.total }) }), planCounts(s)));
+    if (d.truncated) root.appendChild(h('p', { class: 'err', text: t('plan.truncated') }));
+    root.appendChild(h('div', { class: 'row' },
+      h('button', { type: 'button', 'data-fid': 'pg', 'aria-pressed': S.pgrowth ? 'true' : 'false', onclick: function () { S.pgrowth = !S.pgrowth; store('crew.planGrowth', S.pgrowth ? '1' : '0'); S.last = ''; refresh(true); }, text: t('plan.showGrowth') }),
+      h('span', { class: 'muted', text: t('plan.growthHint', { days: PM.GROWTH_DAYS, count: g.recentCount }) })));
+    var recent = S.pgrowth ? g.recent : {};
+    root.appendChild(card(t('plan.tree'), d.nodes.length ? h('ul', { class: 'ptree root' }, d.nodes.map(function (n) { return planNode(n, pid, d.slug, recent); })) : empty('plan.emptyTree'), '', s.nodes));
+    if (S.pgrowth) root.appendChild(growthCard(g));
     return root;
   }
 
@@ -1209,6 +1301,17 @@
       }).then(done, fail);
       return;
     }
+    if (r.page === 'plan') {
+      api('/api/project/' + encodeURIComponent(r.id) + '/plan/' + encodeURIComponent(r.slug)).then(function (res) {
+        if (res.status >= 400) { render(card(t('error'), h('p', { class: 'err', text: res.status === 404 ? t('plan.gone') : (res.data.error ? res.data.error.message : 'Error') })), 'perr' + tag); return; }
+        var sig = 'pl' + tag + S.pgrowth + JSON.stringify([res.data, S.pcollapsed]);
+        if (S.last === sig) return;
+        var fid = document.activeElement && document.activeElement.getAttribute ? document.activeElement.getAttribute('data-fid') : null;
+        render(planPage(res.data, r.id), sig);
+        if (fid) { var el = document.querySelector('[data-fid="' + fid + '"]'); if (el) { try { el.focus(); } catch (e) { /* ignore */ } } }
+      }).then(done, fail);
+      return;
+    }
     if (r.page !== 'history') HIST.loaded = false;   // coming back reloads the first page
     if (r.page === 'history') {
       if (force) S.last = '';
@@ -1246,6 +1349,8 @@
     S.mask = store('crew.mask') === '1';
     try { S.sf = SM.cleanFilter(JSON.parse(store('crew.sessionFilter') || '{}')); } catch (e) { S.sf = SM.cleanFilter({}); }
     try { var hf = JSON.parse(store('crew.historyFilter') || '{}'); if (HIST_RANGES.indexOf(hf.days) >= 0) HIST.days = hf.days; if (typeof hf.project === 'string') HIST.project = hf.project.slice(0, 40); } catch (e) { /* defaults */ }
+    try { S.pcollapsed = PM.cleanCollapsed(JSON.parse(store('crew.planCollapsed') || '{}')); } catch (e) { S.pcollapsed = {}; }
+    S.pgrowth = store('crew.planGrowth') === '1';
     try { var so = JSON.parse(store('crew.sessionOpen') || '{}'); S.sopen = so && typeof so === 'object' && !Array.isArray(so) ? so : {}; } catch (e) { S.sopen = {}; }
     loadTables().then(function () {
       S.route = parseRoute();
