@@ -367,7 +367,7 @@ async function run(argv, ctx) {
   if (sub === 'start') return start(ctx, a);
   if (sub === 'stop') return stop(ctx);
   if (sub === 'status') return status(ctx);
-  if (sub === 'ensure') { await ensureChecked(); return 0; }
+  if (sub === 'ensure') { logLine(`autostart check: ${await ensureChecked()}`); return 0; }
   return serve(ctx, a.port === undefined ? defaultPort() : a.port, a.port === undefined || a.search === true);
 }
 

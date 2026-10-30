@@ -86,6 +86,9 @@ test('SessionStart starts the board when board.autostart is on, without waiting 
   assert.equal(st.port, port);
   assert.equal(fs.existsSync(lock), false, 'the serve process released the start lock');
   h.start(F);
+  // the second start's detached check must have finished (and found the board) before the board is stopped,
+  // or it could outlive this test and start a new board
+  assert.ok(await until(() => /autostart check: running/.test(fs.readFileSync(log, 'utf8'))), 'the detached check ran');
   assert.equal(JSON.parse(fs.readFileSync(state, 'utf8')).pid, st.pid, 'no second board');
   assert.equal(crew(['board', 'stop']).code, 0);
 });
@@ -182,6 +185,7 @@ test('SessionStart with a reused pid in board.json ends with one working board',
     } catch { return null; }
   });
   assert.ok(st, 'the stale state was replaced by a real board');
+  assert.ok(await until(() => /autostart check: started/.test(fs.readFileSync(log, 'utf8'))), 'the detached check finished');
   assert.equal(crew(['board', 'stop']).code, 0);
 });
 
@@ -201,8 +205,11 @@ test('manual board start waits for an autostart in progress and reports that boa
   assert.equal(j.started, false);
   assert.equal(j.port, port);
   assert.equal(j.pid, serve.pid, 'reported the existing board, started no second one');
-  assert.equal(crew(['board', 'stop']).code, 0);
-  serve.kill();
+  // End the board through the event loop: it is a child of this process, and a blocking `crew board stop` would
+  // leave it a zombie (alive to kill -0) that this process cannot reap while it waits.
+  const exited = new Promise((r) => serve.on('exit', r));
+  serve.kill('SIGTERM');
+  await exited;
   reset();
 });
 
