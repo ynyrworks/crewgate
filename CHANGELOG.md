@@ -11,6 +11,7 @@
 ### Improved
 
 - CLI events (`task.*`, `work.set`, `lesson.added`, `log.added`, ...) now carry the session id of the shell that ran the command (`CLAUDE_CODE_SESSION_ID`, then `CLAUDE_SESSION_ID`) when the caller gave none; hook events keep their own. Dedupe ids are unchanged. `currentSession()` moved to `lib/core/sessionid.js` (still exported from `gates.js`).
+- CLI errors say what was wrong: a bad flag or action prints the problem (`Unknown option: --note`, an unknown action) followed by that group's usage lines, in en and zh-TW; exit codes are unchanged. New `crew --version` and `crew version` (with `--json`) print the plugin version.
 
 ## 0.13.0 — 2026-10-30
 

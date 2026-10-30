@@ -72,4 +72,4 @@ function counts(now = new Date()) {
   return out;
 }
 
-module.exports = { log, counts, file, oldFile, MAX_BYTES };
+module.exports = { log, counts, file, oldFile, pluginVersion, MAX_BYTES };
