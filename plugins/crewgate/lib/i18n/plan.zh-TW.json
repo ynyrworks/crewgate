@@ -55,5 +55,7 @@
   "planReview.maxRounds": "計畫 {slug} 已做過 {max} 輪計畫審查（plan.max_rounds）；要再做請加 --force",
   "planReview.alreadyFinalized": "計畫審查第 {round} 輪已定案；請用 crew plan review run 開新的一輪",
   "planReview.noRefutations": "第 {round} 輪還沒有反駁結果（用 --kind refutations 提交，或給 --refutations-file）",
-  "planReview.targetGone": "提議 {node} 針對的步驟 {target} 已不存在或已放棄；請改為拒絕"
+  "planReview.targetGone": "提議 {node} 針對的步驟 {target} 已不存在或已放棄；請改為拒絕",
+  "planReview.unknownRound": "計畫審查第 {round} 輪不是用「crew plan review run」開始的；請先開始一輪",
+  "planReview.targetChanged": "提議 {node} 是針對步驟 {target} 先前的寫法審查的，之後該步驟已改變；請拒絕它並重新做一輪審查"
 }

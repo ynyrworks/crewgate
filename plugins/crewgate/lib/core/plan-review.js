@@ -59,9 +59,11 @@ function limits(cfg) {
   return { max_proposals_per_round: n(p.max_proposals_per_round, 5), max_rounds: n(p.max_rounds, 3), large_growth: n(p.large_growth, 5) };
 }
 
+// Only a round that `plan review run` registered counts: the caps (plan.max_rounds, the per-round limit) hang on it.
 function currentRound(dir, round, suffix) {
   const r = round || latestRound(dir, suffix);
   if (!r) throw new CrewError('wf.review.noRound', { what: suffix });
+  if (!readState(dir).rounds.some((x) => x.round === r)) throw new CrewError('planReview.unknownRound', { round: r });
   return r;
 }
 
@@ -143,10 +145,11 @@ function packetText({ slug, round, doc, scope, st, caps, taskState }) {
 
 // start(root, projectId, cfg, slug, { node, force }) -> { round, scope, packet_path, raw_path, prompt, ... }
 function start(root, projectId, cfg, slug, opts = {}) {
-  const doc = plans.readCapped(root, slug);
-  if (!doc) throw new CrewError('plan.notFound', { slug });
+  if (!plans.exists(root, slug)) throw new CrewError('plan.notFound', { slug });
   const caps = limits(cfg);
-  const scope = opts.node ? plans.refOf(plans.find(doc, opts.node)) : null;
+  // every step gets a real id first, so the packet and the findings only ever name stable ids (never Lnn)
+  const scope = plans.update(root, slug, (d) => { const n = opts.node ? plans.find(d, opts.node) : null; plans.assignIds(d); return n ? n.meta.id : null; });
+  const doc = plans.readCapped(root, slug);
   const dir = dirOf(projectId, slug);
   const entry = updateState(dir, (st) => {
     if (st.rounds.length >= caps.max_rounds && !opts.force) throw new CrewError('planReview.maxRounds', { slug, max: caps.max_rounds });
@@ -200,7 +203,9 @@ function sanitizeRefutation(r) {
 // submit(projectId, slug, { kind, round, list }) -> { round, kind, count, file }
 function submit(projectId, slug, { kind, round, list }) {
   const dir = dirOf(projectId, slug);
-  const r = round || Math.max(1, latestRound(dir, 'raw.json'));
+  const known = readState(dir).rounds.map((x) => x.round);
+  const r = round || Math.max(0, ...known);
+  if (!r || !known.includes(r)) throw new CrewError('planReview.unknownRound', { round: r || 0 });
   const safe = kind === 'refutations' ? list.map(sanitizeRefutation) : sanitizeFindings(list);
   const file = roundFile(dir, r, kind === 'refutations' ? 'refutations.json' : 'raw.json');
   json.save(file, safe);
@@ -225,6 +230,7 @@ function problemOf(f, ctx) {
   if (!nonEmpty(p.done_when)) return { reason: 'no-done-when', detail: 'proposal.done_when: a way to tell it is finished is required' };
   const node = f.node ? String(f.node).trim() : null;
   if (!node && p.action !== 'add') return bad(`proposal.action ${p.action} needs a node`);
+  if (/^L\d+$/.test(node || '')) return { reason: 'unknown-node', detail: `${node}: a line number is not stable, use the step id` };
   if (node) {
     let n = null;
     try { n = plans.find(ctx.doc, node); } catch { n = null; }
@@ -256,7 +262,7 @@ function filter(root, projectId, cfg, slug, round) {
   const reasons = {};
   for (const f of list) {
     const p = problemOf(f, ctx);
-    if (p) { dropped.push({ finding: f, ...p }); reasons[p.reason] = (reasons[p.reason] || 0) + 1; } else kept.push(f);
+    if (p) { dropped.push({ finding: f, ...p }); reasons[p.reason] = (reasons[p.reason] || 0) + 1; } else kept.push({ ...f, node_text: f.node ? plans.find(doc, f.node).text : null });
   }
   json.save(roundFile(dir, r, 'filtered.json'), dropped);
   json.save(roundFile(dir, r, 'kept.json'), kept);
@@ -279,13 +285,19 @@ function attachUnder(node) {
   return node.depth < plans.MAX_DEPTH ? { under: node, deep: false } : { under: node.parent, deep: true };
 }
 
+// The round must be one `plan review run` registered and not finalized yet.
+function checkOpen(dir, r, st = readState(dir)) {
+  const e = st.rounds.find((x) => x.round === r);
+  if (!e) throw new CrewError('planReview.unknownRound', { round: r });
+  if (e.status === 'finalized') throw new CrewError('planReview.alreadyFinalized', { round: r });
+  return e;
+}
+
 // finalize(root, projectId, cfg, slug, { round, refutations }) -> { round, findings, refuted, cut, problems, created: [...] }
 function finalize(root, projectId, cfg, slug, opts = {}) {
   const dir = dirOf(projectId, slug);
   const r = currentRound(dir, opts.round, 'kept.json');
-  const st0 = readState(dir);
-  const entry0 = st0.rounds.find((x) => x.round === r);
-  if (entry0 && entry0.status === 'finalized') throw new CrewError('planReview.alreadyFinalized', { round: r });
+  checkOpen(dir, r);
   const kept = rv.readArray(roundFile(dir, r, 'kept.json'), 'kept findings');
   let refs = [];
   if (kept.length) {
@@ -307,44 +319,65 @@ function finalize(root, projectId, cfg, slug, opts = {}) {
   const survivors = findings.filter((f) => keep.has(f.id));
   const cut = findings.filter((f) => !keep.has(f.id)).map((f) => ({ finding: f, reason: 'cap', detail: `cap ${caps.max_proposals_per_round}` }));
   const created = [];
-  if (survivors.length) {
-    plans.update(root, slug, (doc) => {
-      // resolve every target before ids are assigned: a hand-written line is still Lnn here
-      const targets = survivors.map((f) => (f.node ? plans.find(doc, String(f.node).trim()) : null));
-      plans.assignIds(doc);
-      const date = plans.today();
-      survivors.forEach((f, i) => {
-        const target = targets[i];
-        const at = attachUnder(target);
-        const alt = better.get(f.id);
-        const text = alt || f.proposal.text;
-        const meta = { round: r, kind: f.kind, action: f.proposal.action, done_when: enc(clean(f.proposal.done_when, DONE_MAX)) };
+  const stale = [];
+  // The status check, the nodes and the "finalized" mark all happen under the plan lock, so two finalizations of one
+  // round cannot both pass; a node is created once per round + finding id.
+  plans.update(root, slug, (doc) => {
+    checkOpen(dir, r);
+    const live = [];
+    for (const f of survivors) {
+      let target = null;
+      if (f.node) {
+        try { target = plans.find(doc, String(f.node).trim()); } catch { target = null; }
+        // the step moved on since it was reviewed: attaching to it (or rewriting it) would hit the wrong thing
+        if (!target || target.box === '~' || target.box === '?' || target.text !== f.node_text) { stale.push({ finding: f, reason: 'target-changed', detail: String(f.node) }); continue; }
+      }
+      live.push({ f, target });
+    }
+    const date = plans.today();
+    for (const { f, target } of live) {
+      const fid = enc(f.id);
+      const have = doc.nodes.find((n) => n.meta.round === String(r) && n.meta.finding === fid);
+      const at = attachUnder(target);
+      const alt = better.get(f.id);
+      let n = have;
+      if (!n) {
+        const meta = { round: r, finding: fid, kind: f.kind, action: f.proposal.action, done_when: enc(clean(f.proposal.done_when, DONE_MAX)) };
         if (target) meta.for = target.meta.id;
         if (f.verdict === 'uncertain') meta.uncertain = 1;
-        const n = plans.addNode(doc, { text, under: at.under ? at.under.meta.id : undefined, origin: alt ? 'refute' : 'review', proposed: true, date, meta });
-        created.push({
-          id: f.id, node_id: n.meta.id, for: target ? target.meta.id : null, under: at.under ? at.under.meta.id : null, deep: at.deep,
-          action: f.proposal.action, origin: n.meta.origin, uncertain: f.verdict === 'uncertain', text: n.text,
-        });
+        n = plans.addNode(doc, { text: alt || f.proposal.text, under: at.under ? at.under.meta.id : undefined, origin: alt ? 'refute' : 'review', proposed: true, date, meta });
+      }
+      created.push({
+        id: f.id, node_id: n.meta.id, for: target ? target.meta.id : null, under: at.under ? at.under.meta.id : null, deep: at.deep,
+        action: f.proposal.action, origin: n.meta.origin, uncertain: f.verdict === 'uncertain', text: n.text,
       });
+    }
+    updateState(dir, (st) => {
+      const e = checkOpen(dir, r, st);
+      e.status = 'finalized'; e.refuted = dropped.length; e.cut = cut.length; e.kept = created.length;
     });
-  }
-  const finalList = survivors.map((f) => ({ ...f, ...created.find((c) => c.id === f.id), better: better.get(f.id) || null }));
+  });
+  for (const x of stale) problems.push(`${x.finding.id}: step ${x.detail} changed since it was reviewed; not proposed`);
+  const finalList = created.map((c) => ({ ...survivors.find((f) => f.id === c.id), ...c, better: better.get(c.id) || null }));
   json.save(roundFile(dir, r, 'json'), finalList);
   json.save(roundFile(dir, r, 'filtered.json'), (() => {
     let prior = [];
     try { prior = rv.readArray(roundFile(dir, r, 'filtered.json'), 'filtered'); } catch { /* none yet */ }
-    return prior.filter((d) => d.reason !== 'refuted' && d.reason !== 'cap').concat(dropped, cut);
+    return prior.filter((d) => d.reason !== 'refuted' && d.reason !== 'cap' && d.reason !== 'target-changed').concat(dropped, cut, stale);
   })());
-  updateState(dir, (s) => {
-    const e = s.rounds.find((x) => x.round === r);
-    if (e) { e.status = 'finalized'; e.refuted = dropped.length; e.cut = cut.length; e.kept = survivors.length; }
-  });
-  plans.record(projectId, 'plan.review_finalized', { slug, round: r, raised: kept.length, kept: survivors.length, refuted: dropped.length, cut: cut.length });
+  plans.record(projectId, 'plan.review_finalized', { slug, round: r, raised: kept.length, kept: created.length, refuted: dropped.length, cut: cut.length });
   return { slug, round: r, findings: finalList, refuted: dropped.length, cut: cut.length, problems, created };
 }
 
 // ---------------------------------------------------------------- accept and reject
+// The text of the target step as the review saw it (round file), or null when it cannot be told.
+function reviewedText(projectId, slug, round, nodeId) {
+  try {
+    const f = rv.readArray(roundFile(dirOf(projectId, slug), Number(round), 'json'), 'findings').find((x) => x && x.node_id === nodeId);
+    return f && typeof f.node_text === 'string' ? f.node_text : null;
+  } catch { return null; }
+}
+
 // Plain [?] nodes (no review metadata) are accepted as an add.
 function accept(root, projectId, cfg, slug, ref) {
   const info = plans.update(root, slug, (doc) => {
@@ -357,6 +390,7 @@ function accept(root, projectId, cfg, slug, ref) {
       let target = null;
       try { target = n.meta.for ? plans.find(doc, n.meta.for) : null; } catch { target = null; }
       if (!target || target.box === '~') throw new CrewError('planReview.targetGone', { node: id, target: n.meta.for || '?' });
+      if (reviewedText(projectId, slug, n.meta.round, id) !== target.text) throw new CrewError('planReview.targetChanged', { node: id, target: plans.refOf(target) });
       if (action === 'change') { target.text = n.text; plans.touch(target); } else plans.setBox(target, '~');
       plans.removeNode(doc, n);
       out.target = plans.refOf(target);

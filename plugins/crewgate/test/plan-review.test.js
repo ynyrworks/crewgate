@@ -102,7 +102,7 @@ test('full round: run, submit, filter, finalize turns survivors into proposed no
   assert.equal(byFinding.f3.text, 'Release with a signed, pushed tag');
   assert.equal(byFinding.f4.uncertain, true);
   const text = planText(repo);
-  assert.ok(/- \[\?\] Reject due dates in the past <!-- id:n\d+ added:\d{4}-\d{2}-\d{2} origin:review round:1 kind:missing-step action:add done_when:\S+ for:n2 -->/.test(text), text);
+  assert.ok(/- \[\?\] Reject due dates in the past <!-- id:n\d+ added:\d{4}-\d{2}-\d{2} origin:review round:1 finding:\S+ kind:missing-step action:add done_when:\S+ for:n2 -->/.test(text), text);
   assert.ok(/uncertain:1/.test(text));
   assert.ok(!text.includes('claim about'), 'long reasoning stays out of the Markdown');
   // metadata on the derived node and in the round files
@@ -400,4 +400,105 @@ test('proposalsOf joins a pending node with its round file', () => {
   assert.equal(p.target.text, 'Add due dates');
   assert.equal(p.accept_cmd, `crew plan accept demo ${p.id}`);
   assert.match(p.reject_cmd, /crew plan reject demo .* --note/);
+});
+
+// ---------------------------------------------------------------- hardening
+test('metadata round-trips: a done_when with "-->", newlines, % and unicode keeps the proposal readable after a reload', () => {
+  const { repo, proj } = setup();
+  const nasty = 'ends --> here <!-- and\nnew line, 100% sure,\ttab   end';
+  const r = raise(repo, [F('n5', 'risk', 'change', 'Release with a signed tag', { proposal: { done_when: nasty } })]);
+  const fin = close(repo, r.round, verdicts(['f1', 'upheld']));
+  const id = fin.created[0].node_id;
+  const text = planText(repo);
+  assert.equal((text.match(/-->/g) || []).length, text.split('\n').filter((l) => l.includes('<!--')).length, 'one comment end per line');
+  const n = node(repo, proj, id);
+  assert.equal(n.proposal.action, 'change');
+  assert.equal(n.proposal.for, 'n5');
+  assert.equal(n.proposal.done_when, nasty);
+  assert.equal(pr.proposalsOf(proj.id, 'demo', plans.readCapped(repo, 'demo'))[0].done_when, nasty);
+  const acc = cli(repo, ['plan', 'accept', 'demo', id]);
+  assert.equal(acc.code, 0, acc.err);
+  assert.equal(acc.data.removed, true);
+  assert.equal(node(repo, proj, 'n5').text, 'Release with a signed tag', 'the target was reworded, no new step opened');
+  assert.equal(cli(repo, ['plan', 'show', 'demo']).data.summary.total, 3);
+  assert.equal(plans.decodeToken(plans.encodeToken(nasty)), nasty);
+});
+
+test('rounds must be registered by review run: submit, filter and finalize refuse an unknown round', () => {
+  const { repo, proj } = setup();
+  const sub = cli(repo, ['plan', 'review', 'submit', 'demo'], [F('n2', 'risk', 'add', 'x y z')]);
+  assert.notEqual(sub.code, 0);
+  assert.match(sub.err, /review run/);
+  cli(repo, ['plan', 'review', 'run', 'demo']);
+  assert.notEqual(cli(repo, ['plan', 'review', 'submit', 'demo', '--round', '7'], [F('n2', 'risk', 'add', 'x y z')]).code, 0);
+  // files planted by hand for a round that was never started
+  const dir = pr.dirOf(proj.id, 'demo');
+  fs.writeFileSync(pr.roundFile(dir, 9, 'raw.json'), JSON.stringify([F('n2', 'risk', 'add', 'Planted')]));
+  fs.writeFileSync(pr.roundFile(dir, 9, 'kept.json'), JSON.stringify([F('n2', 'risk', 'add', 'Planted')]));
+  assert.match(cli(repo, ['plan', 'review', 'filter', 'demo', '--round', '9']).err, /review run/);
+  const fin = cli(repo, ['plan', 'review', 'finalize', 'demo', '--round', '9']);
+  assert.notEqual(fin.code, 0);
+  assert.match(fin.err, /review run/);
+  assert.ok(!planText(repo).includes('Planted'));
+  assert.equal(pr.roundsOf(proj.id, 'demo').length, 1);
+});
+
+test('finalize twice fails clearly and adds nothing; several at once create the proposals exactly once', async () => {
+  const { repo } = setup();
+  const r = raise(repo, [F('n2', 'risk', 'add', 'One'), F('n3', 'risk', 'add', 'Two')]);
+  cli(repo, ['plan', 'review', 'submit', 'demo', '--round', String(r.round), '--kind', 'refutations'], verdicts(['f1', 'upheld'], ['f2', 'upheld']));
+  const runs = await Promise.all([1, 2, 3].map(() => u.crewAsync(['--json', 'plan', 'review', 'finalize', 'demo', '--round', String(r.round)], repo)));
+  assert.equal(runs.filter((x) => x.code === 0).length, 1, runs.map((x) => x.err).join(' | '));
+  assert.equal((planText(repo).match(/\[\?\]/g) || []).length, 2);
+  const again = cli(repo, ['plan', 'review', 'finalize', 'demo', '--round', String(r.round)]);
+  assert.notEqual(again.code, 0);
+  assert.match(again.err, /already finalized/);
+  assert.equal((planText(repo).match(/\[\?\]/g) || []).length, 2);
+});
+
+test('node creation is idempotent per round and finding id (a finalize that stopped before the mark can be repeated)', () => {
+  const { repo, proj } = setup();
+  const r = raise(repo, [F('n2', 'risk', 'add', 'One')]);
+  const fin = close(repo, r.round, verdicts(['f1', 'upheld']));
+  const dir = pr.dirOf(proj.id, 'demo');
+  const st = pr.readState(dir);
+  st.rounds[0].status = 'started';
+  fs.writeFileSync(path.join(dir, 'state.json'), JSON.stringify(st));
+  const again = cli(repo, ['plan', 'review', 'finalize', 'demo', '--round', '1']);
+  assert.equal(again.code, 0, again.err);
+  assert.equal(again.data.created[0].node_id, fin.created[0].node_id);
+  assert.equal((planText(repo).match(/\[\?\]/g) || []).length, 1);
+});
+
+test('stable ids: review run gives every step an id and a line reference is not accepted as a node', () => {
+  const { repo } = setup();
+  fs.writeFileSync(path.join(repo, '.crew', 'plans', 'demo.md'), '# Hand\n\n- [ ] First\n- [ ] Second\n');
+  const run = cli(repo, ['plan', 'review', 'run', 'demo']).data;
+  assert.ok(/id:n1/.test(planText(repo)) && /id:n2/.test(planText(repo)), 'ids written at run time');
+  assert.ok(!/\bL\d+\b/.test(fs.readFileSync(run.packet_path, 'utf8')), 'the packet only names ids');
+  cli(repo, ['plan', 'review', 'submit', 'demo', '--round', '1'], [F('L3', 'risk', 'change', 'Reworded first')]);
+  const flt = cli(repo, ['plan', 'review', 'filter', 'demo']).data;
+  assert.equal(flt.kept.length, 0);
+  assert.equal(flt.dropped[0].reason, 'unknown-node');
+});
+
+test('a step that changed after filtering is never attached to or overwritten', () => {
+  const { repo, proj } = setup();
+  let r = raise(repo, [F('n5', 'risk', 'change', 'Release with a signed tag'), F('n2', 'risk', 'add', 'Reject past dates')]);
+  cli(repo, ['plan', 'review', 'submit', 'demo', '--round', String(r.round), '--kind', 'refutations'], verdicts(['f1', 'upheld'], ['f2', 'upheld']));
+  fs.writeFileSync(path.join(repo, '.crew', 'plans', 'demo.md'), planText(repo).replace('Release <!--', 'Ship it <!--'));
+  const fin = cli(repo, ['plan', 'review', 'finalize', 'demo', '--round', String(r.round)]);
+  assert.equal(fin.code, 0, fin.err);
+  assert.equal(fin.data.created.length, 1, 'only the proposal whose target is unchanged');
+  assert.ok(fin.data.problems.some((p) => /changed since it was reviewed/.test(p)));
+  assert.equal(node(repo, proj, 'n5').text, 'Ship it');
+  // accept refuses when the target changed after finalize
+  r = raise(repo, [F('n3', 'risk', 'change', 'Sort by due date, newest first')]);
+  const f2 = close(repo, r.round, verdicts(['f1', 'upheld']));
+  fs.writeFileSync(path.join(repo, '.crew', 'plans', 'demo.md'), planText(repo).replace('Sort by due date <!--', 'Order by due date <!--'));
+  const acc = cli(repo, ['plan', 'accept', 'demo', f2.created[0].node_id]);
+  assert.notEqual(acc.code, 0);
+  assert.match(acc.err, /changed since/);
+  assert.equal(node(repo, proj, 'n3').text, 'Order by due date', 'never overwritten on a mismatch');
+  assert.equal(node(repo, proj, f2.created[0].node_id).state, 'proposed');
 });

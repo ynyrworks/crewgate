@@ -55,5 +55,7 @@
   "planReview.maxRounds": "Plan {slug} has had {max} plan review rounds already (plan.max_rounds); add --force to run another",
   "planReview.alreadyFinalized": "Plan review round {round} is already finalized; start a new round with: crew plan review run",
   "planReview.noRefutations": "No refutations for round {round} yet (submit them with --kind refutations, or pass --refutations-file)",
-  "planReview.targetGone": "Proposal {node} is about step {target}, which is gone or dropped; reject it instead"
+  "planReview.targetGone": "Proposal {node} is about step {target}, which is gone or dropped; reject it instead",
+  "planReview.unknownRound": "Plan review round {round} was not started with \"crew plan review run\"; start one first",
+  "planReview.targetChanged": "Proposal {node} was reviewed against an earlier wording of step {target}, which has changed since; reject it and run a new review round"
 }

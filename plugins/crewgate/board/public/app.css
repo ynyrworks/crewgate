@@ -267,7 +267,7 @@ button.older { margin: 0 0 10px; min-height: 36px; }
 .pprop .phead { margin-bottom: 4px; }
 .prow2 { margin: 2px 0; }
 .pcmds { margin-top: 6px; }
-.pcmds pre { margin: 0 0 6px; }
+.pcmds pre { margin: 0 0 6px; white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: auto; max-width: 100%; }
 .pending { margin: 0 0 6px; }
 @media (max-width: 480px) {
   .pmeta { margin-left: 0; }
