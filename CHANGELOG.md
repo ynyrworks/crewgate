@@ -8,6 +8,10 @@
 - `crew plan new|list|show|add|link|set|rm` (`--json` on the reads), `crew task create ... --plan SLUG:NODE` (checked before the task exists), `crew doctor` warns about nodes nested deeper than 3 levels. Events `plan.created`, `plan.node_added` (with origin), `plan.node_changed`; they carry ids, not node text. The design leaves room for the next steps (a plan review that proposes `[?]` nodes, follow-ups from code review) but builds neither.
 - Board: `GET /api/project/<id>/plans` and `GET /api/project/<id>/plan/<slug>` (tree with derived state, linked task state, origin and added date; read from the file on every request, capped at 256 KiB and 500 nodes with `truncated`), a **Plans** card on the project page (also as `plans` in `GET /api/project/<id>`) and the plan page `#/p/<project>/plan/<slug>`: collapsible tree, status chip with symbol and colour, percentage on parents, linked task and its state, origin badge, added date and a **Show growth** toggle that highlights nodes added in the last 7 days and lists additions by day and origin. It refreshes with the board polling, works at 375 px, in both themes and both languages; private mode shows ids and states only.
 
+### Improved
+
+- CLI events (`task.*`, `work.set`, `lesson.added`, `log.added`, ...) now carry the session id of the shell that ran the command (`CLAUDE_CODE_SESSION_ID`, then `CLAUDE_SESSION_ID`) when the caller gave none; hook events keep their own. Dedupe ids are unchanged. `currentSession()` moved to `lib/core/sessionid.js` (still exported from `gates.js`).
+
 ## 0.13.0 — 2026-10-30
 
 ### New

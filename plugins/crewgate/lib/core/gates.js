@@ -6,6 +6,7 @@
 // the PostToolUse hook can tell when a push or merge happened without an approval (gate.missing).
 const crypto = require('crypto');
 const events = require('./events');
+const { currentSession } = require('./sessionid');
 const { CrewError, UsageError } = require('./errors');
 
 const GATES = ['push', 'open_pr', 'merge', 'remote_hosts', 'large_task', 'install_or_download'];
@@ -50,13 +51,6 @@ function ask(projectId, cfg, input, opts = {}) {
   });
   if (mode === 'never') throw new CrewError('gate.never', { gate });
   return { id, gate, mode, answered: reply };
-}
-
-// The session id of the process that runs the CLI. Claude Code exports CLAUDE_CODE_SESSION_ID to the Bash tool
-// (same value as the hook payload session_id); CLAUDE_SESSION_ID is kept for compatibility. CLAUDE_CODE_HOST_SESSION_ID
-// is a different value and is not used. Codex: no variable is known, so '' (the answer falls back, see below).
-function currentSession(env = process.env) {
-  return String((env && (env.CLAUDE_CODE_SESSION_ID || env.CLAUDE_SESSION_ID)) || '').trim() || undefined;
 }
 
 // Did the user speak between the ask and now? Judged once, when the answer is recorded. Returns true, false or 'project'.
