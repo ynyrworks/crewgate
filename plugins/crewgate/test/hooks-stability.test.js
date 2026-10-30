@@ -264,6 +264,33 @@ test('hook keeps quiet about the merge `crew task merge` recorded: same branches
   assert.deepEqual(H.evs(f, 'git.merge').map((e) => e.data.branches), [['feat/x'], ['feat/y']]);
 });
 
+test('dedupe still holds when a tag has the same name as the branch (git prints heads/<name>)', () => {
+  const f = H.fixture();
+  H.start(f);
+  const branch = git(f.repo, 'rev-parse', '--abbrev-ref', 'HEAD');
+  git(f.repo, 'tag', branch);
+  assert.equal(git(f.repo, 'rev-parse', '--abbrev-ref', 'HEAD'), 'heads/' + branch); // what crew task merge records
+  cliMerge(f);
+  post(f, 'git merge feat/x', 't1');
+  assert.equal(H.evs(f, 'git.merge').length, 1);
+});
+
+test('dedupe asks git when GIT_DIR / GIT_WORK_TREE are set (the .git files may not tell the same root)', () => {
+  const f = H.fixture();
+  H.start(f);
+  const other = tmpDir();
+  const saved = { GIT_DIR: process.env.GIT_DIR, GIT_WORK_TREE: process.env.GIT_WORK_TREE };
+  try {
+    process.env.GIT_DIR = path.join(f.repo, '.git');
+    process.env.GIT_WORK_TREE = other; // git now reports `other` as the work tree, the files say f.repo
+    cliMerge(f);
+    post(f, 'git merge feat/x', 'g1');
+  } finally {
+    for (const k of Object.keys(saved)) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
+  }
+  assert.equal(H.evs(f, 'git.merge').length, 1);
+});
+
 test('hook still records a merge of the same branch into another target or work tree, or of more branches', () => {
   const f = H.fixture();
   H.start(f);
