@@ -72,8 +72,17 @@
     return out;
   }
 
+  // Proposals waiting for a decision, as the server sends them (plan review). Private mode shows the id
+  // where a text would be; the commands and the kind/action words are not text and stay.
+  function proposalText(p, mask) { return mask ? p.id : p.text; }
+  function targetText(p, mask) { return !p.target ? '' : (mask || !p.target.text ? p.target.id : p.target.text); }
+  function pending(d) { return d && Array.isArray(d.proposals) ? d.proposals : []; }
+  // Round history, newest first.
+  function rounds(d) { return (d && Array.isArray(d.rounds) ? d.rounds.slice() : []).sort(function (a, b) { return b.round - a.round; }); }
+  function pendingTotal(list) { return (list || []).reduce(function (s, p) { return s + (p.pending || 0); }, 0); }
+
   // A link may only point at a task id the server made.
   function validTask(id) { return typeof id === 'string' && /^[\w.-]{1,40}$/.test(id); }
 
-  return { MARKS: MARKS, GROWTH_DAYS: GROWTH_DAYS, mark: mark, flatten: flatten, nodeText: nodeText, planTitle: planTitle, isRecent: isRecent, growth: growth, collapseKey: collapseKey, cleanCollapsed: cleanCollapsed, validTask: validTask };
+  return { MARKS: MARKS, GROWTH_DAYS: GROWTH_DAYS, mark: mark, flatten: flatten, nodeText: nodeText, planTitle: planTitle, isRecent: isRecent, growth: growth, collapseKey: collapseKey, cleanCollapsed: cleanCollapsed, validTask: validTask, proposalText: proposalText, targetText: targetText, pending: pending, rounds: rounds, pendingTotal: pendingTotal };
 }));

@@ -194,6 +194,11 @@ crew task create --title "..." --brief-file brief.md --plan 0-14:n2   # or: crew
 crew plan show 0-14
 ```
 
+Before you dispatch, a plan review can challenge the plan: a reviewer criticises it, a refuter tries to disprove each
+criticism, and the survivors appear as proposed `[?]` nodes under the step they are about (`crew plan review run|filter|finalize`).
+You accept or reject each one (`crew plan accept|reject`); only accepted nodes count. The board lists the pending proposals
+with the commands to copy.
+
 Hand-edit the file whenever you like (`- [ ] step`, two-space indentation, `[x]` done, `[~]` dropped); the CLI keeps
 your text and order and only adds ids. Details: [references/commands.md](plugins/crewgate/skills/crew/references/commands.md#plans).
 

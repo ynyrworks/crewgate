@@ -552,6 +552,8 @@
         h('a', { href: '#/p/' + encodeURIComponent(d.project.id) + '/plan/' + encodeURIComponent(p.slug), text: name }),
         h('div', { class: 'prow' }, planBar(p.pct, name), h('span', { class: 'pct', text: p.pct + '%' }), h('span', { class: 'muted', text: t('plan.steps', { done: p.done, total: p.total }) }), planCounts(p)));
     }))) : h('div', null, empty('plan.none'), h('pre', { class: 'cmd', text: 'crew plan new SLUG --title "..."' }));
+    var waiting = PM.pendingTotal(list);
+    if (waiting) body = h('div', null, h('p', { class: 'pending' }, h('span', { class: 'badge ps ps-proposed', text: plural('plan.pendingProject', waiting) })), body);
     return card(t('project.plans'), body, '', list.length ? list.length : null);
   }
 
@@ -562,12 +564,53 @@
     refresh(true);
   }
 
+  // kind, action and the uncertain mark of a proposal (words, not colour alone)
+  function proposalMarks(p) {
+    var out = [];
+    if (p.kind) out.push(h('span', { class: 'badge pk', text: t('plan.kind.' + p.kind) }));
+    if (p.action) out.push(h('span', { class: 'badge pa', text: t('plan.action.' + p.action) }));
+    if (p.uncertain) out.push(h('span', { class: 'badge ps ps-uncertain', text: '? ' + t('plan.uncertain') }));
+    return out;
+  }
+
+  function propRow(label, value) {
+    return h('div', { class: 'prow2' }, h('strong', { text: label + ': ' }), value);
+  }
+
+  // One proposal waiting for a decision. The board is read-only: the commands are shown to copy.
+  function proposalItem(p, d) {
+    var li = h('li', { class: 'pprop' + (p.uncertain ? ' is-uncertain' : '') });
+    li.appendChild(h('div', { class: 'phead' },
+      S.mask ? null : h('code', { text: p.id }),
+      proposalMarks({ kind: p.kind, action: p.action, uncertain: p.uncertain }),
+      p.verdict && !p.uncertain ? h('span', { class: 'badge', text: t('plan.verdict.' + p.verdict) }) : null,
+      p.round ? h('span', { class: 'muted', text: t('plan.prop.round', { round: p.round }) }) : null));
+    li.appendChild(propRow(t('plan.prop.about'), p.target ? PM.targetText(p, S.mask) : t('plan.prop.whole')));
+    li.appendChild(propRow(t('plan.prop.proposal'), PM.proposalText(p, S.mask)));
+    if (p.done_when && !S.mask) li.appendChild(propRow(t('plan.prop.doneWhen'), p.done_when));
+    if (!S.mask && p.claim) {
+      li.appendChild(propRow(t('plan.prop.claim'), p.claim));
+      if (p.evidence && p.evidence.length) li.appendChild(propRow(t('plan.prop.evidence'), p.evidence.join(' · ')));
+      if (p.refutation) li.appendChild(propRow(t('plan.prop.refuter'), typeof p.refutation === 'string' ? p.refutation : [].concat(p.refutation).join(' · ')));
+    } else if (!S.mask && p.round && !d.show_text) li.appendChild(h('p', { class: 'muted', text: t('plan.prop.textOff') }));
+    li.appendChild(h('div', { class: 'pcmds' }, commandBlock([p.accept_cmd, p.reject_cmd])));
+    return li;
+  }
+
+  function proposalsCard(d) {
+    var list = PM.pending(d);
+    if (!list.length) return null;
+    return card(plural('plan.pendingTitle', list.length), h('div', null,
+      h('p', { class: 'muted', text: t('plan.prop.hint') }),
+      h('ul', { class: 'pprops' }, list.map(function (p) { return proposalItem(p, d); }))));
+  }
+
   function planNode(n, pid, slug, recent) {
     var key = PM.collapseKey(pid, slug, n.id);
     var kids = n.children.length;
     var open = !S.pcollapsed[key];
     var text = PM.nodeText(n, S.mask);
-    var li = h('li', { class: 'pnode' + (recent[n.id] ? ' is-new' : '') + (n.state === 'dropped' ? ' is-dropped' : '') });
+    var li = h('li', { class: 'pnode' + (recent[n.id] ? ' is-new' : '') + (n.state === 'dropped' ? ' is-dropped' : '') + (n.state === 'proposed' ? ' is-proposal' : '') });
     var head = h('div', { class: 'phead' },
       kids ? h('button', { type: 'button', class: 'toggle', 'data-fid': 'pt-' + n.id, 'aria-expanded': open ? 'true' : 'false', 'aria-label': t(open ? 'plan.collapse' : 'plan.expand') + ': ' + text, onclick: function () { toggleCollapsed(key); }, text: open ? '▾' : '▸' }) : h('span', { class: 'toggle spacer' }),
       planChip(n.state),
@@ -580,6 +623,7 @@
       meta.appendChild(h('span', null, ' · ' + t('plan.task') + ' ', h('code', { text: n.task.id }), ' ', n.task.missing ? h('span', { class: 'badge s-failed', text: t('plan.taskMissing') }) : badge(n.task.state)));
     }
     if (n.origin !== 'plan') meta.appendChild(h('span', { class: 'badge po po-' + n.origin, text: t('plan.origin.' + n.origin) }));
+    if (n.proposal) proposalMarks(n.proposal).forEach(function (m) { meta.appendChild(m); });
     if (n.added) meta.appendChild(h('span', { text: ' · ' + t('plan.added', { date: n.added }) }));
     if (recent[n.id]) meta.appendChild(h('span', { class: 'badge ps ps-new', text: t('plan.new') }));
     li.appendChild(meta);
@@ -587,14 +631,22 @@
     return li;
   }
 
-  function growthCard(g) {
+  function roundsTable(list) {
+    if (!list.length) return h('p', { class: 'empty', text: t('plan.rounds.none') });
+    return table([t('plan.rcol.date'), t('plan.rcol.round'), t('plan.rcol.raised'), t('plan.rcol.refuted'), t('plan.rcol.kept'), t('plan.rcol.accepted'), t('plan.rcol.rejected')],
+      list.map(function (r) {
+        return h('tr', null, td(r.date), td(String(r.round), true), td(String(r.raised), true), td(String(r.refuted), true), td(String(r.kept), true), td(String(r.accepted), true), td(String(r.rejected), true));
+      }), [1, 2, 3, 4, 5, 6], 'rounds', t('plan.rounds'));
+  }
+
+  function growthCard(g, rounds) {
     var body = g.groups.length ? cap('growth', t('plan.growth'), h('ul', { class: 'list' }, g.groups.map(function (day) {
       return h('li', null, h('strong', { text: day.date }), day.recent ? ' ' + t('plan.new') : '',
         h('ul', { class: 'list nested' }, day.origins.map(function (o) {
           return h('li', null, h('span', { class: 'badge po po-' + o.origin, text: t('plan.origin.' + o.origin) }), ' ' + o.items.map(function (n) { return PM.nodeText(n, S.mask); }).join(' · '));
         })));
     }))) : empty('plan.growthNone');
-    return card(t('plan.growth'), body);
+    return card(t('plan.growth'), h('div', null, body, h('h3', { text: t('plan.rounds') }), roundsTable(rounds || [])));
   }
 
   function planPage(d, pid) {
@@ -607,12 +659,14 @@
     if (d.goal && !S.mask) root.appendChild(h('p', { class: 'muted', text: d.goal }));
     root.appendChild(h('div', { class: 'prow big' }, planBar(s.pct, title), h('span', { class: 'pct', text: s.pct + '%' }), h('span', { class: 'muted', text: t('plan.steps', { done: s.done, total: s.total }) }), planCounts(s)));
     if (d.truncated) root.appendChild(h('p', { class: 'err', text: t('plan.truncated') }));
+    var props = proposalsCard(d);
+    if (props) root.appendChild(props);
     root.appendChild(h('div', { class: 'row' },
       h('button', { type: 'button', 'data-fid': 'pg', 'aria-pressed': S.pgrowth ? 'true' : 'false', onclick: function () { S.pgrowth = !S.pgrowth; store('crew.planGrowth', S.pgrowth ? '1' : '0'); S.last = ''; refresh(true); }, text: t('plan.showGrowth') }),
       h('span', { class: 'muted', text: t('plan.growthHint', { days: PM.GROWTH_DAYS, count: g.recentCount }) })));
     var recent = S.pgrowth ? g.recent : {};
     root.appendChild(card(t('plan.tree'), d.nodes.length ? h('ul', { class: 'ptree root' }, d.nodes.map(function (n) { return planNode(n, pid, d.slug, recent); })) : empty('plan.emptyTree'), '', s.nodes));
-    if (S.pgrowth) root.appendChild(growthCard(g));
+    if (S.pgrowth) root.appendChild(growthCard(g, PM.rounds(d)));
     return root;
   }
 
