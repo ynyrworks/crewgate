@@ -127,10 +127,10 @@ async function run(argv, ctx) {
     if (b.state === 'running') add('board', 'ok', ctx.t('wf.doctor.boardRunning', { port }));
     else if (b.state === 'down') add('board', 'ok', ctx.t('wf.doctor.boardDown', { port }));
     else add('board', 'warn', ctx.t('wf.doctor.boardOther', { port, detail: b.detail }));
-    if (b.state !== 'running') {
-      const stale = boardCmd.staleState();
-      if (stale) add('board', 'warn', ctx.t('board.stale', { pid: stale.pid, started: stale.started || '?', log: boardCmd.logFile() }));
-    }
+    // board.json naming a dead pid is stale whoever answers on the port: a board that answers there is not the one
+    // recorded (another data folder, or one started before the file was lost), so say so instead of claiming it.
+    const stale = boardCmd.staleState();
+    if (stale) add('board', 'warn', ctx.t('board.stale', { pid: stale.pid, started: stale.started || '?', log: boardCmd.logFile() }));
   }
   add('autostart', 'ok', ctx.t(config.loadGlobal().config.board.autostart ? 'wf.doctor.autostartOn' : 'wf.doctor.autostartOff'));
 

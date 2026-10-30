@@ -9,16 +9,33 @@ const { spawnSync } = require('node:child_process');
 const h = require('./hooks-helpers');
 const bh = require('./board-helpers');
 
-const F = h.fixture();
-const HOME = F.home;
 const board = require('../lib/commands/board');
-const crewEnv = { CREWGATE_HOME: HOME };
-const crew = (args) => bh.crew(args, process.cwd(), crewEnv);
-const state = path.join(HOME, 'board.json');
-const lock = path.join(HOME, 'board.starting');
-const log = path.join(HOME, 'board.log');
-const writeGlobal = (o) => fs.writeFileSync(path.join(HOME, 'config.json'), JSON.stringify({ version: 1, ...o }));
-const reset = () => { for (const f of [state, lock, log, path.join(HOME, 'config.json')]) fs.rmSync(f, { force: true }); };
+const BIN = require('./helpers').BIN;
+const { spawn } = require('node:child_process');
+
+// A fresh data folder per test (process.env.CREWGATE_HOME points at it while the test runs; tests in a file run one
+// after another). Nothing a late helper or board does can reach another test's files. t.after switches autostart off
+// in that folder, stops the board it started and removes the folder, so nothing outlives the test.
+function fresh(t) {
+  const F = h.fixture();
+  const HOME = F.home;
+  const E = {
+    F, HOME,
+    state: path.join(HOME, 'board.json'),
+    lock: path.join(HOME, 'board.starting'),
+    log: path.join(HOME, 'board.log'),
+    crew: (args) => bh.crew(args, process.cwd(), { CREWGATE_HOME: HOME }),
+    reset() { for (const f of [E.state, E.lock, E.log, path.join(HOME, 'config.json')]) fs.rmSync(f, { force: true }); },
+    writeGlobal: (o) => fs.writeFileSync(path.join(HOME, 'config.json'), JSON.stringify({ version: 1, ...o })),
+  };
+  t.after(() => {
+    fs.rmSync(path.join(HOME, 'config.json'), { force: true });
+    E.crew(['board', 'stop']);
+    try { const pid = JSON.parse(fs.readFileSync(E.state, 'utf8')).pid; if (pid !== process.pid) process.kill(pid, 'SIGKILL'); } catch { /* no board left */ }
+    fs.rmSync(HOME, { recursive: true, force: true });
+  });
+  return E;
+}
 const freePort = () => new Promise((resolve) => {
   const s = net.createServer();
   s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => resolve(p)); });
@@ -29,9 +46,8 @@ const until = async (fn, ms = 15000) => {
   return null;
 };
 
-test.after(() => { crew(['board', 'stop']); });
-
-test('autostart is off by default and never spawns', () => {
+test('autostart is off by default and never spawns', (t) => {
+  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = fresh(t);
   reset();
   let calls = 0;
   assert.equal(board.ensureStarted({ spawn: () => { calls++; } }), 'off');
@@ -41,7 +57,8 @@ test('autostart is off by default and never spawns', () => {
   assert.equal(fs.existsSync(lock), false);
 });
 
-test('autostart: one spawn for two callers, a live state file wins, a stale lock is retaken, a failing spawn is an error', () => {
+test('autostart: one spawn for two callers, a live state file wins, a stale lock is retaken, a failing spawn is an error', (t) => {
+  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = fresh(t);
   reset();
   writeGlobal({ port: 45678, board: { autostart: true } });
   const ports = [];
@@ -69,7 +86,8 @@ test('autostart: one spawn for two callers, a live state file wins, a stale lock
   reset();
 });
 
-test('SessionStart starts the board when board.autostart is on, without waiting for it, and a second start reuses it', async () => {
+test('SessionStart starts the board when board.autostart is on, without waiting for it, and a second start reuses it', async (t) => {
+  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = fresh(t);
   reset();
   const port = await freePort();
   writeGlobal({ port, board: { autostart: true } });
@@ -93,7 +111,8 @@ test('SessionStart starts the board when board.autostart is on, without waiting 
   assert.equal(crew(['board', 'stop']).code, 0);
 });
 
-test('SessionStart leaves the board alone by default', () => {
+test('SessionStart leaves the board alone by default', (t) => {
+  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = fresh(t);
   reset();
   const r = h.start(F);
   assert.equal(r.code, 0, r.err);
@@ -102,34 +121,37 @@ test('SessionStart leaves the board alone by default', () => {
 });
 
 function child(script) {
-  return spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', env: { ...process.env, CREWGATE_HOME: HOME }, timeout: 20000 });
+  return spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', env: { ...process.env }, timeout: 20000 });
 }
 const loadBoard = `const b = require(${JSON.stringify(path.join(__dirname, '..', 'lib', 'commands', 'board.js'))});`;
 
-test('the server logs why it stops: exit, uncaught exception, unhandled rejection', () => {
+test('the server logs why it stops: exit, uncaught exception, unhandled rejection', (t) => {
+  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = fresh(t);
   reset();
   child(`${loadBoard} b.installStopLog();`);
   assert.match(fs.readFileSync(log, 'utf8'), /^\d{4}-\d\d-\d\dT[\d:.]+Z board \(pid \d+\) exit, code 0$/m);
   reset();
   const c = child(`${loadBoard} b.installStopLog(); setTimeout(() => { throw new Error('kaput'); }, 10);`);
   assert.equal(c.status, 1);
-  const t = fs.readFileSync(log, 'utf8');
-  assert.match(t, /uncaught exception: Error: kaput/);
-  assert.match(t, /exit, code 1/);
+  const text = fs.readFileSync(log, 'utf8');
+  assert.match(text, /uncaught exception: Error: kaput/);
+  assert.match(text, /exit, code 1/);
   reset();
   child(`${loadBoard} b.installStopLog(); Promise.reject(new Error('nope')); setTimeout(() => {}, 1000);`);
   assert.match(fs.readFileSync(log, 'utf8'), /unhandled rejection: Error: nope/);
 });
 
-test('the server logs the signal that stops it', { skip: process.platform === 'win32' && 'Windows has no catchable SIGTERM' }, () => {
+test('the server logs the signal that stops it', { skip: process.platform === 'win32' && 'Windows has no catchable SIGTERM' }, (t) => {
+  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = fresh(t);
   reset();
   child(`${loadBoard} b.installStopLog(); process.on('SIGTERM', () => process.exit(0)); setTimeout(() => process.kill(process.pid, 'SIGTERM'), 20); setTimeout(() => {}, 5000);`);
-  const t = fs.readFileSync(log, 'utf8');
-  assert.match(t, /received SIGTERM/);
-  assert.match(t, /exit, code 0/);
+  const text = fs.readFileSync(log, 'utf8');
+  assert.match(text, /received SIGTERM/);
+  assert.match(text, /exit, code 0/);
 });
 
-test('status and doctor report a board that vanished without a stop line', async () => {
+test('status and doctor report a board that vanished without a stop line', async (t) => {
+  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = fresh(t);
   reset();
   const port = await freePort();
   writeGlobal({ port });
@@ -149,7 +171,8 @@ test('status and doctor report a board that vanished without a stop line', async
   reset();
 });
 
-test('a state file whose pid is alive but where nothing answers is stale: board ensure starts a board', async () => {
+test('a state file whose pid is alive but where nothing answers is stale: board ensure starts a board', async (t) => {
+  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = fresh(t);
   reset();
   const port = await freePort();
   writeGlobal({ port, board: { autostart: true } });
@@ -172,7 +195,8 @@ test('a state file whose pid is alive but where nothing answers is stale: board 
   reset();
 });
 
-test('SessionStart with a reused pid in board.json ends with one working board', async () => {
+test('SessionStart with a reused pid in board.json ends with one working board', async (t) => {
+  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = fresh(t);
   reset();
   const port = await freePort();
   writeGlobal({ port, board: { autostart: true } });
@@ -189,16 +213,17 @@ test('SessionStart with a reused pid in board.json ends with one working board',
   assert.equal(crew(['board', 'stop']).code, 0);
 });
 
-test('manual board start waits for an autostart in progress and reports that board', async () => {
+test('manual board start waits for an autostart in progress and reports that board', async (t) => {
+  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = fresh(t);
   reset();
   const port = await freePort();
   fs.writeFileSync(lock, '1');
-  const c = require('node:child_process').spawn(process.execPath, [require('../test/helpers').BIN, 'board', 'start', '--no-open', '--json'], { env: { ...process.env, CREWGATE_HOME: HOME } });
+  const c = spawn(process.execPath, [BIN, 'board', 'start', '--no-open', '--json'], { env: { ...process.env } });
   let out = '';
   c.stdout.on('data', (d) => { out += d; });
   await new Promise((r) => setTimeout(r, 500));
   // the "autostarted" board: a real one, tracked in board.json, which drops the lock when it listens
-  const serve = require('node:child_process').spawn(process.execPath, [require('../test/helpers').BIN, 'board', 'serve', '--port', String(port)], { env: { ...process.env, CREWGATE_HOME: HOME }, stdio: 'ignore' });
+  const serve = spawn(process.execPath, [BIN, 'board', 'serve', '--port', String(port)], { env: { ...process.env }, stdio: 'ignore' });
   const code = await new Promise((r) => c.on('exit', r));
   assert.equal(code, 0, out);
   const j = JSON.parse(out);
@@ -213,7 +238,8 @@ test('manual board start waits for an autostart in progress and reports that boa
   reset();
 });
 
-test('manual board start takes and releases the lock', async () => {
+test('manual board start takes and releases the lock', async (t) => {
+  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = fresh(t);
   reset();
   const port = await freePort();
   assert.equal(crew(['board', 'start', '--port', String(port), '--no-open']).code, 0);
@@ -226,4 +252,19 @@ test('manual board start takes and releases the lock', async () => {
   assert.equal(fs.existsSync(lock), false);
   blocker.close();
   reset();
+});
+
+test('doctor: a board answering on the port does not make a state file with a dead pid look healthy', async (t) => {
+  const { state, crew, writeGlobal } = fresh(t);
+  // a real board of ANOTHER data folder holds the port (what a leaked or foreign board looks like)
+  const other = require('./helpers').tmpDir('crew-other-home-');
+  const port = await freePort();
+  const run = (args) => bh.crew(args, process.cwd(), { CREWGATE_HOME: other });
+  t.after(() => { run(['board', 'stop']); });
+  assert.equal(run(['board', 'start', '--port', String(port), '--no-open']).code, 0);
+  writeGlobal({ port });
+  fs.writeFileSync(state, JSON.stringify({ pid: 2147483000, port, started: '2026-10-30T01:02:03.000Z' }));
+  const doc = crew(['doctor']);
+  assert.match(doc.out, new RegExp(`Board: running on 127\.0\.0\.1:${port}`));
+  assert.match(doc.out, /WARN {2}Board: The board stopped without logging a reason \(pid 2147483000/);
 });
