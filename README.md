@@ -4,7 +4,7 @@
 
 [繁體中文](README.zh-TW.md)
 
-**Delegate coding work to AI subagents, with independent review, approvals before anything leaves your machine, and a record of what really happened.**
+**Hand coding work to AI subagents and still be able to trust the result: the work stays on its goal, someone other than the author checks it, you approve what leaves your machine, and there is a record of what really happened.**
 
 ## What is crewgate
 
@@ -43,7 +43,7 @@ crewgate adds nothing to your project except a config file and a few markdown fi
 - Local only: the board binds `127.0.0.1`, no telemetry, no model calls from hooks or the board, one optional update check.
 
 **Visibility**
-- A local board with these pages: Overview, Project, Sessions (live Claude and Codex sessions in one tree), a per-session timeline with search, History (up to 90 days), Usage (tokens and estimated cost), Office (experimental pixel-art view), Settings (a form generated from the config schema), and an update banner. English and Traditional Chinese.
+- A local board with these pages: Overview, Project, Sessions (live Claude and Codex sessions in one tree), a per-session timeline with search, History (up to 90 days), Usage (tokens and estimated cost), Settings (a form generated from the config schema), and an update banner. English and Traditional Chinese. A pixel-art Office page is an [optional add-on](#optional-office-view).
 - Dispatches, returns, pushes, merges and session digests are recorded by hooks; you do not log anything by hand.
 
 **Learning**
@@ -59,7 +59,7 @@ will not accept incomplete, edit and big-read guards, state taken from hook even
 stop reminders for unreviewed or still-running work, and lessons promoted into rules only when you say yes.
 The model is still asked to follow the process; crewgate makes it visible when it does not.
 
-Status: experimental parts are labelled where they appear: Codex support, the Office view, and `confirm` mode
+Status: experimental parts are labelled where they appear: Codex support, the optional Office add-on, and `confirm` mode
 in bypass-permissions mode (not verified). Zero runtime dependencies. Node.js 18 or newer. Works on Windows,
 macOS and Linux. The only network request is the board's optional update check (one request a day to GitHub, see
 Privacy and safety; turn it off with `updates.check`).
@@ -117,7 +117,7 @@ hook is a silent no-op. Details: [plugins/crewgate/hooks/README.md](plugins/crew
 **Board.** `crew board start` serves a local page: all projects, tasks by state with return counts, live
 subagents, things waiting for you, work streams, log, review statistics, lessons, handoffs, a live list of
 local Claude Code / Codex sessions with a per-session timeline, a History page that looks back up to 90 days,
-token usage, an experimental Office view, and a Settings form generated from the config schema.
+token usage, and a Settings form generated from the config schema.
 English and Traditional Chinese.
 
 A complete, fictional session is in [examples/todo-cli/WALKTHROUGH.md](examples/todo-cli/WALKTHROUGH.md).
@@ -140,6 +140,8 @@ claude --plugin-dir crewgate/plugins/crewgate
 
 The skill is invoked namespaced: `/crewgate:crew`. The CLI lives at `plugins/crewgate/bin/crew.js`; inside
 Claude Code the skill calls it for you. From a terminal use `node plugins/crewgate/bin/crew.js <command>`.
+
+This installs everything crewgate needs. The Office page is separate and you can skip it: see [Optional: Office view](#optional-office-view).
 
 ## Quick start
 
@@ -181,13 +183,21 @@ fails if the committed file is out of date.
 
 ## Plans
 
-A plan is a tree of steps kept as Markdown in your repo (`.crew/plans/<name>.md`). Leaves link to crewgate tasks, so
-the board can show how far the whole job is and updates by itself when the file or a task changes. The plan may keep
-growing: every node records where it came from (`plan`, `user`, `review`, `refute`, `implementation`, `send-back`)
-and when it was added, and the plan page can highlight what was added recently.
+A plan keeps the work from drifting away from what you set out to do. It records the goal, and every step can be
+held against it: when a new step does not serve the goal, the orchestrator is told to raise it with you instead of
+folding it in. You then drop it, move it to its own plan, or change the goal.
+
+Technically, a plan is a tree of steps kept as Markdown in your repo (`.crew/plans/<name>.md`). Leaves link to crewgate
+tasks, so the board can show how far the whole job is and updates by itself when the file or a task changes. A plan may
+grow, but visibly: every node records where it came from (`plan`, `user`, `review`, `refute`, `implementation`,
+`send-back`) and when it was added, and the plan page can highlight what was added recently.
+
+For a plan of about three steps or more, the orchestrator is told to clarify first: it asks only what would change the
+plan and what the code cannot answer, and keeps the answers in the plan file. It asks again only when the goal, scope, a
+constraint or an earlier answer changes. These are instructions to the model, not checks that crewgate enforces.
 
 ```
-crew plan new 0-14 --title "0.14 plan"
+crew plan new 0-14 --title "0.14 plan" --goal "What this release must achieve"
 crew plan add 0-14 "Plan tree and completion view"
 crew plan add 0-14 "File format and CLI" --under n1
 crew task create --title "..." --brief-file brief.md --plan 0-14:n2   # or: crew plan link 0-14 n2 <task-id>
@@ -233,13 +243,6 @@ All screenshots come from a fully fictional demo (`node scripts/demo-board.js`, 
   <img alt="Sessions" src="docs/images/sessions-light.png" width="100%">
 </picture>
 
-**Office (experimental): the same sessions as a small pixel-art office, one room per project.** Role marks (headset, hard hat, glasses, horns) show the role, shirt colour the engine. Characters act out the work: reading holds a document, searching a magnifier, editing types fast, a command shows a terminal with a progress bar, waiting shows a `!`. Finished subagents walk to their parent with a paper, idle sessions rest on the sofa, finished ones walk out of the door. Drawn from scratch on a canvas, no external assets, still works with a keyboard through the list under it.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/office-dark.png">
-  <img alt="Office: sessions as pixel-art characters at desks" src="docs/images/office-light.png" width="100%">
-</picture>
-
 **History: sessions older than 24 hours, up to 90 days back, grouped by day with the same statistics; every row opens its timeline.**
 
 <picture>
@@ -261,9 +264,36 @@ All screenshots come from a fully fictional demo (`node scripts/demo-board.js`, 
   <img alt="Settings" src="docs/images/settings-light.png" width="100%">
 </picture>
 
+## Optional: Office view
+
+The Office page shows your sessions as a small pixel-art office. It is for fun and for an at-a-glance feel; nothing in
+crewgate depends on it, so it is a separate plugin that you install only if you want it. Without it there is no Office tab.
+
+```
+/plugin install crewgate-office@crewgate
+```
+
+Then reload the board page; the board does not need a restart. From a terminal, use `claude plugin install crewgate-office@crewgate`. Once it
+is installed, one-click update keeps it current. If the two ever do not match, the tab says so and shows the commands to
+update it, and the rest of the board keeps working. To remove it, use `/plugin uninstall crewgate-office@crewgate`.
+
+**Upgrading from 0.14 or older:** the Office tab disappears until you install the add-on. Nothing else changes.
+
+Installing it through Codex is experimental and has not been verified. A local checkout finds `plugins/crewgate-office` by itself.
+
+**What it shows: one room per project.** Role marks (headset, hard hat, glasses, horns) show the role, shirt colour the engine. Characters act out the work: reading holds a document, searching a magnifier, editing types fast, a command shows a terminal with a progress bar, waiting shows a `!`. Finished subagents walk to their parent with a paper, idle sessions rest on the sofa, finished ones walk out of the door. Drawn from scratch on a canvas, no external assets, still works with a keyboard through the list under it.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/office-dark.png">
+  <img alt="Office: sessions as pixel-art characters at desks" src="docs/images/office-light.png" width="100%">
+</picture>
+
 ## Roadmap
 
 What is next, what comes later and what is 1.0: [docs/ROADMAP.md](docs/ROADMAP.md).
+
+An enhanced WebGL Office is planned for the next release, in the same optional add-on. It is not available yet, and the
+pixel-art view stays as the fallback for browsers without WebGL.
 
 ## Privacy and safety
 
@@ -366,7 +396,7 @@ codex plugin add crewgate@crewgate
 - Git and gate detection reads only the command text of the Bash and PowerShell tools. A script that pushes, a configured alias, a variable (`$GIT push`), `-EncodedCommand` or a push by another tool (IDE, Git GUI, MCP server) is not seen; the gates guard against the model's ordinary habits, not against a determined bypass.
 - `gates.enforce: confirm` relies on Claude Code honouring a PreToolUse `ask`; its behaviour in bypass-permissions mode (and `dontAsk`) is not verified. `gate.confirmed` means the command ran after an ask was returned, not that a human clicked.
 - Codex sessions stay on `remind`: whether Codex honours `ask` / `deny` from a hook is not established. Where the session id is unknown (Codex CLI), `gates.require_user_turn` falls back to the weaker `"project"` check: a message in any session of the project counts.
-- The Office view is experimental and shows activity, not results: whether a command passed is not in the data it receives. A Codex orchestrator is experimental; there is no Gemini support.
+- The optional Office add-on is experimental and shows activity, not results: whether a command passed is not in the data it receives. A Codex orchestrator is experimental; there is no Gemini support.
 
 ## Contributing
 

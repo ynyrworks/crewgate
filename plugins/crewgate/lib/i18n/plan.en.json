@@ -14,6 +14,7 @@
   "plan.notProposed": "Node {node} is not a proposed node; accept only applies to [?]",
   "plan.badTarget": "--plan takes SLUG:NODE (for example 0-14-plan:n3)",
   "plan.created": "Plan {slug} created: {file}",
+  "plan.noGoal": "Warning: this plan has no goal, so nothing can tell when the work drifts away from it. Add a goal line under the title in the plan file.",
   "plan.added": "Node {id} added to {slug}",
   "plan.linked": "Node {id} linked to task {task}",
   "plan.changed": "Node {id} is now {state}",

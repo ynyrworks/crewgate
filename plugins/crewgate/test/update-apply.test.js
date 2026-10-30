@@ -59,6 +59,36 @@ test('both installed: the three fixed commands run in order, stdin of codex is c
   assert.equal(m.calls().includes('stdin-open'), false);
 });
 
+const WITH_OFFICE = JSON.stringify([{ id: 'crewgate@crewgate' }, { id: 'crewgate-office@crewgate' }]);
+
+test('the Office add-on is updated along with the plugin only when it is installed', async () => {
+  const m = machine({ codex: false, codexConfigured: false, claudeCfg: { list: WITH_OFFICE } });
+  const s = (await runIt(m)).status();
+  assert.equal(s.state, 'done', JSON.stringify(s));
+  assert.deepEqual(s.steps.map((x) => x.cmd), [
+    'claude plugin marketplace update crewgate',
+    'claude plugin update crewgate@crewgate',
+    'claude plugin update crewgate-office@crewgate',
+  ]);
+});
+
+test('a failed add-on update is shown but does not fail the plugin update', async () => {
+  const onUpdate = "if (args[2].includes('office')) process.exit(3);";
+  const m = machine({ codex: false, codexConfigured: false, claudeCfg: { list: WITH_OFFICE, onUpdate } });
+  const s = (await runIt(m)).status();
+  assert.equal(s.state, 'done', JSON.stringify(s));
+  assert.deepEqual(s.steps.map((x) => x.ok), [true, true, false]);
+  assert.equal(s.results.find((x) => x.tool === 'claude').status, 'updated');
+});
+
+test('a long plugin list does not hide the plugin behind the output limit', async () => {
+  const list = JSON.stringify([...Array.from({ length: 200 }, (_, i) => ({ id: `other-plugin-${i}@somewhere` })), { id: 'crewgate@crewgate' }]);
+  assert.ok(list.length > 5000);
+  const m = machine({ codex: false, codexConfigured: false, claudeCfg: { list } });
+  const s = (await runIt(m)).status();
+  assert.deepEqual(s.steps.map((x) => x.tool), ['claude', 'claude']);
+});
+
 test('only Claude installed: no codex command is run', async () => {
   const m = machine({ codex: false, codexConfigured: false });
   const s = (await runIt(m)).status();

@@ -79,6 +79,7 @@ Endpoints (all JSON; reads are GET, every write is POST with `Content-Type: appl
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/health` | `{ ok: true, name: "crewgate", version }` (used by `crew doctor`) |
+| `GET /api/addons` | whether the optional Office add-on is `missing`, `outdated` or `ok`, its install and update commands, and the files to load (`board/office-addon.js`) |
 | `GET /api/update`, `POST /api/update/check`, `POST /api/update/apply`, `GET /api/update/status`, `GET|POST /api/update/cleanup` | update notice `{ enabled, current, latest, kind, notes_url, rehook, checked_at }`; forced re-check; start the one-click update (no parameters); its progress `{ state, current, steps, manual, results, old_versions, error, new_version, restart_command }`; old plugin versions that can be removed / removing them (POST has no parameters) (`board/update-routes.js`) |
 | `GET /api/meta`, `/api/schema` | defaults, and `config.SCHEMA` / `GLOBAL_SCHEMA` for the Settings form |
 | `GET /api/overview` | every registered project: tasks by state, open needs, live subagents, last activity |

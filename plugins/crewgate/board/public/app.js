@@ -4,7 +4,7 @@
   // ------------------------------------------------------------------ state and helpers
   var $ = function (id) { return document.getElementById(id); };
   var TOKEN = (document.querySelector('meta[name="crew-token"]') || {}).content || '';
-  var S = { lang: 'en', mask: false, sf: null, sopen: {}, tables: {}, meta: null, timer: null, last: '', route: null, busy: false, offline: false, pcollapsed: {}, pgrowth: false };
+  var S = { lang: 'en', mask: false, sf: null, sopen: {}, tables: {}, meta: null, timer: null, last: '', route: null, busy: false, offline: false, pcollapsed: {}, pgrowth: false, office: { state: 'missing' } };
 
   function store(key, val) {
     try { if (val === undefined) return window.localStorage.getItem(key); window.localStorage.setItem(key, val); } catch (e) { /* storage unavailable */ }
@@ -340,7 +340,8 @@
     $('skip').textContent = t('skip');
     $('nav').setAttribute('aria-label', t('nav'));
     var page = S.route.page;
-    var items = [['overview', '#/', t('nav.overview')], ['sessions', '#/sessions', t('nav.sessions')], ['history', '#/history', t('nav.history')], ['office', '#/office', t('office.nav')], ['usage', '#/usage', t('nav.usage')], ['settings', '#/settings', t('nav.settings')]];
+    var items = [['overview', '#/', t('nav.overview')], ['sessions', '#/sessions', t('nav.sessions')], ['history', '#/history', t('nav.history')], ['usage', '#/usage', t('nav.usage')], ['settings', '#/settings', t('nav.settings')]];
+    if (S.office.state !== 'missing') items.splice(3, 0, ['office', '#/office', t('office.nav')]);   // the add-on is optional
     var nav = $('nav');
     nav.textContent = '';
     items.forEach(function (it) {
@@ -1284,9 +1285,39 @@
     return h('div', null, h('h1', { text: t(projectId ? 'settings.project' : 'settings.global') }), h('p', { class: 'muted', text: t('settings.hint') }), intro, form);
   }
 
-  // ------------------------------------------------------------------ office (drawn by office.js)
+  // ------------------------------------------------------------------ office (an optional add-on, drawn by its office.js)
+  // Loads what the add-on lists, one file after another. Whatever fails, the rest of the board keeps working.
+  function loadOffice() {
+    return api('/api/addons').then(function (res) {
+      if (res.status >= 400 || !res.data.office) return;
+      S.office = res.data.office;
+      if (S.office.state !== 'ok') return;
+      S.office.styles.forEach(function (href) { document.head.appendChild(h('link', { rel: 'stylesheet', href: href })); });
+      return S.office.scripts.reduce(function (p, src) {
+        return p.then(function () {
+          return new Promise(function (resolve, reject) {
+            var s = document.createElement('script');
+            s.src = src;
+            s.onload = resolve;
+            s.onerror = reject;
+            document.body.appendChild(s);
+          });
+        });
+      }, Promise.resolve());
+    }).catch(function () { if (S.office.state === 'ok') S.office.state = 'outdated'; });
+  }
+
+  // How to install or update the add-on, or the version that is installed.
+  function officeStatus() {
+    var o = S.office;
+    var commands = function (list) { return list.map(function (c) { return h('p', null, h('code', { text: c })); }); };
+    if (o.state === 'ok') return h('div', null, h('p', { text: t('office.optionalIntro') }), h('p', { class: 'muted', text: t('office.installed', { version: o.version || '?' }) }));
+    if (o.state === 'outdated') return h('div', null, h('p', { text: t('office.outdated') }), commands(o.update || []));
+    return h('div', null, h('p', { text: t('office.optionalIntro') }), h('p', { text: t('office.installHow') }), commands(o.install || []));
+  }
+
   function officePage(d) {
-    if (!window.Office) return empty('office.none');
+    if (S.office.state !== 'ok' || !window.Office) return h('div', null, h('h1', { text: t('office.title') }), card(t('office.optional'), officeStatus()));
     // a session page is used when this build has one (#/s/<id>); otherwise the sessions list, filtered to that project
     var hasSession = parseHash('#/s/x').page !== 'overview';
     return window.Office.page(d, {
@@ -1378,7 +1409,8 @@
       Promise.all([api('/api/schema'), api(pid ? '/api/project/' + pid + '/config' : '/api/config')]).then(function (rs) {
         if (rs[1].status >= 400) { render(card(t('error'), h('p', { class: 'err', text: rs[1].data.error.message })), 'settings-err'); return; }
         var schema = pid ? rs[0].data.project : rs[0].data.global;
-        render(settingsPage(schema, rs[1].data, pid, function () { S.last = ''; refresh(true); }), 'settings' + tag + Date.now());
+        var form = settingsPage(schema, rs[1].data, pid, function () { S.last = ''; refresh(true); });
+        render(pid ? form : h('div', null, form, card(t('office.optional'), officeStatus())), 'settings' + tag + Date.now());
       }).then(done, fail);
       return;
     }
@@ -1406,7 +1438,7 @@
     try { S.pcollapsed = PM.cleanCollapsed(JSON.parse(store('crew.planCollapsed') || '{}')); } catch (e) { S.pcollapsed = {}; }
     S.pgrowth = store('crew.planGrowth') === '1';
     try { var so = JSON.parse(store('crew.sessionOpen') || '{}'); S.sopen = so && typeof so === 'object' && !Array.isArray(so) ? so : {}; } catch (e) { S.sopen = {}; }
-    loadTables().then(function () {
+    loadTables().then(loadOffice).then(function () {
       S.route = parseRoute();
       renderChrome();
       window.addEventListener('hashchange', function () { S.last = ''; refresh(true); });

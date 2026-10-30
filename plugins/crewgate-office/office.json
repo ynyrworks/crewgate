@@ -1,0 +1,5 @@
+{
+  "office_api": 1,
+  "scripts": ["office-sprites.js", "office-model.js", "office.js"],
+  "styles": ["office.css"]
+}

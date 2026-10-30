@@ -49,10 +49,22 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
 2. **Split the work** into pieces that can be reviewed alone. Prefer pieces that touch different
    files so workers do not collide. Say the split to the user in a few lines. If the job is large,
    the `large_task` gate applies (see Gates). For a job with more than a few pieces keep a **plan**:
-   `crew plan new <slug> --title "..."`, then `crew plan add <slug> "step" [--under <node>]` for each step
-   (the plan is a Markdown tree in `.crew/plans/<slug>.md`, the board shows its completion). A step you
+   `crew plan new <slug> --title "..." --goal "..."`, then `crew plan add <slug> "step" [--under <node>]` for each step
+   (the plan is a Markdown tree in `.crew/plans/<slug>.md`, the board shows its completion). A plan exists to
+   keep the work on its original goal, so always give `--goal`, in the user's terms. A step you
    discover later is added with its source: `--origin user|review|refute|implementation|send-back`
    (`--proposed` for one you are unsure about; `crew plan accept <slug> <node>` once it is agreed).
+   If a new step does not serve the goal, do not fold it in: tell the user, and let them drop it, move it to
+   its own plan, or change the goal.
+   **Clarify before a non-trivial plan** (about 3 steps or more), and skip this for a smaller one or a plan
+   the user dictated step by step. Ask only what would change the plan and what the code cannot answer: read
+   the code first. Ask one question at a time and give your recommended answer. Once the plan file exists, add
+   the questions and answers under a `## Clarified` heading at the end of the file, as plain lines such as
+   `- Q: ... A: ... (user)`, so a later session can read them. Plain lines and headings are not plan steps.
+   Clarify again only when the goal, scope, a constraint or an earlier answer changes (the `plan.large_growth`
+   notice is one such signal), and only about what that change affects. If nobody can answer, such as in an
+   unattended run, do not wait: write your assumption there with `(assumed)` and carry on; the next time the
+   user is present, confirm those lines.
    For a non-trivial plan (about 3 steps or more) run a **plan review** before you dispatch anything:
    `crew plan review run <slug>`, then the reviewer, filter, refuter and finalize steps in
    `references/review-pipeline.md` ("Plan review"). What survives is proposed as `[?]` nodes; accept or reject each

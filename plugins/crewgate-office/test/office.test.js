@@ -3,12 +3,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const SP = require('../board/public/office-sprites.js');
-const OM = require('../board/public/office-model.js');
-const SM = require('../board/public/sessions-model.js');
+const SP = require('../public/office-sprites.js');
+const OM = require('../public/office-model.js');
+const SM = require('../../crewgate/board/public/sessions-model.js');
 
-const PUB = path.join(__dirname, '..', 'board', 'public');
-const read = (f) => fs.readFileSync(path.join(PUB, f), 'utf8');
+const OWN = path.join(__dirname, '..', 'public');
+const PUB = path.join(__dirname, '..', '..', 'crewgate', 'board', 'public');
+const read = (f) => fs.readFileSync(path.join(/^office/.test(f) ? OWN : PUB, f), 'utf8');
 const table = (l) => JSON.parse(read(`i18n/${l}.json`));
 
 let n = 0;
@@ -296,10 +297,11 @@ test('office code keeps the strict front-end rules: DOM nodes only, no eval, no 
     assert.doesNotMatch(src, /https?:\/\/|fetch\(|XMLHttpRequest|WebSocket|localStorage|\bimport\s/, f);
   }
   assert.doesNotMatch(read('office.css'), /@import|url\(/);
-  const html = read('index.html');
-  for (const s of ['/office-sprites.js', '/office-model.js', '/office.js', '/office.css']) assert.ok(html.includes(`"${s}"`), s);
-  // the models load before the page script
-  assert.ok(html.indexOf('/office-model.js') < html.indexOf('/office.js') && html.indexOf('/office.js') < html.indexOf('/app.js'));
+  // the board loads what office.json lists, in that order: the models before the page script
+  const m = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'office.json'), 'utf8'));
+  assert.deepEqual(m.scripts, ['office-sprites.js', 'office-model.js', 'office.js']);
+  assert.deepEqual(m.styles, ['office.css']);
+  assert.doesNotMatch(read('index.html'), /office/, 'nothing of the add-on is in the plugin page');
   // reduced motion and hidden tabs are respected
   const src = read('office.js');
   assert.match(src, /prefers-reduced-motion/);
@@ -307,7 +309,7 @@ test('office code keeps the strict front-end rules: DOM nodes only, no eval, no 
   assert.match(src, /imageSmoothingEnabled = false/);
 });
 
-test('the board serves the office files and the nav links to #/office', () => {
+test('the nav can link to #/office', () => {
   const app = read('app.js');
   assert.match(app, /'#\/office'/);
   assert.match(app, /\['sessions', 'office'/);

@@ -8,6 +8,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { createApi } = require('./api');
 const { createUpdateRoutes } = require('./update-routes');
+const officeAddon = require('./office-addon');
 const { normalizeLang } = require('../lib/core/i18n');
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -78,10 +79,18 @@ function createBoard(opts = {}) {
     return indexHtml.replace('__CREW_TOKEN__', token);
   }
 
+  const findOffice = () => officeAddon.find({ pluginRoot: path.join(__dirname, '..'), ...(opts.addon || {}) });
+
   function serveStatic(req, res, pathname) {
     if (pathname === '/' || pathname === '/index.html') {
       if (req.method === 'HEAD') return send(res, 200, '', MIME['.html']);
       return send(res, 200, page(), MIME['.html']);
+    }
+    if (pathname.startsWith('/addon/office/')) {
+      const name = pathname.slice('/addon/office/'.length);
+      const data = officeAddon.readFile(findOffice(), name);
+      if (!data) return fail(res, 404, 'api.notFound', 'Not found');
+      return send(res, 200, req.method === 'HEAD' ? '' : data, MIME[path.extname(name)]);
     }
     let rel;
     try { rel = decodeURIComponent(pathname); } catch { return fail(res, 404, 'api.notFound', 'Not found'); }
@@ -136,6 +145,11 @@ function createBoard(opts = {}) {
     if (url.pathname === '/api/health') {
       if (req.method !== 'GET' && req.method !== 'HEAD') return fail(res, 405, 'api.method', 'Method not allowed');
       return sendJson(res, 200, { ok: true, name: 'crewgate', version });
+    }
+
+    if (url.pathname === '/api/addons') {
+      if (req.method !== 'GET') return fail(res, 405, 'api.method', 'Method not allowed');
+      return sendJson(res, 200, { office: officeAddon.describe(findOffice()) });
     }
 
     if (url.pathname.startsWith('/api/')) {

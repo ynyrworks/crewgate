@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.15.0 — unreleased
+
+### Behaviour changes
+
+- **A gate set to `never` now really blocks.** In every `gates.enforce` mode, Claude Code denies a detected push, PR or merge with that gate before it runs, and an approval cannot lift it. Before, `never` only reminded in the default mode. Check your `.claude/crew.json`: to keep being asked instead, set the gate to `ask`. Codex has no pre-run check, so a `never` gate that ran there is recorded as `gate.missing` and reported afterwards.
+- **The Office page is now an optional add-on.** The pixel-art Office moved out of the main plugin into a separate plugin, `crewgate-office`. After upgrading, the Office tab is gone until you run `/plugin install crewgate-office@crewgate`; nothing else changes. The Settings page shows the command.
+
+### New
+
+- `plugins/crewgate-office`, listed in the marketplace with the same version as the plugin. The board finds it in the folder next to the plugin or in the Claude and Codex caches, reads what it may load from `office.json` and serves only those files at `/addon/office/`. `GET /api/addons` reports `missing`, `outdated` or `ok`. An add-on with another `office_api` is not loaded; its tab shows the update commands. No restart is needed: reload the page. Installing through Codex is experimental and unverified.
+- One-click update also runs `claude plugin update crewgate-office@crewgate` when the add-on is installed (a failure there does not fail the plugin update), and `crew update cleanup` also removes the add-on's old versions.
+- Plans guard the goal. `crew plan new` without `--goal` warns on stderr and still creates the plan. Plan review has a new first-ranked kind, `off-goal`, for a step that does not serve the goal. The skill now tells the orchestrator to give a goal, to raise a step that does not serve it instead of folding it in, and to clarify before a plan of about 3 steps or more, keeping the answers under `## Clarified` in the plan file. These are instructions to the model, not checks.
+- `crew task accept` notes when a task had no finalized review (JSON: `review_gap`).
+
+### Improved
+
+- Gate detection covers the PowerShell tool and commands wrapped in `bash -c`, `powershell -Command`, `cmd /c`, `eval`, `iex`, `npx` and inline git aliases. Under `enforce: block`, a failed approval lookup denies instead of letting the command through. The docs say plainly that gates are best effort, not a security boundary: scripts, configured aliases and other tools are not seen.
+- `crew update check` always asks GitHub and says when its answer is stale; `crew doctor` shows the date of its update answer.
+
+### Fixed
+
+- A long `claude plugin list` no longer hides crewgate behind the output limit, which made one-click update think it was not installed.
+
+### Upgrade notes
+
+- `hooks/hooks.json` gained `PowerShell` entries for PreToolUse and PostToolUse; start a new session for them to apply. `hooks/codex-hooks.json` is unchanged, so Codex needs no `/hooks` re-approval.
+- A project with its own copies of `crew-reviewer` in `.claude/agents/` still works: the kinds come from the prompt that `crew plan review run` prints.
+
 ## 0.14.0 — 2026-10-30
 
 ### New

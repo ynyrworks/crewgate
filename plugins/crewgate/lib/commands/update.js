@@ -94,16 +94,18 @@ async function apply(ctx) {
   return 0;
 }
 
+const itemTool = (i) => `${toolName(i.tool)}${i.plugin ? ` ${i.plugin}` : ''}`;
+
 function cleanup(ctx, a) {
   const o = { dirs: updateApply.configDirs(process.env), pluginRoot: path.resolve(__dirname, '..', '..') };
   if (a.dryRun) {
     const s = updateCleanup.scan(o);
-    ctx.emit(s, s.count ? [ctx.t('update.oldVersions', { count: s.count, mb: mb(s.bytes) }), ...s.items.map((i) => `  ${toolName(i.tool)} ${i.version}`)] : [ctx.t('update.noOld')]);
+    ctx.emit(s, s.count ? [ctx.t('update.oldVersions', { count: s.count, mb: mb(s.bytes) }), ...s.items.map((i) => `  ${itemTool(i)} ${i.version}`)] : [ctx.t('update.noOld')]);
     return 0;
   }
   const r = updateCleanup.cleanup(o);
-  const lines = r.removed.map((i) => ctx.t('update.removed', { tool: toolName(i.tool), version: i.version }));
-  for (const k of r.kept) lines.push(ctx.t(`update.kept.${k.reason}`, { tool: toolName(k.tool), version: k.version }));
+  const lines = r.removed.map((i) => ctx.t('update.removed', { tool: itemTool(i), version: i.version }));
+  for (const k of r.kept) lines.push(ctx.t(`update.kept.${k.reason}`, { tool: itemTool(k), version: k.version }));
   lines.push(r.removed.length || r.kept.length ? ctx.t('update.freed', { mb: mb(r.freed) }) : ctx.t('update.noOld'));
   ctx.emit(r, lines);
   return r.kept.length ? 1 : 0;

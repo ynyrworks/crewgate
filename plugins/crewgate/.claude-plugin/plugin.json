@@ -1,6 +1,6 @@
 {
   "name": "crewgate",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "description": "Delegated development for Claude Code: an orchestrator dispatches worker and reviewer subagents in git worktrees, a deterministic review filter keeps only real findings, and hooks record progress on a local board.",
   "author": { "name": "Ynyr" },
   "license": "MIT",

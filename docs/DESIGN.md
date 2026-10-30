@@ -28,7 +28,7 @@ Goals
 Non-goals (first release)
 - No LLM calls from hooks or the board. No network access, with one exception: the board's update check
   (section 10), which is on by default and can be turned off.
-- No 3D or game-like board. The live-session list is the default and the only view that must work everywhere; the pixel-art Office page (section 14) is an experimental extra.
+- No 3D or game-like board. The live-session list is the default and the only view that must work everywhere; the pixel-art Office page (section 14) is an experimental, separately installed add-on.
 - Gemini. Codex as orchestrator, worker and reviewer is supported experimentally (section 16).
 
 ## 2. Clean-room rule
@@ -561,7 +561,18 @@ remembers a bounded id to file map, and `GET /api/session/<id>` falls back to it
 roots), so ids never name a path the caller chose. The page keeps pages in memory, fetches again a page whose rows are `partial`, and
 reloads the first page when you come back to it.
 
-Office. `#/office` (`board/public/office.js`, `office-model.js`, `office-sprites.js`; experimental) draws the Sessions rows as
+Office add-on. The Office page is a separate optional plugin, `plugins/crewgate-office`, so the main plugin ships nothing of it.
+The board looks for it in three fixed places (`board/office-addon.js`): the folder next to the plugin, and the Claude and Codex
+plugin caches when that tool's own list (`installed_plugins.json`, `config.toml`) still names it, because an uninstall leaves the
+cache folder behind. There is no configured path and no download. `GET /api/addons` tells the page `missing`, `outdated` or `ok`,
+never the folder. `office.json` in the add-on declares `office_api` and its files; a value other than `OFFICE_API` is not loaded,
+and the page shows the update commands instead. The board serves only the listed `.js` and `.css` files from the add-on's `public`
+folder at `/addon/office/<file>`, and the page loads them in order under the same CSP. `office_api` is the contract: raise it when
+what `app.js` passes to `Office.page` changes. Its strings stay in the board's i18n tables. One-click update runs
+`claude plugin update crewgate-office@crewgate` when it is installed (a failure there does not fail the plugin update), and old
+versions are cleaned up like the plugin's.
+
+Office. `#/office` (`plugins/crewgate-office/public/office.js`, `office-model.js`, `office-sprites.js`; experimental) draws the Sessions rows as
 a pixel-art office on a canvas, from scratch with no assets: one room per project, an orchestrator at the middle desk of a pod
 with its subagents around it. `office-model.js` is pure logic (no DOM, no canvas) and decides, from a row's status and
 activity, which animation a session gets (thinking, tool, writing, waiting, idle, done; the tool decides the prop: document,
@@ -669,7 +680,7 @@ about; only accepted nodes count. Code: `lib/core/plan-review.js`, CLI in `lib/c
 - Files: `<data>/projects/<id>/runtime/plan-review/<slug>/` holds `state.json` (rounds with counters, rejected keys, accepted log,
   notes) and per round `N.packet.md`, `N.raw.json`, `N.filtered.json` (dropped, with reason), `N.kept.json`, `N.refutations.json`,
   `N.json` (survivors with claim, evidence, verdict, node id). Long reasoning stays there, not in the Markdown.
-- Finding: `{ node|null, kind, claim, evidence[], proposal: { action, text, done_when } }`. Kinds: missing-step, wrong-order, too-big,
+- Finding: `{ node|null, kind, claim, evidence[], proposal: { action, text, done_when } }`. Kinds: off-goal (a step that does not serve the goal), missing-step, wrong-order, too-big,
   risk, vague-done, redundant (also the order proposals are kept in under the cap). Actions: add, split (one finding per piece; the big
   step stays until dropped), change, drop. A missing `done_when` is rejected at filter time (`no-done-when`).
 - Filter reasons: `invalid`, `no-done-when`, `unknown-node` (also dropped and proposed steps), `out-of-scope` (`--node`),
