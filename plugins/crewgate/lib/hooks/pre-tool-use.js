@@ -41,6 +41,18 @@ function onAgent(payload) {
   // a task in review may be linked to a reviewer subagent and must not change state.
   const worker = task.state === 'created' || task.state === 'dispatched';
 
+  // Over the limit: deny before anything is recorded, so the task stays as it was and can be dispatched later.
+  // Counted: workers that are really running (sess.running), this task excluded so a re-dispatch is not counted twice.
+  let over = null;
+  if (worker) {
+    const lim = h.cfg().limits;
+    const others = sess.running(h.pid, id);
+    if (lim.max_parallel_workers > 0 && others.length + 1 > lim.max_parallel_workers) {
+      over = { id, count: others.length + 1, max: lim.max_parallel_workers, ids: others.join(', ') };
+      if (lim.parallel_enforce !== 'warn') return C.deny(h.t('deny.parallel', over));
+    }
+  }
+
   try {
     if (task.state === 'created') {
       tasks.transition(h.pid, id, 'dispatched', {
@@ -56,14 +68,33 @@ function onAgent(payload) {
     }
   } catch { /* an illegal transition must not stop the dispatch */ }
 
-  sess.remember(h.pid, key, { task: id, type, bg, worker, ts: Date.now(), agent: null, stopped: false, ...(eng.engine ? { codex: true } : {}) });
+  sess.remember(h.pid, key, { task: id, type, bg, worker, ts: Date.now(), agent: null, stopped: false, session: h.sid || null, ...(eng.engine ? { codex: true } : {}) });
   sess.touch(h, (s) => sess.addTask(s, id));
 
-  if (!worker) return null;
-  let inflight = 0;
-  try { inflight = tasks.list(h.pid, { state: 'dispatched' }).filter((t) => t.id !== id).length + 1; } catch { /* ignore */ }
-  const max = h.cfg().limits.max_parallel_workers;
-  if (max > 0 && inflight > max) return C.withContext('PreToolUse', h.t('warn.parallel', { id, count: inflight, max }));
+  if (over) return C.withContext('PreToolUse', h.t('warn.parallel', over));
+  return null;
+}
+
+// ---------------------------------------------------------------- SendMessage
+// Waking a stopped crew worker is a new run: it counts like a dispatch. A message to anything that is not a known
+// worker (another name, a running worker, a reviewer) passes untouched. The payload field (tool_input.to) is read from
+// the tool's documented input and is not measured: see docs/PLUGIN-FACTS.md.
+function onSend(payload) {
+  if (payload.agent_id) return null;
+  const to = C.str(C.obj(payload.tool_input).to);
+  if (!to) return null;
+  const h = C.open(payload);
+  if (!h) return null;
+  const rec = sess.byAgent(h.pid, to);
+  if (!rec || !rec.worker || !rec.stopped || !rec.task) return null;
+  const lim = h.cfg().limits;
+  const others = sess.running(h.pid, rec.task);
+  const vars = { id: rec.task, count: others.length + 1, max: lim.max_parallel_workers, ids: others.join(', ') };
+  if (lim.max_parallel_workers > 0 && vars.count > vars.max) {
+    if (lim.parallel_enforce !== 'warn') return C.deny(h.t('deny.parallel', vars));
+    return C.withContext('PreToolUse', h.t('warn.parallel', vars));
+  }
+  sess.remember(h.pid, rec.id, { ...rec, id: undefined, stopped: false, ts: Date.now(), session: h.sid || null });
   return null;
 }
 
@@ -170,7 +201,7 @@ function onAgentLimit(payload, command) {
       } catch { /* ignore */ }
     }
     const lang = h ? h.lang() : 'en';
-    const key = hit.word === 'git' ? 'limit.git' : 'limit.kill';
+    const key = hit.loop ? 'limit.loop' : hit.word === 'git' ? 'limit.git' : 'limit.kill';
     return C.deny(i18n.t(lang, `hooks.${key}`, { type, word: hit.word }));
   } catch { return null; }
 }
@@ -239,6 +270,7 @@ function onBash(payload) {
 function run(payload) {
   const tool = C.str(payload.tool_name);
   if (C.AGENT_TOOLS.has(tool)) return onAgent(payload);
+  if (tool === 'SendMessage') return onSend(payload);
   if (C.EDIT_TOOLS.has(tool)) return onEdit(payload);
   if (tool === 'Read') return onRead(payload);
   if (SHELL_TOOLS.has(tool)) return onBash(payload);

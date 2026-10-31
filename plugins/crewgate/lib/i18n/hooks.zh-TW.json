@@ -31,5 +31,7 @@
   "hooks.brief.accountMismatch": "警告：此工作階段使用的 Claude 帳號不是此專案預期的帳號（account.expected）。進行會消耗方案用量的工作前，請先告訴使用者。",
   "hooks.brief.accountUnknown": "警告：無法判斷此工作階段的 Claude 帳號，因此無法對照 account.expected。請告訴使用者。",
   "hooks.account.needMismatch": "有工作階段以不是 account.expected 所指定的 Claude 帳號開始。請確認目前登入的是哪個帳號（crew doctor）。",
-  "hooks.account.needUnknown": "有工作階段開始了，但無法判斷其 Claude 帳號，所以沒有檢查 account.expected（crew doctor 會顯示找到什麼）。"
+  "hooks.account.needUnknown": "有工作階段開始了，但無法判斷其 Claude 帳號，所以沒有檢查 account.expected（crew doctor 會顯示找到什麼）。",
+  "hooks.deny.parallel": "crewgate 已擋下任務 {id} 的派出：這樣會有 {count} 個 worker 同時執行（上限 {max}）。目前進行中：{ids}。請等其中一個回報，或調高 limits.max_parallel_workers（limits.parallel_enforce=warn 只提醒）。",
+  "hooks.limit.loop": "crewgate 已擋下「{word}」：{type} 不得啟動無止盡的迴圈或不設上限的大量程序。請依任務書給的數量與時間限制執行（例如 timeout 60 node -e ...，或限制份數，最多 CPU 核心數的一半），並只依 pid 停止自己啟動的程序。"
 }

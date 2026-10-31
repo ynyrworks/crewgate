@@ -26,7 +26,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Agent|Task|collaborationspawn_agent",
+        "matcher": "Agent|Task|collaborationspawn_agent|SendMessage",
         "hooks": [
           {
             "type": "command",

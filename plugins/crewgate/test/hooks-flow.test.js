@@ -76,8 +76,8 @@ test('Agent dispatch: "Task" tool name works; no marker / unknown task / subagen
   assert.equal(tasks.load(f.pid, t.id).state, 'dispatched');
 });
 
-test('Agent dispatch: warns when in-flight tasks would exceed max_parallel_workers', () => {
-  const f = H.fixture({ config: { limits: { max_parallel_workers: 1 } } });
+test('Agent dispatch: parallel_enforce=warn only warns when running workers would exceed max_parallel_workers', () => {
+  const f = H.fixture({ config: { limits: { max_parallel_workers: 1, parallel_enforce: 'warn' } } });
   H.start(f);
   const a = H.newTask(f, 'A');
   const b = H.newTask(f, 'B');

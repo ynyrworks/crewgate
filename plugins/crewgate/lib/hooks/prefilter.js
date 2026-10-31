@@ -6,8 +6,8 @@ const GIT_WORDS = /\b(push|merge|create)\b/;
 const MAX_SCAN = 20000;
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell']);
 
-// Words in a crew subagent's command that agentlimits.js may deny: a git command that changes a tree, a kill by name.
-const LIMIT_WORDS = /\b(checkout|switch|reset|merge|rebase|commit|stash|clean|restore|cherry-pick|push|pull|revert|am|worktree|branch|taskkill|stop-process|spps|pkill|killall)\b/i;
+// Words in a crew subagent's command that agentlimits.js may deny: a git command that changes a tree, a kill by name, an endless loop.
+const LIMIT_WORDS = /\b(checkout|switch|reset|merge|rebase|commit|stash|clean|restore|cherry-pick|push|pull|revert|am|worktree|branch|taskkill|stop-process|spps|pkill|killall|for|while|yes|stress|node|nodejs|python[\d.]*|py|pypy3?|powershell|pwsh|timeout)\b/i;
 const gitish = (command) => GIT_WORDS.test(String(command || '').slice(0, MAX_SCAN));
 
 // True when this PreToolUse payload is a shell call that PreToolUse has nothing to say about.

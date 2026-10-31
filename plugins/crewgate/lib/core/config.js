@@ -25,6 +25,8 @@ const DEFAULTS = Object.freeze({
   },
   limits: {
     max_parallel_workers: 3,
+    parallel_enforce: 'block',
+    parallel_enforce: "block",
     max_returns_before_takeover: 2,
     report_max_tokens: 1500,
     orchestrator_read_warn_lines: 300,
@@ -92,6 +94,9 @@ const SCHEMA = [
     '核准要在「gate ask」與「gate answer yes」之間有使用者送出訊息才算數，避免模型在同一輪自己核准。')),
   f('limits', 'object', d('Limits and guards.', '限制與守門。')),
   f('limits.max_parallel_workers', 'integer', d('Most workers running at once.', '同時進行的 worker 上限。'), { min: 1, max: 20 }),
+  f('limits.parallel_enforce', 'string', d(
+    'What happens when a dispatch (or a SendMessage that wakes a stopped worker) would pass max_parallel_workers: block (denied; the reason names the running tasks) or warn (a reminder only). Workers are counted from the dispatch map, so records left by an ended or quit session do not count.',
+    '派出（或用 SendMessage 喚醒已停止的 worker）會超過 max_parallel_workers 時的處理：block（拒絕，理由會列出進行中的任務）或 warn（只提醒）。worker 數依派工紀錄計算，已結束或被關閉的工作階段留下的紀錄不算。'), { enum: ['block', 'warn'] }),
   f('limits.max_returns_before_takeover', 'integer', d('Send-backs allowed before the orchestrator takes the task over.', '退回幾次後改由統籌接手。'), { min: 1, max: 20 }),
   f('limits.report_max_tokens', 'integer', d('Maximum worker report size (estimated as characters / 4).', 'worker 報告長度上限（以字元數 / 4 估算）。'), { min: 100, max: 20000 }),
   f('limits.orchestrator_read_warn_lines', 'integer', d('Warn when the orchestrator reads a file longer than this without a range.', '統籌不帶範圍讀超過此行數的檔案時提醒。'), { min: 1, max: 100000 }),

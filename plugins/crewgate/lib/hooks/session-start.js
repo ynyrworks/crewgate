@@ -104,6 +104,8 @@ function run(payload) {
     s.source = C.snippet(p.source, 20);
     if (verdict !== true && !s.account_warned) { s.account_warned = true; firstWarn = true; }
   }) || {};
+  // A new process (startup, resume, fork) has none of the old workers; a compact or clear keeps the same ones.
+  if (/^(startup|resume|fork)$/.test(C.str(p.source))) { try { sess.clearStale(h.pid); } catch { /* a stale record only ages out */ } }
   if (verdict !== true) h.accountWarn = verdict === null ? 'unknown' : 'mismatch';
   try {
     events.append(h.pid, {

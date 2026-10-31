@@ -144,6 +144,7 @@ All fields are optional; defaults below. The board's Settings page edits this fi
   },
   "limits": {
     "max_parallel_workers": 3,
+    "parallel_enforce": "block",
     "max_returns_before_takeover": 2,
     "report_max_tokens": 1500,
     "orchestrator_read_warn_lines": 300,
@@ -277,7 +278,7 @@ crash and a guard expiry append one line `{ts, event, kind: error|guard|worker_e
 | Event | Behaviour |
 |---|---|
 | SessionStart | Inject a fenced brief ≤ 4,000 bytes: role contract one-liner, open tasks by state, count + ids of open handoffs (never their bodies), count of needs waiting for the user, path to promoted rules. Content from files is fenced and marked untrusted. Record `session.start`. |
-| PreToolUse (Agent/Task tool, main session) | If prompt contains `crew-task: <id>`, record `task.dispatched` (with tool_use_id, subagent type, model, background flag). Warn when the number of in-flight tasks would exceed `max_parallel_workers`. |
+| PreToolUse (Agent/Task tool, main session) | If prompt contains `crew-task: <id>`, record `task.dispatched` (with tool_use_id, subagent type, model, background flag). Deny (`limits.parallel_enforce` `block`, default; `warn` only reminds) when the workers really running would pass `max_parallel_workers`: see 8.2. |
 | PostToolUse (Agent/Task tool) | Foreground: record `task.returned` if the worker did not already report. Background launch: nothing (wait for SubagentStop). |
 | SubagentStart / SubagentStop | Record `subagent.start/stop`; on stop of a task-linked worker, show the user a `systemMessage` (not `additionalContext`, which would keep the subagent running): "task <id> returned — review it: `crew task show <id>`". |
 | PreToolUse (Edit/Write/MultiEdit/NotebookEdit, main session, main worktree) | If the target is not matched by `orchestrator_edit_allow`: `warn` → non-blocking reminder to delegate + `orchestrator.warned`; `block` → deny with reason. Never applies inside subagents or linked worktrees. |
@@ -409,13 +410,30 @@ PreToolUse(Bash / PowerShell) denies, for a subagent of type `crew-worker`, `cre
   `diff`, `log`, `show`, `status`, `rev-parse`, `merge-tree`, `merge-base` pass.
 - all three: killing by image name (`taskkill /IM`, `Stop-Process -Name`, a piped `Stop-Process`, `pkill`, `killall`).
   Killing by pid passes.
+- all three: an inline loop with no end: `node -e` / `python -c` / `powershell -Command` with `for(;;)`, `while(true)`,
+  `while(1)` or `while($true)`, a bash `while true; do` / `while :; do`, `yes` with its output discarded, `stress` and
+  `stress-ng` without `-t` / `--timeout`. A `timeout N` prefix passes only a shell loop or `node -e` run directly under it.
+  A `for` loop that starts more background jobs (`&`) than half the CPU cores (`os.cpus().length`) is denied; a count
+  it cannot read passes. The reason tells the agent to give a count and a time limit from the brief.
 
 The command line is tokenised with `gitcmd.js`, so `git -C`, `cd x && ...`, `bash -c`, `powershell -Command` and git
 aliases are seen. The main session and other subagent types are never limited. The agent type is the payload's
 `agent_type`; when absent, the type SubagentStart recorded for the `agent_id`. A denial records `agent.limit`
 `{ agent_type, command (first word), tool_use_id }`, never the arguments. This is best effort: a command the parser
 cannot recognise (a script file, a variable, an unusual wrapper) passes, and so does any failure of the check; the
-agent templates state the same rules in words.
+agent templates state the same rules in words. Scripts and files are never read (`node run.js` with a loop inside
+passes), so the busy-loop rule is best effort, and nothing here limits a process once it runs.
+
+**Parallel workers.** A dispatch through Agent / Task, or a SendMessage to a stopped worker (`tool_input.to`, read from
+the tool's documented input, not measured), that would pass `limits.max_parallel_workers` is denied when
+`limits.parallel_enforce` is `block`; the reason names the running tasks, and nothing is recorded, so the task stays as it was.
+The count is the dispatch map (`dispatch.json`), not tasks in state `dispatched`: a worker record, not `stopped`, younger
+than 6 hours, whose task is still `dispatched` and whose session file still exists (SessionEnd removes it). The task
+being dispatched is left out, so a re-dispatch is not counted twice. SessionStart with source `startup`, `resume` or
+`fork` marks every open record stopped (a new process has none of the old workers; `compact` and `clear` keep them), so
+tasks an app quit left `dispatched` never block and can be dispatched again at once. Two sessions open on one project at the
+same time share the map, so the second one starting clears the first one's records. `crew task send-back` and
+reviewers are not counted.
 
 ## 9. Review pipeline
 

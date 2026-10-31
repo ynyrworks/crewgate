@@ -51,6 +51,8 @@ permission_mode, agent_id, agent_type, effort, hook_event_name, tool_name, tool_
 payload and crewgate's map from SubagentStart is only a fallback. In that run the reviewer, asked to run
 `git checkout -b x`, declined on its own (its instructions forbid it), so the hook's denial was not seen in a real run; the
 `git diff` it ran passed the hook. Denial is tested with payloads of this shape.
+SendMessage (not measured, no `claude -p` run was made for it): crewgate reads `tool_input.to` from the tool's documented
+input, matches it to an `agent_id` in the dispatch map, and lets any other value pass. Unverified.
 The tool that launches subagents is named `Agent` (older builds: `Task`); match both.
 Its `tool_input` contains `prompt`, `subagent_type`, `description`, optional `model`,
 `run_in_background` (field names beyond `prompt`/`subagent_type` are (uncertain) — read defensively).

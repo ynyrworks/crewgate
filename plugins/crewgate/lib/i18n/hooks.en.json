@@ -31,5 +31,7 @@
   "hooks.brief.accountMismatch": "WARNING: this session runs under a Claude account other than the one this project expects (account.expected). Tell the user before doing work that uses plan usage.",
   "hooks.brief.accountUnknown": "WARNING: the Claude account of this session could not be determined, so it cannot be checked against account.expected. Tell the user.",
   "hooks.account.needMismatch": "A session started under a Claude account other than the one account.expected names. Check which account is signed in (crew doctor).",
-  "hooks.account.needUnknown": "A session started but its Claude account could not be determined, so account.expected was not checked (crew doctor shows what was found)."
+  "hooks.account.needUnknown": "A session started but its Claude account could not be determined, so account.expected was not checked (crew doctor shows what was found).",
+  "hooks.deny.parallel": "crewgate blocked dispatching task {id}: {count} workers would run at once (limit {max}). Running now: {ids}. Wait for one of them to return, or raise limits.max_parallel_workers (limits.parallel_enforce=warn only reminds).",
+  "hooks.limit.loop": "crewgate blocked \"{word}\": a {type} does not start an endless loop or an unbounded number of copies. Run it with a count and a time limit taken from the brief (for example timeout 60 node -e ... or a bounded number of copies, at most half the CPU cores), and stop only processes you started, by pid."
 }

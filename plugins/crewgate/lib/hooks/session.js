@@ -127,7 +127,7 @@ function bindAgent(pid, agentId, type) {
   return updateUses(pid, (u) => {
     const now = Date.now();
     const cands = Object.entries(u)
-      .filter(([, r]) => !r.agent && (r.type === type || r.codex) && now - (r.ts || 0) < 15 * 60 * 1000)
+      .filter(([, r]) => !r.agent && !r.stopped && (r.type === type || r.codex) && now - (r.ts || 0) < 15 * 60 * 1000)
       .sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0));
     if (!cands.length) return null;
     cands[0][1].agent = agentId;
@@ -148,7 +148,33 @@ function byToolUse(pid, toolUseId) {
 
 function markStopped(pid, toolUseId) { return updateUses(pid, (u) => { if (u[toolUseId]) u[toolUseId].stopped = true; }); }
 
+const RUNNING_MAX_AGE_MS = 6 * 3600 * 1000;
+
+// Task ids of the workers that are really running now (not tasks that merely sit in state 'dispatched'): a dispatch
+// record that is a worker, not stopped, younger than 6 hours, whose task is still 'dispatched', and whose session has
+// not ended (SessionEnd removes the session file). Records of a quit app are cleared by clearStale at SessionStart.
+function running(pid, exceptTask) {
+  const tasks = require('../core/tasks');
+  const out = [];
+  for (const r of Object.values(readUses(pid))) {
+    if (!r || !r.worker || r.stopped || !r.task || r.task === exceptTask || out.includes(r.task)) continue;
+    if (Date.now() - (r.ts || 0) > RUNNING_MAX_AGE_MS) continue;
+    if (r.session && !read(r.session)) continue;
+    try { if (tasks.load(pid, r.task).state !== 'dispatched') continue; } catch { continue; }
+    out.push(r.task);
+  }
+  return out;
+}
+
+// A new process (SessionStart startup / resume / fork) has none of the old workers: mark every open record stopped.
+// The tasks stay 'dispatched' and can be dispatched again at once. Returns how many records were cleared.
+function clearStale(pid) {
+  let n = 0;
+  updateUses(pid, (u) => { for (const r of Object.values(u)) if (r && !r.stopped) { r.stopped = true; n++; } });
+  return n;
+}
+
 module.exports = {
   read, promptsOfProject, touch, bumpTool, addTask, remove, prune,
-  remember, bindAgent, byAgent, byToolUse, readUses, markStopped, sessionFile,
+  remember, bindAgent, byAgent, byToolUse, readUses, markStopped, running, clearStale, sessionFile,
 };
