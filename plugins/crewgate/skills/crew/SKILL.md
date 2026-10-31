@@ -1,6 +1,6 @@
 ---
 name: crew
-description: Orchestrator playbook for delegated development. Use when the user asks to delegate work, split a job into parts, run the crew, or says "分工". Plans and briefs tasks, dispatches worker subagents in git worktrees, runs the review pipeline, enforces gates, merges, and records lessons.
+description: Crewgate's orchestrator playbook for delegated development. Use when the user mentions Crewgate, asks to delegate work, split a job into parts, run the crew, or says "分工". Plans and briefs tasks, dispatches worker subagents in git worktrees, runs the review pipeline, enforces gates, merges, and records lessons.
 when_to_use: The user wants work split across subagents, wants a reviewed merge flow, or asks to init, check status, wrap up or hand off a crew session.
 argument-hint: "[init | status | wrap-up | handoff]"
 ---
@@ -106,7 +106,8 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
      task over: do the remaining fix yourself in the task's worktree, say so to the user, and keep
      the change as small as possible. This is the one case where you edit code.
    - Clean: `crew task accept <id>`. Finalize the round first, even when you expect to dismiss its
-     findings: accept notes a task with no review round or an unfinalized one.
+     findings: accept refuses an unfinalized round with findings unless you pass `--skip-refuter "<reason>"`,
+     and tell the user when you do. It only notes a task with no review round.
 10. **Gates, then merge.** Check the gates (below). When allowed, merge with git yourself, then record
     it: `crew task merge <id> --note "<merge commit>"`. Remove the worktree when done
     (`git worktree remove <path>`).

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- `crew task accept` refuses a task whose latest review round has findings that never went through the refuter and `crew review finalize`. It used to accept and print a note, and real runs skipped the refuter in 3 of 6 rounds with findings. `--skip-refuter "reason"` accepts anyway and records the reason in the event. A task with no review round still gets only a note.
+- The `crew` skill's description names Crewgate, so asking for it by name finds the skill.
+
 ## 0.15.1 — 2026-10-31
 
 ### New

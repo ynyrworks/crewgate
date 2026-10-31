@@ -41,6 +41,7 @@
   "wf.task.acceptedWithFindings": "Note: {n} blocker/major finding(s) are still listed for this task: {ids}",
   "wf.task.acceptedNoReview": "Note: no review round was recorded for this task.",
   "wf.task.acceptedUnfinalized": "Note: review round {round} was never finalized, so its {n} finding(s) did not go through the refuter.",
+  "wf.task.acceptUnfinalized": "Task {id} was not accepted: review round {round} has {n} finding(s) that did not go through the refuter. Run crew review filter and the refuter, then crew review finalize. To accept anyway, say why with --skip-refuter \"reason\".",
   "wf.task.merged": "Task {id} recorded as merged (no git command was run).",
   "wf.task.mergeNever": "The merge gate is set to \"never\" in .claude/crew.json; do not merge this task",
   "wf.task.cancelled": "Task {id} cancelled.",

@@ -19,7 +19,7 @@ a send-back goes back to `dispatched`.
 - `crew task show <id>`: state, returns, capped report, diff stat, packet path, latest findings summary.
 - `crew task report <id> --report-file F [--packet-file F]`: the worker's call; validates sections and the size cap.
 - `crew task send-back <id> --note "..."`: refused at `max_returns_before_takeover` (records a takeover lesson).
-- `crew task accept <id> [--note]`, `crew task merge <id> [--note]` (records only, runs no git merge; refused if `gates.merge` is
+- `crew task accept <id> [--note] [--skip-refuter "reason"]` (refused while the latest review round has findings that were not finalized, unless a reason is given; the reason goes into the event), `crew task merge <id> [--note]` (records only, runs no git merge; refused if `gates.merge` is
   `never`; also records `git.merge` with the real branch when git shows it merged into HEAD), `crew task cancel <id> [--note]`.
 - `crew task run <id> [--engine codex] [--timeout 1800] [--model M]`: runs the Codex CLI as the worker in the task's worktree (created from HEAD when missing), then commits as the repository user (trailer `Co-Authored-By: Codex`), files report and packet and moves the task to `returned`. Failure (bad output, timeout, non-zero exit, no changes): nothing committed, `task.failed` event, a need, task stays `dispatched`. Log: `codex.log` in the task folder.
 
