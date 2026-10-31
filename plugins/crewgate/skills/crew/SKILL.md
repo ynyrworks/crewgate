@@ -73,7 +73,9 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
 3. **Brief each piece.** Write a brief file with exactly five sections: Goal, Scope (allowed and
    forbidden files), Must not regress (and who fixes out-of-scope fallout), Acceptance (commands and
    observable behaviour), Context (paths and line ranges, never pasted dumps). Template and a worked
-   example: `references/brief-template.md`.
+   example: `references/brief-template.md`. Workers run on the user's machine while they use it: never ask for a
+   load or stress test without a process count (at most half the CPU cores) and a time limit after which each
+   process ends by itself.
 4. **Create the task.** `crew task create --title "..." --brief-file brief.md --branch feat/x
    --worktree <path> --allow "src/**" --deny "docs/**" [--plan <slug>:<node>]` (`--plan` links the new task to a
    plan step; a task already created is linked with `crew plan link <slug> <node> <task-id>`). It refuses an incomplete brief, prints the
@@ -85,11 +87,13 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
    see "Running in Codex".) Call the Agent tool with `subagent_type` from the task output (`crew-worker`; if the tool does not know that name, as after `crew init` in a running session, use `crewgate:crew-worker`, and the same for the reviewer and refuter), the
    printed prompt (it contains the marker line, which links the subagent to the task), and
    `run_in_background: true` for anything that takes more than a minute. Never run more workers than
-   `max_parallel_workers`; start the next one when a task returns.
+   `max_parallel_workers`; start the next one when a task returns. A worker you send back counts: the hook only
+   warns, so count before you dispatch or resend, and wait when the limit is reached.
 7. **When a worker returns** (the background notification arrives; the stop hooks only show the user a reminder, they tell you nothing):
    `crew task show <id>`. You get the state, return count, the capped report, the diff stat of the
    branch and the packet path. If the report is invalid or missing, the worker did not finish: send
-   it back (step 9).
+   it back (step 9). If it ran a load test or a long-running process, check yourself that nothing is left: a
+   worker's "nothing left" is a claim. Stop what is left by pid, after checking its command line, and tell the user.
 8. **Review.** Run the pipeline in `references/review-pipeline.md`:
    `crew review run <id>` → dispatch the reviewer subagent (Agent tool; in Codex spawn the `crew-reviewer` custom agent) with the printed prompt →
    `crew review filter <id>` → dispatch the refuter with the printed prompt →
