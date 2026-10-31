@@ -74,6 +74,47 @@ function tailEvents(projectId, limit) {
   }
 }
 
+// Newest-first events of the given types, read backwards from the end of events.jsonl in chunks. Bounded in work
+// (`maxBytes`) and in result (`want(type)` says how many of each type are still wanted), so a merge far back is found
+// without reading the whole file and without depending on the 40-event tail the page also gets.
+const ACTIVITY_SCAN_BYTES = 8 * 1024 * 1024;
+function scanBack(projectId, quota, maxBytes) {
+  const left = { ...quota };
+  const out = [];
+  const open = () => Object.values(left).some((n) => n > 0);
+  let fd;
+  try {
+    fd = fs.openSync(paths.eventsFile(projectId), 'r');
+    const size = fs.fstatSync(fd).size;
+    const CH = 256 * 1024;
+    let pos = size;
+    let rest = Buffer.alloc(0);
+    while (pos > 0 && size - pos < maxBytes && open()) {
+      const len = Math.min(CH, pos);
+      pos -= len;
+      const buf = Buffer.alloc(len);
+      fs.readSync(fd, buf, 0, len, pos);
+      rest = Buffer.concat([buf, rest]);
+      let cut = rest.indexOf(10);
+      if (pos > 0 && cut < 0) continue;            // one very long line: read more before judging it
+      const head = pos > 0 ? rest.subarray(0, cut) : null; // incomplete first line, completed by the next chunk
+      const body = pos > 0 ? rest.subarray(cut + 1) : rest;
+      rest = head || Buffer.alloc(0);
+      const lines = body.toString('utf8').split('\n');
+      for (let i = lines.length - 1; i >= 0 && open(); i--) {
+        if (!lines[i]) continue;
+        try {
+          const e = JSON.parse(lines[i]);
+          if (e && typeof e.type === 'string' && left[e.type] > 0) { left[e.type]--; out.push(e); }
+        } catch { /* malformed line */ }
+      }
+    }
+  } catch { /* no events yet */ } finally {
+    if (fd !== undefined) { try { fs.closeSync(fd); } catch { /* ignore */ } }
+  }
+  return out;
+}
+
 function findingsOf(list) {
   if (Array.isArray(list)) return list;
   if (isObj(list) && Array.isArray(list.findings)) return list.findings;
@@ -369,6 +410,29 @@ function createApi(opts = {}) {
     return rest;
   }
 
+  // What the project page can say by itself when the hand-kept cards are empty: the latest merges and pushes (10) and
+  // the latest steps of the task flow (15), newest first. Only a few named fields of each event, through publicData.
+  function activityOf(projectId, taskList) {
+    const titles = new Map(taskList.map((tk) => [tk.id, tk.title]));
+    const merges = ['task.merged', 'git.push'];
+    const steps = ['task.created', 'task.returned', 'task.sent_back', 'task.accepted', 'gate.answered', 'plan.created'];
+    const q = {};
+    for (const ty of merges) q[ty] = 10;
+    for (const ty of steps) q[ty] = 15;
+    const all = scanBack(projectId, q, ACTIVITY_SCAN_BYTES);
+    const shape = (e) => {
+      const d = publicData(e) || {};
+      const data = {};
+      for (const k of ['branch', 'note', 'remote', 'refs', 'gate', 'answer', 'slug', 'title', 'head', 'base', 'command']) {
+        if (d[k] !== undefined && d[k] !== null && d[k] !== '' && (k !== 'note' || e.type === 'task.merged')) data[k] = d[k];
+      }
+      return { ts: e.ts, type: e.type, task: e.task || null, title: (e.task && titles.get(e.task)) || null, data };
+    };
+    const byTime = (a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0);
+    const pick = (types, n) => all.filter((e) => types.includes(e.type)).sort(byTime).slice(0, n).map(shape);
+    return [...pick(merges, 10), ...pick(steps, 15)].sort(byTime);
+  }
+
   function projectDetail({ id }) {
     const p = projectOr404(id);
     const cfg = config.load(p.path);
@@ -398,6 +462,7 @@ function createApi(opts = {}) {
       hook_seen: hookseen.read(p.id),
       show_text: showText(),
       events: tailEvents(p.id, 40).reverse().map((e) => ({ ts: e.ts, type: e.type, src: e.src, task: e.task, agent: e.agent, data: publicData(e) })),
+      activity: activityOf(p.id, taskList),
       last_activity: lastActivity(p.id, taskList, sessions),
     };
   }

@@ -349,5 +349,16 @@
   "plan.rcol.refuted": "Refuted",
   "plan.rcol.kept": "Kept",
   "plan.rcol.accepted": "Accepted",
-  "plan.rcol.rejected": "Rejected"
+  "plan.rcol.rejected": "Rejected",
+  "project.recentMerges": "Recent merges",
+  "work.closed": "No work items. Open to add one.",
+  "validation.closed": "No validation records.",
+  "act.task.created": "created",
+  "act.task.returned": "returned for review",
+  "act.task.sent_back": "sent back",
+  "act.task.accepted": "accepted",
+  "act.merged": "merged",
+  "act.push": "pushed",
+  "act.gate": "gate {gate} answered {answer}",
+  "act.plan": "plan created"
 }

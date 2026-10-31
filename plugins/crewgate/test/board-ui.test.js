@@ -31,7 +31,9 @@ test('every key the UI code asks for exists in both tables', () => {
   // dynamic families: t('state.' + x), t('handoff.' + x)
   for (const s of ['created', 'dispatched', 'returned', 'reviewing', 'accepted', 'merged', 'cancelled', 'working', 'tool', 'waiting', 'idle', 'done', 'todo', 'doing', 'parked', 'passed', 'failed']) keys.add(`state.${s}`);
   for (const s of ['open', 'accepted', 'cancelled']) keys.add(`handoff.${s}`);
-  const missing = [...keys].filter((k) => !k.endsWith('.') && !(k in en));
+  // event type names the project page compares against (activity), not string keys
+  const EVENT_TYPES = new Set(['task.created', 'task.returned', 'task.sent_back', 'task.accepted', 'task.merged']);
+  const missing = [...keys].filter((k) => !k.endsWith('.') && !EVENT_TYPES.has(k) && !(k in en));
   assert.deepEqual(missing, []);
 });
 

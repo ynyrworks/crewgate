@@ -428,6 +428,36 @@
     return bits.length ? h('span', { class: 'muted', text: ' · ' + bits.join(' · ') }) : '';
   }
 
+  // A card with nothing to show folds into one small line that opens on demand (a native details element).
+  function foldCard(title, line, body) {
+    return h('section', { class: 'card fold' }, h('details', null, h('summary', null, h('strong', { text: title }), h('span', { class: 'muted', text: ' \u00b7 ' + line })), body));
+  }
+  // Activity derived from events (api `activity`): what can be said without anyone writing it down.
+  function mergeActs(list) { return (list || []).filter(function (a) { return a.type === 'task.merged' || a.type === 'git.push'; }).slice(0, 10); }
+  function stepActs(list) { return (list || []).filter(function (a) { return a.type !== 'task.merged' && a.type !== 'git.push'; }).slice(0, 15); }
+  // private mode (S.mask): ids and types only, no titles and no free text
+  function actWho(a) { return a.task ? (S.mask ? a.task : (a.title || a.task)) : ''; }
+  function actText(a) {
+    var x = a.data || {};
+    var txt = a.type === 'gate.answered' ? t('act.gate', { gate: x.gate || '', answer: x.answer || '' }) : a.type === 'plan.created' ? t('act.plan') : t('act.' + a.type);
+    var who = actWho(a);
+    if (who) return who + ' \u00b7 ' + txt;
+    return a.type === 'plan.created' && x.slug && !S.mask ? txt + ' \u00b7 ' + x.slug : txt;
+  }
+  function actDetail(a) {
+    var x = a.data || {}, bits = [];
+    bits.push(a.type === 'task.merged' ? t('act.merged') : t('act.push'));
+    if (!S.mask) {
+      if (a.type === 'task.merged') { if (x.branch) bits.push(x.branch); if (x.note) bits.push(x.note); }
+      else {
+        if (x.remote) bits.push(x.remote);
+        if (Array.isArray(x.refs) && x.refs.length) bits.push(x.refs.join(', '));
+        else if (x.head) bits.push(x.head);
+      }
+    }
+    return h('span', { class: 'muted', text: (actWho(a) ? ' \u00b7 ' : '') + bits.join(' \u00b7 ') });
+  }
+
   function projectPage(d) {
     var id = d.project.id;
     var root = h('div', null,
@@ -465,7 +495,6 @@
     grid.appendChild(card(t('project.sessions'), d.sessions.length ? cap('sessions', t('project.sessions'), sessionTree(d.sessions, false, null)) : empty('sessions.none'), '', d.sessions.length));
     // work
     var workBody = h('div', null);
-    if (!d.work.length) workBody.appendChild(empty('work.none'));
     d.work.forEach(function (s) {
       workBody.appendChild(h('h3', { text: s.name }));
       workBody.appendChild(cap('work:' + s.name, s.name, h('ul', { class: 'list' }, s.items.map(function (it) {
@@ -478,18 +507,27 @@
       h('input', { type: 'text', name: 'title', required: true, placeholder: t('work.item'), 'aria-label': t('work.item'), size: 16 }),
       h('select', { name: 'state', 'aria-label': t('task.state') }, ['todo', 'doing', 'done', 'waiting', 'parked'].map(function (s) { return h('option', { value: s, text: t('state.' + s) }); })),
     ], t('add'), function (f) { post('/api/project/' + id + '/work', { stream: f.elements.stream.value, title: f.elements.title.value, state: f.elements.state.value }, function () { f.reset(); }); }));
-    grid.appendChild(card(t('project.work'), workBody, '', d.work.reduce(function (n, s) { return n + s.items.length; }, 0)));
+    if (d.work.length) grid.appendChild(card(t('project.work'), workBody, '', d.work.reduce(function (n, s) { return n + s.items.length; }, 0)));
+    else grid.appendChild(foldCard(t('project.work'), t('work.closed'), workBody));
     // log
-    var logBody = h('div', null, d.log.length ? cap('log', t('project.log'), h('ul', { class: 'list' }, d.log.slice(0, 15).map(function (l) { return h('li', null, h('span', { class: 'muted', text: ago(l.time) + ' · ' + l.who + ' · ' }), l.text); }))) : empty('log.none'));
+    var logBody = h('div', null);
+    var logActs = d.log.length ? [] : stepActs(d.activity);
+    if (d.log.length) logBody.appendChild(cap('log', t('project.log'), h('ul', { class: 'list' }, d.log.slice(0, 15).map(function (l) { return h('li', null, h('span', { class: 'muted', text: ago(l.time) + ' \u00b7 ' + l.who + ' \u00b7 ' }), l.text); }))));
+    else if (logActs.length) logBody.appendChild(cap('log', t('project.log'), h('ul', { class: 'list' }, logActs.map(function (a) { return h('li', null, h('span', { class: 'muted', text: ago(a.ts) + ' \u00b7 ' }), actText(a)); }))));
     logBody.appendChild(formRow([h('input', { type: 'text', name: 'text', required: true, placeholder: t('log.add'), 'aria-label': t('log.add'), size: 30 })], t('add'),
       function (f) { post('/api/project/' + id + '/log', { who: 'board', text: f.elements.text.value }, function () { f.reset(); }); }));
-    grid.appendChild(card(t('project.log'), logBody, '', Math.min(d.log.length, 15)));
+    if (d.log.length || logActs.length) grid.appendChild(card(t('project.log'), logBody, '', d.log.length ? Math.min(d.log.length, 15) : logActs.length));
+    else grid.appendChild(foldCard(t('project.log'), t('log.none'), logBody));
     // merge requests and validation
-    grid.appendChild(card(t('project.mrs'), d.mrs.length
-      ? table(['!', t('task.title'), 'CI', t('mr.merged')], d.mrs.map(function (m) { return h('tr', null, td('!' + m.iid), td(m.title), td(m.ci ? badge(m.ci, m.ci) : ''), td(m.merged ? t('yes') : t('no'))); }), [], 'mrs', t('project.mrs')) : empty('mr.none'), '', d.mrs.length));
+    var merges = d.mrs.length ? [] : mergeActs(d.activity);
+    if (d.mrs.length) grid.appendChild(card(t('project.mrs'), table(['!', t('task.title'), 'CI', t('mr.merged')], d.mrs.map(function (m) { return h('tr', null, td('!' + m.iid), td(m.title), td(m.ci ? badge(m.ci, m.ci) : ''), td(m.merged ? t('yes') : t('no'))); }), [], 'mrs', t('project.mrs')), '', d.mrs.length));
+    else if (merges.length) grid.appendChild(card(t('project.recentMerges'), cap('merges', t('project.recentMerges'), h('ul', { class: 'list' }, merges.map(function (a) {
+      return h('li', null, h('span', { class: 'muted', text: ago(a.ts) + ' \u00b7 ' }), actWho(a), actDetail(a));
+    }))), '', merges.length));
     var vrows = [];
     Object.keys(d.validation).forEach(function (k) { (d.validation[k] || []).forEach(function (r) { vrows.push(h('tr', null, td(k), td(r.date), td(r.host), td(r.result))); }); });
-    grid.appendChild(card(t('project.validation'), vrows.length ? table([t('validation.id'), t('validation.date'), t('validation.host'), t('validation.result')], vrows, [], 'validation', t('project.validation')) : empty('validation.none'), '', vrows.length));
+    if (vrows.length) grid.appendChild(card(t('project.validation'), table([t('validation.id'), t('validation.date'), t('validation.host'), t('validation.result')], vrows, [], 'validation', t('project.validation')), '', vrows.length));
+    else grid.appendChild(foldCard(t('project.validation'), t('validation.closed'), empty('validation.none')));
     // handoffs
     var hitems = [];
     ['open', 'accepted', 'cancelled'].forEach(function (st) {
