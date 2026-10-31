@@ -260,8 +260,13 @@ test('hook keeps quiet about the merge `crew task merge` recorded: same branches
   assert.equal(all.length, 1);
   assert.equal(all[0].src, 'cli');
   // another branch is still recorded
-  post(f, 'git merge feat/y', 'm2');
-  assert.deepEqual(H.evs(f, 'git.merge').map((e) => e.data.branches), [['feat/x'], ['feat/y']]);
+  const r2 = post(f, 'git merge feat/y', 'm2');
+  // On a failure this says what the hook did: its result, every event, and the hook error log (no command lines in them).
+  let hookErrors = null;
+  try { hookErrors = fs.readFileSync(path.join(f.home, 'hook-errors.jsonl'), 'utf8'); } catch { /* none */ }
+  assert.deepEqual(H.evs(f, 'git.merge').map((e) => e.data.branches), [['feat/x'], ['feat/y']],
+    `hook result: ${JSON.stringify({ code: r2.code, out: r2.out, err: r2.err, ms: r2.ms })}; hook-errors: ${JSON.stringify(hookErrors)}; `
+    + `events: ${JSON.stringify(H.evs(f).map((e) => ({ type: e.type, src: e.src, id: e.id, ts: e.ts, data: e.data })))}`);
 });
 
 test('dedupe still holds when a tag has the same name as the branch (git prints heads/<name>)', () => {

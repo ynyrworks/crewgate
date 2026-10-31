@@ -315,6 +315,38 @@ test('holder: refuses a process that started after the hook took its pid, and ca
   assert.strictEqual(events.read(f.pid, { types: 'session.job' }).length, 0);
 });
 
+// A holder on a sleeping stand-in; hookStart(t0) gives the -HookStart value, t0 being taken just before the stand-in starts.
+function holderOn(t, f, hookStart) {
+  const t0 = Date.now();
+  const sess = spawn(sessionjob.findShell(), ['-NoLogo', '-NoProfile', '-Command', 'Start-Sleep -Seconds 60'], { stdio: 'ignore', windowsHide: true });
+  const holder = spawn(sessionjob.findShell(), ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', HOLDER,
+    '-ClaudePid', String(sess.pid), '-ProjectId', f.pid, '-PidFile', path.join(f.home, 'h.pid'), '-CrewHome', f.home, '-NodeExe', process.execPath,
+    '-RecordScript', require.resolve('../lib/hooks/sessionjob'), '-CapPercent', '45', '-HookStart', String(hookStart(t0))], { stdio: 'ignore', windowsHide: true, env: process.env });
+  t.after(() => { for (const p of [sess.pid, holder.pid]) if (alive(p)) { try { process.kill(p); } catch { /* gone */ } } });
+  return { sess, holder };
+}
+
+test('holder: a hook that took its pid a few ms before the process started still gets its job (clock skew margin)', realHolder, async (t) => {
+  const f = H.fixture();
+  // HookStart is taken before the stand-in is even spawned, so the process starts later than it by the spawn time.
+  holderOn(t, f, (t0) => t0);
+  const job = await until(() => events.read(f.pid, { types: 'session.job' })[0]);
+  assert.strictEqual(job.data.assigned, true);
+  assert.strictEqual(events.read(f.pid, { types: 'session.job.error' }).length, 0);
+});
+
+test('holder: an uncaught error records session.job.error with reason=uncaught, and no command line', realHolder, async (t) => {
+  const f = H.fixture();
+  // A HookStart past the last date a DateTimeOffset holds makes the pid check throw, outside every try block.
+  const { holder } = holderOn(t, f, () => '9007199254740991');
+  const ev = await until(() => events.read(f.pid, { types: 'session.job.error' })[0]);
+  assert.strictEqual(ev.data.reason, 'uncaught');
+  assert.strictEqual(typeof ev.data.type, 'string');
+  assert.ok(!JSON.stringify(ev).includes('powershell') && !JSON.stringify(ev).includes('-File'), 'no command line in the event');
+  await until(() => !alive(holder.pid));
+  assert.strictEqual(events.read(f.pid, { types: 'session.job' }).length, 0);
+});
+
 // The keep decision, without any window: the real thing would flash one at the user.
 test('keep decision: the board, visible windows, board-like processes and all their descendants are kept', { skip: !WIN || !sessionjob.findShell() }, () => {
   const dir = tmpDir('crew-keep-');
