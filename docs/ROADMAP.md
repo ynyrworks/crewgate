@@ -8,6 +8,7 @@ the [CHANGELOG](../CHANGELOG.md).
 
 One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.md).
 
+- **0.17** — A task notification no longer counts as a user message for the gate rule; workers and reviewers are told to keep changes to the brief; `crew doctor` reports stale agent copies, a broken CLI path and project gates; the board's session counts match the Sessions page.
 - **0.16** — Projects can add their own gates, and their scripts get a CLI path that stays the same across versions; `crew task accept` refuses review findings that skipped the refuter unless a reason is given; `crew plan clarify` keeps settled questions with the plan; `crew lesson score` shows whether a promoted rule helped.
 - **0.15.1** — Plan tree step 3: `crew review followup` proposes work a code review found as a `[?]` step that counts only once accepted, next to the task's step or in another plan.
 - **0.15** — The pixel-art Office becomes an optional plugin, `crewgate-office`; plans guard their goal (a warning without one, an `off-goal` review finding, clarifying before a non-trivial plan); a gate set to `never` is denied before the command runs, and detection covers the PowerShell tool and wrapped commands.
@@ -20,7 +21,7 @@ One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.m
 
 ## Unreleased / next release
 
-What is on `main` and will ship in the next version (details under "Unreleased" in the [CHANGELOG](../CHANGELOG.md)): the doctor reports stale agent copies, a broken CLI path and project gates; a task notification no longer counts as a user message; workers and reviewers are told to keep changes to the brief.
+Nothing yet: `main` matches the latest release.
 
 
 ## Later
