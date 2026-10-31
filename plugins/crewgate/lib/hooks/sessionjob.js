@@ -9,6 +9,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'session-job.ps1');
+const HIDDEN_RUN = path.join(__dirname, '..', '..', 'scripts', 'hidden-run.vbs');
 
 function pidFile(projectId, claudePid) {
   return path.join(require('../core/paths').runtimeDir(projectId), `session-job-${claudePid}.pid`);
@@ -70,17 +71,19 @@ function start(projectId, limits, claudePid = process.ppid, deps = {}) {
     const args = ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', deps.script || SCRIPT,
       '-ClaudePid', String(claudePid), '-ProjectId', projectId, '-PidFile', file, '-CrewHome', require('../core/paths').home(),
       '-NodeExe', process.execPath, '-RecordScript', __filename, '-CapPercent', String(cap), '-Cleanup', cleanup, '-HookStart', String(hookStart)];
+    // A `wscript.exe` that is missing or blocked means no holder, never another way of starting one: every other way
+    // measured either shows a window (`cmd /c start /b` opens a Windows Terminal window) or does not run the script.
+    const wscript = deps.wscript !== undefined ? deps.wscript : findWscript();
+    if (!wscript) { note(projectId, 'session.job.error', { reason: 'no-wscript' }); return 'no-wscript'; }
     if (!claim(projectId, claudePid)) return 'already';
     // Node's own children die with it (libuv puts them in a kill-on-close job) and a `detached` PowerShell exits at
-    // once (measured), so the holder is started by `cmd /c start /b` from a detached cmd: it is then outside both.
-    // The holder writes its own pid to the runtime file. Arguments are quoted by hand (cmd re-parses the line).
-    if (args.some((x) => /["%]/.test(x))) { try { fs.unlinkSync(file); } catch { /* none */ } note(projectId, 'session.job.error', { reason: 'bad-path' }); return 'bad-path'; }
-    const q = (x) => `"${x}"`;
-    const line = `"start "" /b ${q(shell)} ${args.map(q).join(' ')}"`;
+    // once (measured), so the holder is started by a detached wscript running scripts/hidden-run.vbs (window style 0,
+    // no waiting): it is then outside both, and no window opens. The holder writes its own pid to the runtime file.
+    if (args.some((x) => /"/.test(x))) { try { fs.unlinkSync(file); } catch { /* none */ } note(projectId, 'session.job.error', { reason: 'bad-path' }); return 'bad-path'; }
     let child;
     try {
-      child = (deps.spawn || spawn)(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', line],
-        { detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true });
+      child = (deps.spawn || spawn)(wscript, ['//B', '//Nologo', HIDDEN_RUN, shell, ...args],
+        { detached: true, stdio: 'ignore', windowsHide: true });
     } catch {
       try { fs.unlinkSync(file); } catch { /* none */ }
       note(projectId, 'session.job.error', { reason: 'spawn-failed' });
@@ -101,6 +104,12 @@ function findShell() {
   return fs.existsSync(sys) ? sys : '';
 }
 
+// Only the system's own wscript.exe, by full path: nothing from PATH.
+function findWscript() {
+  const f = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'wscript.exe');
+  try { return fs.statSync(f).isFile() ? f : ''; } catch { return ''; }
+}
+
 function cli(argv) {
   if (argv[0] !== '--record' || argv.length < 3) return;
   const data = {};
@@ -115,4 +124,4 @@ function cli(argv) {
 
 if (require.main === module) { try { cli(process.argv.slice(2)); } catch { /* nothing to do */ } }
 
-module.exports = { start, claim, held, pidFile, findShell };
+module.exports = { start, claim, held, pidFile, findShell, findWscript };

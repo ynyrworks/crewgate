@@ -41,13 +41,18 @@ test('start(): one detached hidden holder per Claude pid, with the settings; a l
   const home = setupHome();
   const calls = [];
   const sp = (shell, args, opts) => { calls.push({ shell, args, opts }); return { pid: process.pid, unref() {}, on() {} }; };
-  const deps = { platform: 'win32', describe: () => claude, spawn: sp, shell: 'pwsh.exe' };
+  const deps = { platform: 'win32', describe: () => claude, spawn: sp, shell: 'pwsh.exe', wscript: 'C:/Windows/System32/wscript.exe' };
   assert.strictEqual(sessionjob.start('pabcdef0123', { session_cpu_percent: 40, session_cleanup: 'off' }, 4242, deps), 'started');
   assert.strictEqual(calls.length, 1);
   assert.deepStrictEqual([calls[0].opts.detached, calls[0].opts.windowsHide, calls[0].opts.stdio], [true, true, 'ignore']);
-  const a = calls[0].args[3].split(' ').map((x) => x.replace(/"/g, ''));
-  assert.strictEqual(calls[0].args[2], '/c');
-  assert.ok(calls[0].args[3].startsWith('"start "" /b "pwsh.exe" '));
+  // the command: wscript.exe running the static hidden-run.vbs, then the shell and its arguments; no cmd, no start
+  assert.strictEqual(path.win32.basename(calls[0].shell).toLowerCase(), 'wscript.exe');
+  assert.deepStrictEqual(calls[0].args.slice(0, 2), ['//B', '//Nologo']);
+  assert.strictEqual(path.basename(calls[0].args[2]), 'hidden-run.vbs');
+  assert.ok(fs.existsSync(calls[0].args[2]));
+  assert.strictEqual(calls[0].args[3], 'pwsh.exe');
+  assert.ok(!/cmd|start/i.test(path.win32.basename(calls[0].shell) + calls[0].args.slice(0, 3).join(' ')));
+  const a = calls[0].args.slice(4);
   assert.strictEqual(a[a.indexOf('-CapPercent') + 1], '40');
   assert.strictEqual(a[a.indexOf('-Cleanup') + 1], 'off');
   assert.strictEqual(a[a.indexOf('-ClaudePid') + 1], '4242');
@@ -78,6 +83,34 @@ test('start(): one detached hidden holder per Claude pid, with the settings; a l
   assert.strictEqual(sessionjob.start('pabcdef0123', {}, 4242, bad), 'error');
   assert.ok(!fs.existsSync(file), 'the claim is given back');
   assert.ok(events.read('pabcdef0123', { types: 'session.job.error' }).some((e) => e.data.reason === 'spawn-failed'));
+});
+
+test('start(): no wscript.exe means no holder and an event, never another way of starting one', () => {
+  const f = H.fixture();
+  const sp = () => { throw new Error('must not spawn'); };
+  assert.strictEqual(sessionjob.start(f.pid, {}, 4242, { platform: 'win32', describe: () => claude, shell: 'pwsh.exe', wscript: '', spawn: sp }), 'no-wscript');
+  assert.ok(events.read(f.pid, { types: 'session.job.error' }).some((e) => e.data.reason === 'no-wscript'));
+  assert.ok(!fs.existsSync(sessionjob.pidFile(f.pid, 4242)), 'no claim is left');
+  // an argument with a quote is refused (the claim is given back)
+  const calls = [];
+  const deps = { platform: 'win32', describe: () => claude, shell: 'pwsh.exe', wscript: 'wscript.exe', script: 'a"b.ps1', spawn: (...a) => { calls.push(a); return {}; } };
+  assert.strictEqual(sessionjob.start(f.pid, {}, 4243, deps), 'bad-path');
+  assert.strictEqual(calls.length, 0);
+  assert.ok(!fs.existsSync(sessionjob.pidFile(f.pid, 4243)));
+});
+
+test('hidden-run.vbs: arguments with spaces reach the program intact, and it opens no window', { skip: !WIN || !sessionjob.findWscript(), timeout: 60000 }, async (t) => {
+  const dir = tmpDir('crew-vbs-');
+  const out = path.join(dir, 'argv.json');
+  const js = path.join(dir, 'a b', 'dump.js');
+  fs.mkdirSync(path.dirname(js), { recursive: true });
+  fs.writeFileSync(js, 'require("fs").writeFileSync(process.argv[2], JSON.stringify(process.argv.slice(3)));');
+  const vbs = path.join(__dirname, '..', 'scripts', 'hidden-run.vbs');
+  const child = spawn(sessionjob.findWscript(), ['//B', '//Nologo', vbs, process.execPath, js, out, 'one two', 'x', 'C:/p q/r s'],
+    { detached: true, stdio: 'ignore', windowsHide: true });
+  child.unref();
+  const got = JSON.parse(await until(() => fs.existsSync(out) && fs.readFileSync(out, 'utf8'), 20000));
+  assert.deepStrictEqual(got, ['one two', 'x', 'C:/p q/r s']);
 });
 
 test('start(): no PowerShell records an event and does not throw', () => {
@@ -215,7 +248,7 @@ test('holder killed first: the session and its children keep running and nothing
   assert.strictEqual(events.read(s.f.pid, { types: 'session.cleanup' }).length, 0);
 });
 
-test('start() launches a real holder through cmd; it records the job and the cleanup, and removes its pid file', realHolder, async (t) => {
+test('start() launches a real holder through wscript; it records the job and the cleanup, and removes its pid file', realHolder, async (t) => {
   const f = H.fixture();
   const sess = spawn(sessionjob.findShell(), ['-NoLogo', '-NoProfile', '-Command', 'Start-Sleep -Seconds 60'], { stdio: 'ignore', windowsHide: true });
   const stopSess = () => { if (alive(sess.pid)) { try { process.kill(sess.pid); } catch { /* gone */ } } };
@@ -281,7 +314,7 @@ test('keep decision: the board, visible windows, board-like processes and all th
   ];
   const run = (board, list) => {
     fs.writeFileSync(file, JSON.stringify({ board, procs: list }));
-    const r = require('child_process').spawnSync(sessionjob.findShell(), ['-NoLogo', '-NoProfile', '-File', HOLDER, '-TestKeepFile', file], { encoding: 'utf8' });
+    const r = require('child_process').spawnSync(sessionjob.findShell(), ['-NoLogo', '-NoProfile', '-File', HOLDER, '-TestKeepFile', file], { encoding: 'utf8', windowsHide: true });
     return JSON.parse(r.stdout.trim());
   };
   assert.deepStrictEqual(run(10, procs.map((p) => ({ ...p, boardlike: false }))), [10, 11, 12, 20, 21]);
