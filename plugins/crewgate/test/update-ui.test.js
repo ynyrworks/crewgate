@@ -44,6 +44,17 @@ test('restart verdict: wait while down or on the old version, ok on a new versio
   assert.equal(UM.restartVerdict('1.0.0', h('1.0.0'), 60000), 'timeout');
 });
 
+test('status step: idle while running means a fresh board, so check the restart; idle otherwise stays idle', () => {
+  assert.equal(UM.statusStep('running', 'idle'), 'restart');
+  assert.equal(UM.statusStep('running', undefined), 'restart');
+  assert.equal(UM.statusStep('idle', 'idle'), 'idle');
+  assert.equal(UM.statusStep('running', 'running'), 'running');
+  assert.equal(UM.statusStep('running', 'restarting'), 'restart');
+  assert.equal(UM.statusStep('running', 'manual'), 'manual');
+  assert.equal(UM.statusStep('running', 'failed'), 'failed');
+  assert.equal(UM.statusStep('running', 'done'), 'done');
+});
+
 test('page wiring: banner container on every page, strict-CSP friendly, skip stored defensively', () => {
   const html = read('index.html');
   assert.match(html, /<section id="update"[^>]*hidden/);

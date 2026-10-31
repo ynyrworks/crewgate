@@ -29,5 +29,15 @@
     return elapsedMs >= (limitMs || RESTART_LIMIT_MS) ? 'timeout' : 'wait';
   }
 
-  return { visible: visible, kindKey: kindKey, restartVerdict: restartVerdict, RESTART_LIMIT_MS: RESTART_LIMIT_MS };
+  // What a /api/update/status answer means for the page. While an update runs, `idle` can only come
+  // from a fresh board (no update record in its memory): the restart already happened, check health.
+  //   -> 'running' | 'restart' | 'manual' | 'failed' | 'done' | 'idle'
+  function statusStep(phase, state) {
+    if (state === 'running') return 'running';
+    if (state === 'restarting') return 'restart';
+    if (state === 'manual' || state === 'failed' || state === 'done') return state;
+    return phase === 'running' ? 'restart' : 'idle';
+  }
+
+  return { visible: visible, kindKey: kindKey, restartVerdict: restartVerdict, statusStep: statusStep, RESTART_LIMIT_MS: RESTART_LIMIT_MS };
 }));
