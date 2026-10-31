@@ -24,7 +24,7 @@ function fresh(t) {
     state: path.join(HOME, 'board.json'),
     lock: path.join(HOME, 'board.starting'),
     log: path.join(HOME, 'board.log'),
-    crew: (args) => bh.crew(args, process.cwd(), { CREWGATE_HOME: HOME }),
+    crew: (args) => bh.crew(args, F.repo, { CREWGATE_HOME: HOME }),
     reset() { for (const f of [E.state, E.lock, E.log, path.join(HOME, 'config.json')]) fs.rmSync(f, { force: true }); },
     writeGlobal: (o) => fs.writeFileSync(path.join(HOME, 'config.json'), JSON.stringify({ version: 1, ...o })),
   };
@@ -255,11 +255,11 @@ test('manual board start takes and releases the lock', async (t) => {
 });
 
 test('doctor: a board answering on the port does not make a state file with a dead pid look healthy', async (t) => {
-  const { state, crew, writeGlobal } = fresh(t);
+  const { F, state, crew, writeGlobal } = fresh(t);
   // a real board of ANOTHER data folder holds the port (what a leaked or foreign board looks like)
   const other = require('./helpers').tmpDir('crew-other-home-');
   const port = await freePort();
-  const run = (args) => bh.crew(args, process.cwd(), { CREWGATE_HOME: other });
+  const run = (args) => bh.crew(args, F.repo, { CREWGATE_HOME: other });
   t.after(() => { run(['board', 'stop']); });
   assert.equal(run(['board', 'start', '--port', String(port), '--no-open']).code, 0);
   writeGlobal({ port });
