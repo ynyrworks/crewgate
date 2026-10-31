@@ -302,11 +302,12 @@
     api('/api/update/status').then(function (r) {
       var d = r.data;
       u.status = d;
-      if (d.state === 'running') { renderUpdate(); again(); return; }
-      if (d.state === 'restarting') { toRestart(); return; }
-      if (d.state === 'manual') u.phase = 'manual';
-      else if (d.state === 'failed') u.phase = 'failed';
-      else if (d.state === 'done') { u.phase = 'done'; u.doneVersion = d.new_version || ''; loadOld(); } else u.phase = 'idle';
+      var step = UM.statusStep(u.phase, d.state);
+      if (step === 'running') { renderUpdate(); again(); return; }
+      if (step === 'restart') { toRestart(); return; }
+      if (step === 'manual') u.phase = 'manual';
+      else if (step === 'failed') u.phase = 'failed';
+      else if (step === 'done') { u.phase = 'done'; u.doneVersion = d.new_version || ''; loadOld(); } else u.phase = 'idle';
       renderUpdate();
     }).catch(toRestart);   // the board stopped answering: it is restarting itself
   }
