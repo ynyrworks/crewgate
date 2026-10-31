@@ -138,6 +138,7 @@ All fields are optional; defaults below. The board's Settings page edits this fi
   "gates": {
     "push": "ask", "open_pr": "ask", "merge": "ask",
     "remote_hosts": "ask", "large_task": "ask", "install_or_download": "ask"
+    // plus a project's own, such as "release": "ask": any lowercase key set to auto, ask or never works with crew gate ask
   },
   "limits": {
     "max_parallel_workers": 3,

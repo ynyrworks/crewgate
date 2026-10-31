@@ -22,6 +22,7 @@ One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.m
 What is on `main` and will ship in the next version (details under "Unreleased" in the [CHANGELOG](../CHANGELOG.md)).
 
 - **Review findings cannot skip the refuter unnoticed.** `crew task accept` refuses a round that was never finalized unless a reason is given.
+- **Project gates and a stable CLI path.** A project adds its own gates in `crew.json`, and its scripts call `~/.crewgate/bin/crew.js`.
 - **`crew lesson score`.** Shows whether the lessons behind each promoted rule stopped coming back.
 - **`crew plan clarify`.** Settled questions are kept with the plan and shown by `plan show`, the board and plan review.
 

@@ -248,3 +248,19 @@ test('doctor warns on empty checks and on hooks that never fired; both clear whe
   assert.equal(by.hookseen.status, 'ok');
   assert.ok(doc.hook_seen.find((r) => r.event === 'Stop').last);
 });
+
+test('a project can add its own gates in crew.json; a key that is not a gate stays unknown', () => {
+  const repo = u.initRepo();
+  u.patchCfg(repo, (c) => { c.gates = { ...c.gates, release: 'ask', glossary_signoff: 'auto', delete_files: 'never', notes: 'maybe' }; });
+  const asked = u.crewJson(['gate', 'ask', 'release', '--detail', 'publish 1.0'], repo);
+  assert.equal(asked.code, 0, asked.err);
+  assert.equal(asked.data.mode, 'ask');
+  assert.equal(u.crewJson(['gate', 'ask', 'glossary_signoff'], repo).data.mode, 'auto');
+  assert.notEqual(u.crewJson(['gate', 'ask', 'delete_files'], repo).code, 0, 'never refuses');
+  for (const name of ['notes', 'enforce', 'require_user_turn', 'typo']) {
+    const r = h.crew(['gate', 'ask', name], repo);
+    assert.notEqual(r.code, 0, name);
+    assert.match(r.err, /release/, 'the error lists the project gates');
+  }
+  assert.equal(u.crewJson(['gate', 'ask', 'large_task'], repo).code, 0, 'built-in gates still work');
+});

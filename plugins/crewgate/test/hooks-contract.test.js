@@ -158,3 +158,18 @@ test('the stuck-handler test knob is ignored without CREWGATE_TEST=1', () => {
   assert.ok(Date.now() - t0 < 3500, 'no sleep happened');
   assert.notEqual(r.out, '{}');
 });
+
+test('session start writes a CLI path that stays the same across versions, and it runs', () => {
+  const f = H.fixture();
+  const r = H.runHook('session-start', H.base(f, { source: 'startup' }), { cwd: f.repo });
+  assert.equal(r.code, 0);
+  const shim = path.join(f.home, 'bin', 'crew.js');
+  const text = fs.readFileSync(shim, 'utf8');
+  assert.match(text, /bin.+crew\.js/);
+  const out = require('child_process').spawnSync(process.execPath, [shim, '--help'], { encoding: 'utf8', env: { ...process.env, CREWGATE_HOME: f.home } });
+  assert.equal(out.status, 0, out.stderr);
+  assert.match(out.stdout, /crew/);
+  const before = fs.statSync(shim).mtimeMs;
+  H.runHook('session-start', H.base(f, { source: 'resume' }), { cwd: f.repo });
+  assert.equal(fs.statSync(shim).mtimeMs, before, 'not rewritten when nothing changed');
+});

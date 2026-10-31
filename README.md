@@ -138,7 +138,7 @@ git clone https://github.com/ynyrworks/crewgate
 claude --plugin-dir crewgate/plugins/crewgate
 ```
 
-The skill is invoked namespaced: `/crewgate:crew`. The CLI lives at `plugins/crewgate/bin/crew.js`; inside
+The skill is invoked namespaced: `/crewgate:crew`. A session in a crewgate project also writes `~/.crewgate/bin/crew.js`, a path that stays the same across versions, for your own scripts. The CLI lives at `plugins/crewgate/bin/crew.js`; inside
 Claude Code the skill calls it for you. From a terminal use `node plugins/crewgate/bin/crew.js <command>`.
 
 This installs everything crewgate needs. The Office page is separate and you can skip it: see [Optional: Office view](#optional-office-view).
@@ -171,7 +171,7 @@ default language) in `~/.crewgate/config.json`. The full, generated key referenc
 | `roles.<role>.model` / `.engine` | Which model or external engine plays each role. |
 | `checks` | Commands a worker must run before reporting. |
 | `forbidden.paths`, `forbidden.actions` | Boundaries rendered into the worker agent file. |
-| `gates.*` | `auto`, `ask` or `never` for push, PR, merge, remote hosts, large tasks, installs. |
+| `gates.*` | `auto`, `ask` or `never` for push, PR, merge, remote hosts, large tasks, installs. Any other lowercase key is a gate of your project, such as `"release": "ask"`, used through `crew gate ask`; the hooks do not detect what it is about. |
 | `gates.enforce`, `gates.require_user_turn` | When a push, PR or merge without approval is checked (`remind`, `confirm`, `block`) and whether an approval needs a user message after the ask. See Gates below. |
 | `limits.orchestrator_edit` | `off`, `warn` or `block` when the orchestrator edits code. |
 | `limits.max_parallel_workers`, `limits.max_returns_before_takeover` | Concurrency and send-back limits. |

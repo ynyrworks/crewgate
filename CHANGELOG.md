@@ -8,6 +8,9 @@
 
 - `crew lesson score` shows, for each promoted rule, the lessons under its key before and after it was promoted, per day: too early, no repeats, fewer repeats or not helping. It counts recorded lessons only, so a correction nobody recorded is not seen.
 
+- A project can add its own gates: any other lowercase key under `gates` in `crew.json` set to `auto`, `ask` or `never`, such as `"release": "ask"`, works with `crew gate ask`. The hooks do not detect what such a gate is about.
+- A session in a crewgate project writes `~/.crewgate/bin/crew.js`, which runs the plugin version that last started a session, so a project's own scripts need no version folder in their path.
+
 ### Changed
 
 - `crew task accept` refuses a task whose latest review round has findings that never went through the refuter and `crew review finalize`. It used to accept and print a note, and real runs skipped the refuter in 3 of 6 rounds with findings. `--skip-refuter "reason"` accepts anyway and records the reason in the event. A task with no review round still gets only a note.

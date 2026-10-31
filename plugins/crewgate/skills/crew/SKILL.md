@@ -118,7 +118,8 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
 ## Gates
 
 `gates` in the config decide what needs the user. For each of `push`, `open_pr`, `merge`,
-`remote_hosts`, `large_task`, `install_or_download`:
+`remote_hosts`, `large_task`, `install_or_download`, and any gate this project adds under `gates` in its `crew.json`
+(the hooks do not detect those: asking is your job):
 
 - `auto`: do it.
 - `ask`: run `crew gate ask <gate> --task <id> --detail "<exact action>"` (it prints a gate id), then stop and ask
