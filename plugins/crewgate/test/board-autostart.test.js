@@ -304,3 +304,22 @@ test('heartbeat: stamps alive, keeps other fields, ignores a state file of anoth
     return new Promise((r) => setTimeout(r, 80));
   }).finally(() => clearInterval(timer));
 });
+
+test('a real board serve keeps stamping alive in board.json (the heartbeat is wired into serve)', async (t) => {
+  const { HOME, state, reset } = fresh(t);
+  reset();
+  const port = await freePort();
+  const serve = spawn(process.execPath, [BIN, 'board', 'serve', '--port', String(port)], {
+    env: { ...process.env, CREWGATE_HOME: HOME, CREWGATE_BOARD_HEARTBEAT_MS: '100' }, stdio: 'ignore',
+  });
+  const exited = new Promise((r) => serve.on('exit', r));
+  t.after(async () => { serve.kill('SIGKILL'); await exited; });
+  const read = () => { try { return JSON.parse(fs.readFileSync(state, 'utf8')); } catch { return null; } };
+  const first = await until(() => { const s = read(); return s && s.pid === serve.pid && s.alive ? s : null; });
+  assert.ok(first, 'the board wrote its state file');
+  const next = await until(() => { const s = read(); return s && s.pid === serve.pid && s.alive !== first.alive ? s : null; }, 5000);
+  assert.ok(next, 'alive changed without anyone touching the board');
+  assert.ok(Date.parse(next.alive) > Date.parse(first.alive));
+  serve.kill('SIGTERM');
+  await exited;
+});
