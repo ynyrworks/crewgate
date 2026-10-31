@@ -20,7 +20,7 @@ const claude = { name: 'claude.exe', args: '' };
 
 test('limits.session_cpu_percent and session_cleanup: defaults and ranges', () => {
   assert.strictEqual(config.DEFAULTS.limits.session_cpu_percent, 60);
-  assert.strictEqual(config.DEFAULTS.limits.session_cleanup, 'on');
+  assert.strictEqual(config.DEFAULTS.limits.session_cleanup, 'off');
   const text = (r) => JSON.stringify(r);
   for (const v of [10, 60, 100]) assert.ok(!text(config.validate({ limits: { session_cpu_percent: v } })).includes('session_cpu_percent'));
   for (const v of [9, 101, 'x']) assert.ok(text(config.validate({ limits: { session_cpu_percent: v } })).includes('session_cpu_percent'));
@@ -228,6 +228,7 @@ test('holder: the session ends, its children go, the board and its child stay, t
   const ev = await until(() => events.read(s.f.pid, { types: 'session.cleanup' })[0]);
   assert.ok(ev.data.stopped >= 2, 'the plain and the detached child (and their console hosts) are stopped');
   assert.ok(ev.data.kept >= 2);
+  assert.strictEqual(ev.data.would_stop, ev.data.found - ev.data.kept);
   await until(() => !alive(s.pids.plain) && !alive(s.pids.det));
   assert.ok(alive(s.pids.board) && alive(s.pids.kid), 'the board and its child survive');
   await until(() => !alive(s.holder.pid));
@@ -241,6 +242,9 @@ test('holder: cleanup off lists and records without stopping', realHolder, async
   const ev = await until(() => events.read(s.f.pid, { types: 'session.cleanup' })[0]);
   assert.strictEqual(ev.data.stopped, 0);
   assert.ok(ev.data.found >= 4);
+  assert.ok(ev.data.would_stop >= 2, 'the plain and the detached child would be stopped');
+  assert.strictEqual(ev.data.would_stop, ev.data.found - ev.data.kept);
+  assert.ok(!JSON.stringify(ev).includes('node'), 'no command lines in the event');
   assert.ok(alive(s.pids.plain) && alive(s.pids.det));
 });
 

@@ -183,7 +183,8 @@ try {
     }
     Start-Sleep -Milliseconds 300
   }
-  $extra = @("found=$($foundSet.Count)", "stopped=$($stoppedSet.Count)", "kept=$($keptSet.Count)", "cleanup=$Cleanup")
+  $wouldStop = @($foundSet.Keys | Where-Object { -not $keptSet.ContainsKey($_) }).Count
+  $extra = @("found=$($foundSet.Count)", "stopped=$($stoppedSet.Count)", "kept=$($keptSet.Count)", "would_stop=$wouldStop", "cleanup=$Cleanup")
   if ($err) { $extra += "error=$err" }
   Record 'session.cleanup' $extra
 } finally { Done }
