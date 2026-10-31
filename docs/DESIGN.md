@@ -676,7 +676,7 @@ Layers, from the source of the load outward:
 3. Worker rules: related test files only while working, one run at a time, the full suite once at the end in the foreground; the orchestrator runs the full suite at merge, one at a time.
 4. Hook denials: `limits.max_parallel_workers` and the unbounded-loop checks, a last layer that reads command text.
 
-Priority does not help while the machine has idle cores: measured on 32 threads, a normal-priority 10 ms timer probe saw the same delay with a default test run at normal and at below normal priority (see PLUGIN-FACTS). It matters when every core is busy, and that is when the scheduler needs it. Layer 1 is what lowers the load itself.
+Priority helps once a core is saturated and does nothing while cores are idle. Measured (see PLUGIN-FACTS): a full default test run on 32 threads never saturated the machine (peak CPU about 79%), so a normal-priority timer probe saw no difference there; with four loops pinned to one core, the probe's worst delay was 378.9 ms against 2.5 ms when the loops ran at below normal. A real `claude -p` session confirmed the hook finds the Claude process and a Bash child inherits priority 10. The whole machine at saturation was not measured. Layer 1 is what lowers the load itself.
 
 Not covered: a process that outlives the session (a detached server or a loop started by a command), and any cap on total CPU (no job object or cgroup is used).
 
