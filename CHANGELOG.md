@@ -9,6 +9,7 @@
 
 ### Changed
 
+- Worker instructions: every changed line must trace to the brief, and a problem outside it goes in the report. Reviewer instructions: a change the brief does not call for, or a clearly overbuilt solution, is a finding. Existing projects get these with `crew init --force`; `crew doctor` flags their copies until then.
 - `crew init` also writes `~/.crewgate/bin/crew.js`, so a project's scripts work before the first session.
 
 ### Fixed

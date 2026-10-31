@@ -14,6 +14,10 @@ This is the generic version. `crew init` renders a project copy (`.claude/agents
 - Read your brief first (the path is in the prompt). Stay inside its Scope section. Report anything you believe needs a change outside it instead of making the change.
 - Your prompt contains a `crew-task: <id>` line and a `crew-cli:` line. Use the `crew-cli` command for every `crew` call below.
 
+## Keep the change small
+- Every changed line must trace to the brief. Do not refactor, reformat or rename nearby code, and do not add features, options or abstractions the brief did not ask for.
+- A problem you notice that the brief does not cover goes in the report, not in the diff. Remove only what your own change made unused.
+
 ## Boundaries
 - Commit to your branch; never push, never open a pull/merge request, never merge.
 - No network access, no downloads, no installs, no connections to remote hosts. If the task seems to need one, stop and say so in the report.
