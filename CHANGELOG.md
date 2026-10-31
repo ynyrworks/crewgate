@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.20.1 — 2026-11-01
+
+### Fixed
+
+- A shell loop of background copies is allowed up to `max(2, cores / 2)`. On a machine with few cores, two copies were denied, which failed every macOS CI job for 0.20.0.
+- The session job holder records `session.job.error` with `reason=uncaught` when it dies from an error nothing caught. The check for a reused pid allows 1000 ms between the clocks. In a real session Claude Code starts well before its hook, so only tests came close.
+- The holder test and the merge test in `hooks-stability` print their evidence when they fail.
+
+### Known issues
+
+- 0.20.0 was tagged with failing CI and has no GitHub release. Everything it adds is in this version.
+- The causes of two Windows CI failures are not established: the holder test (most likely the stand-in's start time) and `hooks-stability` "keeps quiet about the merge". See [docs/ROADMAP.md](docs/ROADMAP.md).
+
 ## 0.20.0 — 2026-10-31
 
 ### Fixed
