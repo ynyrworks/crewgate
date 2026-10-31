@@ -21,7 +21,7 @@ test('doctor gates line names project gates with their modes, apart from the bui
   const en = checksOf(repo).gates.detail;
   assert.match(en, /ask gates: push, open_pr, merge; project gates: release ask, deploy never/);
   const zh = checksOf(repo, ['--lang', 'zh-TW']).gates.detail;
-  assert.match(zh, /ask 關卡：push, open_pr, merge；專案關卡：release ask, deploy never|專案關卡：release ask, deploy never/);
+  assert.match(zh, /ask 關卡：push, open_pr, merge；專案關卡：release ask, deploy never/);
 });
 
 test('crew init writes the shim so a project script works right away', () => {

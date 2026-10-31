@@ -69,7 +69,7 @@ async function run(argv, ctx) {
       const enforce = gates.enforceOf(loaded.config);
       const own = gates.gateNames(loaded.config).filter((k) => !gates.GATES.includes(k));
       add('gates', 'ok', ctx.t(`wf.doctor.gates.${enforce}`, { turn: ctx.t(gates.requiresUserTurn(loaded.config) ? 'wf.doctor.gates.turnOn' : 'wf.doctor.gates.turnOff'), ask: ['push', 'open_pr', 'merge'].filter((k) => gates.modeOf(loaded.config, k) === 'ask').join(', ') || '-' })
-        + (own.length ? `; ${ctx.t('wf.doctor.gates.own', { own: own.map((k) => `${k} ${gates.modeOf(loaded.config, k)}`).join(', ') })}` : ''));
+        + (own.length ? `${ctx.t('wf.doctor.gates.own', { own: own.map((k) => `${k} ${gates.modeOf(loaded.config, k)}`).join(', ') })}` : ''));
     }
     add('registration', proj ? 'ok' : 'warn', proj ? `${proj.id} (${proj.name})` : ctx.t('wf.doctor.notRegistered'));
     const expected = ['.claude/agents/crew-worker.md', '.claude/agents/crew-reviewer.md', '.claude/agents/crew-refuter.md', '.crew/REVIEW.md', '.crew/LESSONS.md'];

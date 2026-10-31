@@ -195,7 +195,7 @@
   "wf.doctor.gates.block": "enforce block：沒有核准的推送、PR、合併在執行前被拒絕；使用者回合規則 {turn}；ask 關卡：{ask}。Codex 工作階段退回 remind（Codex PreToolUse 的 deny 尚未驗證）",
   "wf.doctor.gates.turnOn": "開",
   "wf.doctor.gates.turnOff": "關",
-  "wf.doctor.gates.own": "專案關卡：{own}",
+  "wf.doctor.gates.own": "；專案關卡：{own}",
   "wf.doctor.shimMissing": "CLI shim {file} 不存在，專案腳本呼叫它會出現 MODULE_NOT_FOUND。執行 `crew init` 或開始一個工作階段即可寫入",
   "wf.doctor.shimStale": "CLI shim {file} 指向 {target}，該路徑已不存在（例如被 `crew update cleanup` 移除）。執行 `crew init` 或開始一個工作階段即可重寫",
   "wf.doctor.name.shim": "CLI shim",
