@@ -40,6 +40,19 @@ const freePort = () => new Promise((resolve) => {
   const s = net.createServer();
   s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => resolve(p)); });
 });
+// What a failing wait needs to explain itself: board.log, the state file, the lock and how long was waited. A board
+// that is merely slow gets 45 s more, so the message says "came up late" (a slow machine) or "never came up" (a defect).
+async function diagnose(E, t0) {
+  const read = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch (e) { return `(unreadable: ${e.code})`; } };
+  const waited = Date.now() - t0;
+  const late = await until(() => fs.existsSync(E.state), 45000);
+  return [
+    `waited ${waited} ms; the state file ${late ? `appeared ${Date.now() - t0} ms after the start` : 'never appeared (checked for 45 s more)'}`,
+    `lock exists: ${fs.existsSync(E.lock)}`,
+    `board.json: ${read(E.state)}`,
+    `board.log:\n${read(E.log)}`,
+  ].join('\n');
+}
 const until = async (fn, ms = 15000) => {
   const end = Date.now() + ms;
   while (Date.now() < end) { const v = await fn(); if (v) return v; await new Promise((r) => setTimeout(r, 100)); }
@@ -87,22 +100,24 @@ test('autostart: one spawn for two callers, a live state file wins, a stale lock
 });
 
 test('SessionStart starts the board when board.autostart is on, without waiting for it, and a second start reuses it', async (t) => {
-  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = fresh(t);
+  const E = fresh(t);
+  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = E;
   reset();
   const port = await freePort();
   writeGlobal({ port, board: { autostart: true } });
   const r = h.start(F);
   assert.equal(r.code, 0, r.err);
   assert.ok(r.json && r.json.hookSpecificOutput, 'the brief is still returned');
+  const t0 = Date.now();
   const st = await until(async () => {
     try {
       const x = JSON.parse(fs.readFileSync(state, 'utf8'));
       return (await bh.request(port, { path: '/api/health' })).status === 200 ? x : null;
     } catch { return null; }
   });
-  assert.ok(st, 'the board came up on the configured port');
+  assert.ok(st, `the board came up on the configured port ${port}\n${st ? '' : await diagnose(E, t0)}`);
   assert.equal(st.port, port);
-  assert.equal(fs.existsSync(lock), false, 'the serve process released the start lock');
+  assert.equal(fs.existsSync(lock), false, `the serve process released the start lock\n${fs.existsSync(lock) ? await diagnose(E, t0) : ''}`);
   h.start(F);
   // the second start's detached check must have finished (and found the board) before the board is stopped,
   // or it could outlive this test and start a new board
