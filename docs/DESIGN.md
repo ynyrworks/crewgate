@@ -582,6 +582,15 @@ what `app.js` passes to `Office.page` changes. Its strings stay in the board's i
 `claude plugin update crewgate-office@crewgate` when it is installed (a failure there does not fail the plugin update), and old
 versions are cleaned up like the plugin's.
 
+HD view (`office-hd.js`, pure logic in `office-hd-model.js`). Pixel-art cards in a lit 3D room, three.js r170. Cards face the fixed camera
+because the art is drawn from that angle; their normals lean upward so they take light like the floor. Floor and walls write no depth,
+so cards that lean back toward them are not cut. A seated character moves back along the view line: same place on screen, but behind
+the desk's card. The set of lights is fixed, so nothing recompiles when sessions come and go. Bloom, tilt shift and tone mapping are
+written in this file: three's add-ons need an import map, which the CSP does not allow, and the view must load one file only. The board
+builds the page on every refresh and attaches it only when the data changed, so a page takes the single canvas only if it is
+on screen. The first time, the frame rate is measured for 3 s after 1 s of settling (not while hidden); under 20 fps the view stays off
+until the user asks. It is opt-in: the pixel view is the default, and only a stored `crew.office.view` of `hd` shows the HD view; the button is labelled as a test version. The art is produced by `scripts/office-art.py`; see the add-on's `ART.md`.
+
 Office. `#/office` (`plugins/crewgate-office/public/office.js`, `office-model.js`, `office-sprites.js`; experimental) draws the Sessions rows as
 a pixel-art office on a canvas, from scratch with no assets: one room per project, an orchestrator at the middle desk of a pod
 with its subagents around it. `office-model.js` is pure logic (no DOM, no canvas) and decides, from a row's status and

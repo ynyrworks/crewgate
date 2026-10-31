@@ -299,7 +299,7 @@ test('office code keeps the strict front-end rules: DOM nodes only, no eval, no 
   assert.doesNotMatch(read('office.css'), /@import|url\(/);
   // the board loads what office.json lists, in that order: the models before the page script
   const m = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'office.json'), 'utf8'));
-  assert.deepEqual(m.scripts, ['office-sprites.js', 'office-model.js', 'office.js']);
+  assert.deepEqual(m.scripts, ['office-sprites.js', 'office-model.js', 'office-hd-model.js', 'office-hd.js', 'office.js']);
   assert.deepEqual(m.styles, ['office.css']);
   assert.doesNotMatch(read('index.html'), /office/, 'nothing of the add-on is in the plugin page');
   // reduced motion and hidden tabs are respected

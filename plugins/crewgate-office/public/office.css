@@ -33,4 +33,12 @@
 .o-li.is-waiting { border-left: 3px solid var(--warn); padding-left: 8px; }
 .o-item { display: block; padding: 6px 4px; color: var(--text); text-decoration: none; overflow-wrap: anywhere; }
 .o-item:hover { background: var(--track); }
+.o-view { margin: 0 0 10px; }
+.o-view-btn, .o-hd-tab { font: inherit; font-size: 13px; padding: 3px 10px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+.o-view-btn:hover, .o-hd-tab:hover { background: var(--track); }
+.o-hd-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.o-hd-tab[aria-pressed="true"] { border-color: var(--accent); font-weight: 600; }
+.o-hd-alert { color: var(--warn); font-weight: 700; }
+.o-hd-canvas { display: block; max-width: 100%; border-radius: 8px; background: #120c08; touch-action: manipulation; }
+.o-hd-extra { margin: 0 0 8px; }
 @media (max-width: 520px) { .o-tip { max-width: calc(100vw - 32px); } }

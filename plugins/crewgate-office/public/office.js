@@ -945,6 +945,8 @@
 
   // ------------------------------------------------------------------ the page
   function page(d, ctx) {
+    var hd = window.OfficeHD;
+    if (hd && hd.wanted(ctx)) { current = null; return hd.page(d, ctx); }
     var rows = (d && Array.isArray(d.sessions)) ? d.sessions : [];
     var t0 = now();
     rows.forEach(function (r) {
@@ -987,6 +989,8 @@
     this.root = el('div', 'o-page');
     this.root.appendChild(el('h1', '', ctx.t('office.title')));
     this.root.appendChild(el('p', 'muted', ctx.mask ? ctx.t('office.private') : ctx.t('office.intro')));
+    var note = window.OfficeHD ? window.OfficeHD.pixelNote(ctx) : null;
+    if (note) this.root.appendChild(note);
     if (!rows.length) { this.root.appendChild(el('p', 'empty', ctx.t('office.none'))); this.alive = function () { return false; }; return; }
     this.root.appendChild(this.legend());
     this.stage = el('div', 'o-stage');

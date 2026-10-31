@@ -6,10 +6,14 @@
 
 - `crew release record <version> [--from REF] [--to REF] [--plan SLUG] [--conclusion-file F] [--dir D] [--lang en|zh-TW] [--force]` writes one Markdown record per version, for committing: the plan and its assumptions, each task's returns and review results, the gate approvals, and the orchestrator's conclusion, which is kept when it runs again. A task returned after its last finalized review round is flagged as not re-reviewed. Text is redacted, email addresses are masked, the home directory becomes `~`, and reports, briefs and session ids are left out. New config key `release.record_dir` (default `.crew/releases`).
 - The project page shows what events already know. With no merge requests, the card becomes "Recent merges", listing merged tasks and pushes. With no log lines, the log shows the task activity. Empty work and validation cards fold into one line, and validation is never filled automatically. Cards with data look as before.
+- HD view of the Office page, in the optional `crewgate-office` plugin: one room per project, shown one at a time with tabs (a room with a session waiting for you is marked), as a lit diorama in the style of HD-2D games. Six AI-generated characters with standing, walking, raised-hand and typing frames, AI-generated furniture, real-time sunlight with window shapes on the floor, shadows, flickering lanterns, bloom and a miniature-like blur. A room shows up to 8 characters, those waiting first; the rest are in the list below. It draws at most 30 frames a second, stops when the tab is hidden, and draws one still frame with `prefers-reduced-motion`. three.js is loaded only when this view is shown.
+- The pixel view stays the default; the HD view is a test version (`Test version`) that you switch on with a button on the Office page, and the choice is remembered in the browser. Without WebGL the page uses it; when the frame rate measured in the first seconds averages under 20, or the HD view cannot load, the page switches to it, remembers that and says why. The add-on adds about 2 MB.
 
 ### Changed
 
 - The `crew` skill says what only the orchestrator can record: the user's decisions and their reasons with `crew log add`, and items that outlive one task with `crew work set`. It also gains a release record step. These are instructions to the model, not checks.
+- `office_api` is now 2: the board also serves the assets an add-on lists in `office.json`, and passes `store` and `refresh` to its page. A 0.15 add-on with a newer board, or the other way round, is not loaded and shows the update commands. One-click update handles both.
+- "Drawn by code with no external assets" now applies to the pixel view only. Where the HD art comes from and its limits are in `plugins/crewgate-office/ART.md`.
 
 ## 0.18.1 — 2026-10-31
 

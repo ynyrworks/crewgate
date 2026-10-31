@@ -12,14 +12,15 @@ const path = require('path');
 const { parseVersion, compareVersions } = require('../lib/core/update-check');
 const { isManaged } = require('../lib/core/update-apply');
 
-const OFFICE_API = 1;   // what office.json must declare; raise it when the page contract in app.js changes
+const OFFICE_API = 2;   // what office.json must declare; raise it when the page contract in app.js changes
 const NAME = 'crewgate-office';
 const ID = `${NAME}@crewgate`;
 const COMMANDS = {
   install: [`claude plugin install ${ID}`],
   update: ['claude plugin marketplace update crewgate', `claude plugin update ${ID}`],
 };
-const FILE_NAME = /^[a-z0-9-]+\.(js|css)$/;
+const CODE_NAME = /^[a-z0-9-]+\.(js|css)$/;
+const ASSET_NAME = /^[a-z0-9-]+(\.[a-z0-9-]+)*\.(js|png|json)$/;   // loaded by the add-on itself when it needs them
 
 function cachedVersions(configDir) {
   const base = path.join(configDir, 'plugins', 'cache', 'crewgate', NAME);
@@ -52,7 +53,7 @@ function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; }
 }
 
-const names = (list) => (Array.isArray(list) ? list.filter((f) => typeof f === 'string' && FILE_NAME.test(f)) : []);
+const names = (list, re = CODE_NAME) => (Array.isArray(list) ? list.filter((f) => typeof f === 'string' && re.test(f)) : []);
 
 function find({ pluginRoot = path.join(__dirname, '..'), env = process.env } = {}) {
   let outdated = null;
@@ -62,7 +63,7 @@ function find({ pluginRoot = path.join(__dirname, '..'), env = process.env } = {
     const plugin = readJson(path.join(root, '.claude-plugin', 'plugin.json')) || {};
     const version = typeof plugin.version === 'string' ? plugin.version : null;
     if (m.office_api !== OFFICE_API) { outdated = outdated || { state: 'outdated', version }; continue; }
-    return { state: 'ok', version, root, scripts: names(m.scripts), styles: names(m.styles) };
+    return { state: 'ok', version, root, scripts: names(m.scripts), styles: names(m.styles), assets: names(m.assets, ASSET_NAME) };
   }
   return outdated || { state: 'missing' };
 }
@@ -79,7 +80,7 @@ function describe(found) {
 
 // A file the add-on listed in office.json, read from its public folder. -> Buffer or null
 function readFile(found, name) {
-  if (found.state !== 'ok' || (!found.scripts.includes(name) && !found.styles.includes(name))) return null;
+  if (found.state !== 'ok' || ![found.scripts, found.styles, found.assets || []].some((l) => l.includes(name))) return null;
   try {
     const base = fs.realpathSync(path.join(found.root, 'public'));
     const real = fs.realpathSync(path.join(base, name));

@@ -93,6 +93,21 @@ test('an add-on with another office_api is not loaded and says it needs updating
   assert.equal(find(m).state, 'ok');
 });
 
+test('assets the add-on loads itself are served only when listed, and never by an unsafe name', () => {
+  const m = machine();
+  makeAddon(m.sibling);
+  fs.writeFileSync(path.join(m.sibling, 'office.json'), JSON.stringify({ office_api: addon.OFFICE_API, scripts: [], styles: [], assets: ['art-a.png', 'lib.module.min.js', 'sizes.json', '../x.png', 'a..png', 'b.exe', 'c.html'] }));
+  fs.writeFileSync(path.join(m.sibling, 'public', 'art-a.png'), 'png');
+  fs.writeFileSync(path.join(m.sibling, 'public', 'lib.module.min.js'), 'js');
+  const f = find(m);
+  assert.deepEqual(f.assets, ['art-a.png', 'lib.module.min.js', 'sizes.json']);
+  assert.equal(addon.readFile(f, 'art-a.png').toString(), 'png');
+  assert.equal(addon.readFile(f, 'lib.module.min.js').toString(), 'js');
+  assert.equal(addon.readFile(f, 'secret.js'), null, 'not listed');
+  assert.equal(addon.readFile(f, '../x.png'), null);
+  assert.equal(addon.describe(f).assets, undefined, 'the page does not need the list');
+});
+
 test('the page is never told the folder, and only listed files with plain names are offered', () => {
   const m = machine();
   makeAddon(m.sibling, { scripts: ['a.js', '../evil.js', 'b.exe', 7] });
