@@ -139,10 +139,11 @@ function onRead(payload) {
 // ---------------------------------------------------------------- Bash (gates.enforce)
 // A push, PR or merge under a "never" gate is denied in every gates.enforce mode. Under an "ask" gate without a
 // usable approval, in a project whose gates.enforce is confirm (Claude Code asks the user) or block (denied).
-// remind (the default) is handled after the command by PostToolUse. Only registered projects are looked at;
+// remind (the default) is handled after the command by PostToolUse. Codex (measured: deny blocks, ask fails open)
+// gets deny in place of every ask. Only registered projects are looked at;
 // a cd / git -C target outside them is never enforced.
 function onBash(payload) {
-  if (G.isCodex(payload)) return null; // Codex: "ask" support unverified, stays on remind
+  const codex = G.isCodex(payload); // Codex honours deny but not ask: it only ever gets deny or nothing
   const command = C.str(C.obj(payload.tool_input).command);
   if (!G.GIT_WORDS.test(command.slice(0, 20000))) return null;
   const found = gitcmd.detect(command).filter((f) => gates.gateOf(f));
@@ -180,11 +181,13 @@ function onBash(payload) {
     if (enforce === 'remind') continue;
     for (const m of G.unapproved(g.h, wanted, { failClosed: enforce === 'block' })) {
       const vars = { what: m.text, gate: m.gate, project: path.basename(g.h.root), cmd: C.crewCmd() };
-      reasons.push(g.h.t(enforce === 'block' ? 'gate.block' : 'gate.confirm', vars));
-      verdict = enforce === 'block' || verdict === 'block' ? 'block' : 'ask';
+      // Codex cannot ask (an "ask" decision fails open there), so confirm is a deny with the way to approve.
+      const denied = enforce === 'block' || codex;
+      reasons.push(g.h.t(enforce === 'block' ? 'gate.block' : codex ? 'gate.codexConfirm' : 'gate.confirm', vars));
+      verdict = denied || verdict === 'block' ? 'block' : 'ask';
       try {
         events.append(g.h.pid, {
-          type: enforce === 'block' ? 'gate.blocked' : 'gate.prompted', src: 'hook', session: g.h.sid, tool_use_id: tuid,
+          type: denied ? 'gate.blocked' : 'gate.prompted', src: 'hook', session: g.h.sid, tool_use_id: tuid,
           data: { gate: m.gate, command: m.command, mode: enforce, tool_use_id: C.snippet(tuid, 80) || null, permission_mode: C.snippet(payload.permission_mode, 40) || null },
           key: `${tuid || Date.now()}:${m.gate}:${enforce}`,
         });
@@ -193,7 +196,7 @@ function onBash(payload) {
   }
   if (!reasons.length) return null;
   const text = reasons.join(' ');
-  return verdict === 'block' ? C.deny(text) : C.ask(text);
+  return verdict === 'block' || codex ? C.deny(text) : C.ask(text);
 }
 
 function run(payload) {

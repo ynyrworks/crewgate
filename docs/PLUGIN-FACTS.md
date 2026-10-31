@@ -108,6 +108,11 @@ https://learn.chatgpt.com/docs/agent-configuration/subagents · https://learn.ch
   `statusMessage`, `async`. Matchers are regular expressions on the tool name (or agent type, reason, source).
 - **The spawn `message` in PreToolUse/PostToolUse is opaque** (an encrypted-looking base64 string, about 200 characters), so a `crew-task:` marker cannot be read there. `task_name` is chosen by the model (observed `crew_task`), `tool_response` is `{"task_name":"/root/<task_name>"}`. SubagentStart has only `agent_id` and `agent_type` (`default`), but the subagent's own rollout file `<dir of transcript_path>/rollout-<timestamp>-<agent_id>.jsonl` already exists and holds the message (and possibly forked parent history); SubagentStop adds `agent_transcript_path` pointing at it.
 - Project-level `.codex/hooks.json` loads only when the project is trusted (`[projects."<path>"] trust_level = "trusted"`; for a one-off `codex exec` use `-c "projects={ '<path>' = { trust_level = 'trusted' } }"`) in addition to hook trust (`--dangerously-bypass-hook-trust`).
+- **PreToolUse decisions (codex-cli 0.164.0, Windows, project hook in `codex exec`, 2026-10-31):** `permissionDecision: "deny"`
+  blocks the command ("Command blocked by PreToolUse hook: ..."; it does not run). `permissionDecision: "ask"` makes the hook
+  show as "Failed" and THE COMMAND RUNS (fails open), so `ask` must never be sent to Codex. `{}` runs normally. The payload
+  keys are `session_id, turn_id, transcript_path, cwd, hook_event_name, model, permission_mode, tool_name, tool_input,
+  tool_use_id`; `tool_name` is `Bash` even when the command runs in PowerShell.
 - Plugin hooks get `PLUGIN_ROOT` and `CLAUDE_PLUGIN_ROOT` (and the `_DATA` twins) in their environment.
 
 ## Plugins, skills, agents
