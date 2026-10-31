@@ -1130,6 +1130,8 @@
     if (v.branch) meta.push(v.branch);
     var li = h('li', { class: 'sess' + (r.subagent ? ' is-sub' : '') }, head);
     if (meta.length) li.appendChild(h('div', { class: 's-meta muted', text: meta.join(' · ') }));
+    var acc = SM.accountText(r, S.mask);
+    if (acc) li.appendChild(h('div', { class: 's-meta muted', text: t('sessions.account', { who: acc }) }));
     var sl = statsLine(r);
     li.appendChild(sl || h('div', { class: 's-stats muted', text: t('stats.partial') }));
     if (v.title) li.appendChild(h('div', { class: 's-title', text: v.title }));
@@ -1232,7 +1234,10 @@
     var fields = [];
     schema.forEach(function (e) {
       if (FORM_TYPES.indexOf(e.type) < 0 || e.path === 'version') return;
-      expandPaths(cfg.config, e.path).forEach(function (c) { fields.push({ entry: e, path: c.path, value: c.value }); });
+      var found = expandPaths(cfg.config, e.path);
+      // account.expected is absent from a config until set (an empty default is kept out of DEFAULTS); show it empty so it can be set
+      if (!found.length && e.path === 'account.expected') found = [{ path: e.path, value: '' }];
+      found.forEach(function (c) { fields.push({ entry: e, path: c.path, value: c.value }); });
     });
     var inputs = {};
     var groups = {};

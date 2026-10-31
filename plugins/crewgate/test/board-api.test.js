@@ -299,3 +299,40 @@ test('settings: a project-level engines block is reported as ignored, never as a
     if (before === null) fs.rmSync(file, { force: true }); else fs.writeFileSync(file, before);
   }
 });
+
+test('account.expected: unset it is absent from the config; set, read back; clearing removes the key; a hand-edited empty value is still invalid', async () => {
+  const url = `/api/project/${proj.id}/config`;
+  const file = path.join(repo, '.claude', 'crew.json');
+  const onDisk = () => JSON.parse(fs.readFileSync(file, 'utf8'));
+  const schema = (await get('/api/schema')).json.project.find((e) => e.path === 'account.expected');
+  assert.equal(schema.default, '');
+  assert.equal((await get(url)).json.config.account, undefined);
+  assert.equal((await post(url, { config: { account: { expected: 'ann@example.com' } } })).status, 200);
+  assert.equal(onDisk().account.expected, 'ann@example.com');
+  assert.equal((await post(url, { config: { language: 'en', account: { expected: '' } } })).status, 200);
+  assert.ok(!('account' in onDisk()), 'the key (and the empty account object) is gone from crew.json');
+  assert.equal(onDisk().language, 'en', 'other keys are kept');
+  assert.equal((await get(url)).json.config.account, undefined);
+  assert.equal((await post(url, { config: { account: { expected: '' } } })).status, 200, 'clearing when nothing is set is harmless');
+  assert.ok(!('account' in onDisk()));
+  // another key under account is kept
+  const cfg = require('../lib/core/config');
+  cfg.save(repo, { account: { expected: 'x' } });
+  const raw = onDisk(); raw.account.other = 1; fs.writeFileSync(file, JSON.stringify(raw));
+  cfg.save(repo, { account: { expected: '' } });
+  assert.deepEqual(onDisk().account, { other: 1 });
+  // a hand-edited empty value is reported by load and by validate
+  raw.account = { expected: '' }; fs.writeFileSync(file, JSON.stringify(raw));
+  assert.ok(cfg.load(repo).errors.some((e) => e.path === 'account.expected'));
+  assert.ok(cfg.validate({ account: { expected: '' } }, repo).some((e) => e.path === 'account.expected'));
+  // global config: account.expected is a project setting only, so the global form never offers it
+  assert.ok(!cfg.GLOBAL_SCHEMA.some((e) => e.path.startsWith('account')));
+});
+
+test('settings form: only account.expected is shown while absent from the config (schema entries that qualify)', () => {
+  const app = fs.readFileSync(path.join(__dirname, '..', 'board', 'public', 'app.js'), 'utf8');
+  assert.match(app, /!found\.length && e\.path === 'account\.expected'/);
+  const cfg = require('../lib/core/config');
+  const absent = cfg.SCHEMA.filter((e) => e.type === 'string' && !e.path.includes('*') && (function get(o, p) { return p.split('.').reduce((a, k) => (a == null ? undefined : a[k]), o); })(cfg.DEFAULTS, e.path) === undefined).map((e) => e.path);
+  assert.deepEqual(absent, ['account.expected'], 'no other plain string entry is missing from the defaults');
+});

@@ -346,6 +346,14 @@ function load(root) {
 // A corrupt existing file is moved aside first. Throws CrewError config.invalid (err.errors) on bad input.
 // opts.src is the event source ('cli' by default; the board passes 'board').
 function save(root, obj, opts = {}) {
+  // Saving account.expected as "" (the Settings form clearing the field) removes the key, which turns the check off. An empty
+  // value is still invalid when it is read from a hand-edited file (validate and load are unchanged).
+  let clearExpected = false;
+  if (isObj(obj) && isObj(obj.account) && obj.account.expected === '') {
+    clearExpected = true;
+    const { expected, ...rest } = obj.account;
+    obj = { ...obj, account: rest };
+  }
   const errors = validate(obj, root);
   if (isObj(obj) && 'engines' in obj) {
     errors.push({ path: 'engines', key: 'config.err.engines', vars: {}, message: require('./i18n').t('en', 'config.err.engines', { path: 'engines' }) });
@@ -358,6 +366,10 @@ function save(root, obj, opts = {}) {
   const file = configFile(root);
   const out = json.update(file, {}, (cur) => {
     const next = deepMerge(cur, obj);
+    if (clearExpected && isObj(next.account)) {
+      delete next.account.expected;
+      if (!Object.keys(next.account).length) delete next.account;
+    }
     for (const k of Object.keys(cur)) delete cur[k];
     Object.assign(cur, next);
     return next;

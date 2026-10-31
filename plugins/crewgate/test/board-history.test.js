@@ -361,3 +361,20 @@ test('show_text switched off elsewhere: cached history pages are detected and dr
   assert.equal(off.json.show_text, false);
   assert.ok(off.json.sessions.every((s) => !('last_prompt' in s)));
 });
+
+test('account: a history row carries the account of its session.start; no account, no field; private mode hides the text', async () => {
+  const paths = require('../lib/core/paths');
+  const ev = (session, data) => JSON.stringify({ ts: iso(ago(2, 3)), type: 'session.start', session, data }) + '\n';
+  fs.mkdirSync(path.dirname(paths.eventsFile(proj.id)), { recursive: true });
+  fs.appendFileSync(paths.eventsFile(proj.id), ev('sessA', { account_id: '1a2b3c4d', plan: 'max' }));
+  fs.writeFileSync(path.join(process.env.CREWGATE_HOME, 'accounts.json'), JSON.stringify({ '1a2b3c4d': { email: 'ann@example.com', organization: 'Example Org' } }));
+  const r = (await get('/api/history?days=7')).json;
+  const a = r.sessions.find((s) => s.id === ids.A);
+  assert.deepEqual(a.account, { id: '1a2b3c4d', plan: 'max', email: 'ann@example.com', organization: 'Example Org' });
+  assert.equal(SM.accountText(a, false), 'ann@example.com · Example Org · max');
+  assert.equal(SM.accountText(a, true), '', 'private mode hides it');
+  const other = r.sessions.find((s) => s.id !== ids.A);
+  assert.ok(!('account' in other), 'a session without a record has no account');
+  assert.equal(SM.accountText(other, false), '');
+  assert.ok(!JSON.stringify(r).includes('"session"'), 'the raw session id still does not leave the server');
+});
