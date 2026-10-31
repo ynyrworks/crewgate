@@ -25,6 +25,7 @@ function run(argv, ctx) {
   if (a.engine === 'codex' || (a.engine !== 'claude' && codexinit.detectCodex(root))) {
     res.files.push(...codexinit.codexInit(root, config.load(root).config, { force: a.force }));
   }
+  try { require('../core/clishim').write(); } catch { /* scripts lose a convenience; init goes on */ }
   const L = [ctx.t(res.created ? 'wf.init.registered' : 'wf.init.alreadyRegistered', { id: res.project.id, name: res.project.name })];
   for (const f of res.files) {
     L.push(`  ${ctx.t(`wf.init.${f.action}`)}  ${f.file}${f.backup ? `  (${ctx.t('wf.init.backup', { file: f.backup })})` : ''}`);

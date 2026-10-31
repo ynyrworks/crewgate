@@ -11,6 +11,7 @@ const hookseen = require('../core/hookseen');
 const store = require('../core/store');
 const hooklog = require('../core/hooklog');
 const gates = require('../core/gates');
+const clishim = require('../core/clishim');
 const plans = require('../core/plans');
 const boardCmd = require('./board');
 
@@ -66,12 +67,17 @@ async function run(argv, ctx) {
     }
     if (loaded.exists && !loaded.errors.length) {
       const enforce = gates.enforceOf(loaded.config);
-      add('gates', 'ok', ctx.t(`wf.doctor.gates.${enforce}`, { turn: ctx.t(gates.requiresUserTurn(loaded.config) ? 'wf.doctor.gates.turnOn' : 'wf.doctor.gates.turnOff'), ask: ['push', 'open_pr', 'merge'].filter((k) => gates.modeOf(loaded.config, k) === 'ask').join(', ') || '-' }));
+      const own = gates.gateNames(loaded.config).filter((k) => !gates.GATES.includes(k));
+      add('gates', 'ok', ctx.t(`wf.doctor.gates.${enforce}`, { turn: ctx.t(gates.requiresUserTurn(loaded.config) ? 'wf.doctor.gates.turnOn' : 'wf.doctor.gates.turnOff'), ask: ['push', 'open_pr', 'merge'].filter((k) => gates.modeOf(loaded.config, k) === 'ask').join(', ') || '-' })
+        + (own.length ? `${ctx.t('wf.doctor.gates.own', { own: own.map((k) => `${k} ${gates.modeOf(loaded.config, k)}`).join(', ') })}` : ''));
     }
     add('registration', proj ? 'ok' : 'warn', proj ? `${proj.id} (${proj.name})` : ctx.t('wf.doctor.notRegistered'));
     const expected = ['.claude/agents/crew-worker.md', '.claude/agents/crew-reviewer.md', '.claude/agents/crew-refuter.md', '.crew/REVIEW.md', '.crew/LESSONS.md'];
     const missing = expected.filter((f) => !fs.existsSync(path.join(dir, ...f.split('/'))));
     add('files', missing.length ? 'warn' : 'ok', missing.length ? ctx.t('wf.doctor.filesMissing', { files: missing.join(', ') }) : ctx.t('wf.doctor.filesOk'));
+    const shim = clishim.check();
+    add('shim', shim.state === 'ok' ? 'ok' : 'warn', shim.state === 'ok' ? shim.target
+      : ctx.t(shim.state === 'missing' ? 'wf.doctor.shimMissing' : 'wf.doctor.shimStale', { file: shim.file, target: shim.target }));
     const nPlans = plans.slugs(dir).length;
     if (nPlans) {
       const deep = plans.deepNodes(dir);
