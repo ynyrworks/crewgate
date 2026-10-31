@@ -24,5 +24,5 @@
   "board.startFailed": "看板未能及時啟動，請看 {log}",
   "board.serving": "看板監聽於 {url}（按 Ctrl+C 停止）",
   "board.stopFailed": "無法停止看板（pid {pid}）。",
-  "board.stale": "看板已停止，但沒有記下原因（pid {pid}，啟動於 {started}）。可用 `crew board start` 重新啟動；請看 {log}"
+  "board.stale": "看板已停止，但沒有記下原因（pid {pid}，啟動於 {started}，最後確認存活 {alive}）。可用 `crew board start` 重新啟動；請看 {log}"
 }

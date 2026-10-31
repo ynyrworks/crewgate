@@ -157,14 +157,14 @@ test('status and doctor report a board that vanished without a stop line', async
   writeGlobal({ port });
   fs.writeFileSync(state, JSON.stringify({ pid: 2147483000, port, started: '2026-10-30T01:02:03.000Z' }));
   const doc = crew(['doctor']);
-  assert.match(doc.out, /stopped without logging a reason \(pid 2147483000, started 2026-10-30T01:02:03\.000Z\)/);
+  assert.match(doc.out, /stopped without logging a reason \(pid 2147483000, started 2026-10-30T01:02:03\.000Z, last known alive unknown\)/);
   assert.match(doc.out, /Board autostart: off/);
   assert.equal(fs.existsSync(state), true, 'doctor only reads');
   const js = crew(['board', 'status', '--json']);
   assert.equal(js.code, 1);
-  assert.deepEqual(JSON.parse(js.out), { running: false, stale: true, pid: 2147483000, started: '2026-10-30T01:02:03.000Z' });
+  assert.deepEqual(JSON.parse(js.out), { running: false, stale: true, pid: 2147483000, started: '2026-10-30T01:02:03.000Z', last_alive: null });
   assert.equal(fs.existsSync(state), false, 'status cleans the stale file');
-  assert.match(fs.readFileSync(log, 'utf8'), /previous board \(pid 2147483000, started 2026-10-30T01:02:03\.000Z\) is gone and left no stop line/);
+  assert.match(fs.readFileSync(log, 'utf8'), /previous board \(pid 2147483000, started 2026-10-30T01:02:03\.000Z\) is gone and left no stop line \(last known alive unknown\)/);
   const again = crew(['board', 'status']);
   assert.equal(again.code, 1);
   assert.match(again.out, /not running/i);
@@ -267,4 +267,40 @@ test('doctor: a board answering on the port does not make a state file with a de
   const doc = crew(['doctor']);
   assert.match(doc.out, new RegExp(`Board: running on 127\.0\.0\.1:${port}`));
   assert.match(doc.out, /WARN {2}Board: The board stopped without logging a reason \(pid 2147483000/);
+});
+
+test('a state file with an alive time: status, --json, doctor and the log give when the board was last alive', async (t) => {
+  const { state, log, crew, writeGlobal, reset } = fresh(t);
+  reset();
+  const port = await freePort();
+  writeGlobal({ port });
+  const alive = '2026-10-30T05:06:07.000Z';
+  const write = () => fs.writeFileSync(state, JSON.stringify({ pid: 2147483000, port, started: '2026-10-30T01:02:03.000Z', alive }));
+  write();
+  assert.match(crew(['doctor']).out, /last known alive 2026-10-30T05:06:07\.000Z/);
+  assert.match(crew(['board', 'status']).out, /last known alive 2026-10-30T05:06:07\.000Z/);
+  write();
+  assert.equal(JSON.parse(crew(['board', 'status', '--json']).out).last_alive, alive);
+  assert.match(fs.readFileSync(log, 'utf8'), /last known alive 2026-10-30T05:06:07\.000Z\); state file removed/);
+  reset();
+});
+
+test('heartbeat: stamps alive, keeps other fields, ignores a state file of another pid, never keeps the process alive', (t) => {
+  const { state, reset } = fresh(t);
+  reset();
+  const timer = board.startHeartbeat(20);
+  assert.equal(timer.hasRef(), false);
+  const other = { pid: 2147483000, port: 1, started: 'x', alive: 'old' };
+  fs.writeFileSync(state, JSON.stringify(other));
+  return new Promise((r) => setTimeout(r, 120)).then(() => {
+    assert.deepEqual(JSON.parse(fs.readFileSync(state, 'utf8')), other);
+    fs.writeFileSync(state, JSON.stringify({ pid: process.pid, port: 1, started: 'x' }));
+    return new Promise((r) => setTimeout(r, 120));
+  }).then(() => {
+    const st = JSON.parse(fs.readFileSync(state, 'utf8'));
+    assert.equal(st.pid, process.pid); assert.equal(st.port, 1); assert.equal(st.started, 'x');
+    assert.ok(!Number.isNaN(Date.parse(st.alive)));
+    fs.rmSync(state, { force: true });   // a missing file must not make the timer throw
+    return new Promise((r) => setTimeout(r, 80));
+  }).finally(() => clearInterval(timer));
 });

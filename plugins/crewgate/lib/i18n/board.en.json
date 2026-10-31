@@ -24,5 +24,5 @@
   "board.startFailed": "The board did not start in time. See {log}",
   "board.serving": "Board listening on {url} (Ctrl+C to stop)",
   "board.stopFailed": "Could not stop the board (pid {pid}).",
-  "board.stale": "The board stopped without logging a reason (pid {pid}, started {started}). Start it with `crew board start`; see {log}."
+  "board.stale": "The board stopped without logging a reason (pid {pid}, started {started}, last known alive {alive}). Start it with `crew board start`; see {log}."
 }
