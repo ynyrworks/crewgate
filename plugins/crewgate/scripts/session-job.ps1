@@ -138,9 +138,10 @@ try {
     } catch { $err = 'tree-unreadable'; break }
     $b = Get-Board $all
     if ($b.mode -eq 'bad') { $err = 'board-json-unreadable'; break }
-        $procs = @{}
+    $procs = @{}
     foreach ($k in $all.Keys) {
-      $procs[$k] = @{ ppid = $all[$k].ppid; window = $false; boardlike = ($all[$k].cmd -match '[\\/]crew\.js"?\s+board\s+serve') }
+      # Another session's holder is kept too: it exits by itself with its session, and cleans up that session's job.
+      $procs[$k] = @{ ppid = $all[$k].ppid; window = $false; boardlike = ($all[$k].cmd -match '[\\/]crew\.js"?\s+board\s+serve|[\\/]session-job\.ps1') }
     }
     $mine = @()
     foreach ($id in $ids) {

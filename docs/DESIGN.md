@@ -679,6 +679,8 @@ Layers, from the source of the load outward:
 
 Priority helps once a core is saturated and does nothing while cores are idle. Measured (see PLUGIN-FACTS): a full default test run on 32 threads never saturated the machine (peak CPU about 79%), so a normal-priority timer probe saw no difference there; with four loops pinned to one core, the probe's worst delay was 378.9 ms against 2.5 ms when the loops ran at below normal. A real `claude -p` session confirmed the hook finds the Claude process and a Bash child inherits priority 10. The whole machine at saturation was not measured. Layer 1 is what lowers the load itself.
 
+Another session's holder in the job is kept like the board: it exits by itself with its session. The cap is proven to be enforced; cleanup is proven with stand-in sessions only, since under `claude -p` leftovers were already gone by other means and the desktop-app quit of the incident was not reproduced (see PLUGIN-FACTS).
+
 What escapes the job: any process that started before the assign (the hook's own children and anything Claude Code started in the first second or so are not in it, and joining later is not possible), anything created through `Win32_Process.Create` (WMI, `Invoke-CimMethod`; Microsoft documents that these are created outside the caller's job), and every other platform (macOS and Linux do nothing: no cgroup is used). The cap and the cleanup cover only what runs inside the job. If the holder never starts, the session is exactly as without it. If the holder is killed after the assign, the cap stays on (nothing clears it while Claude Code is in the job), there is no cleanup, and the next SessionStart in that process finds no live holder and starts a new one, which nests another job.
 
 ## 16. Codex (experimental)
