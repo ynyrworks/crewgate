@@ -78,8 +78,8 @@ function start(projectId, limits, claudePid = process.ppid, deps = {}) {
     if (!claim(projectId, claudePid)) return 'already';
     // Node's own children die with it (libuv puts them in a kill-on-close job) and a `detached` PowerShell exits at
     // once (measured), so the holder is started by a detached wscript running scripts/hidden-run.vbs (window style 0,
-    // no waiting): it is then outside both, and no window opens. The holder writes its own pid to the runtime file.
-    if (args.some((x) => /"/.test(x))) { try { fs.unlinkSync(file); } catch { /* none */ } note(projectId, 'session.job.error', { reason: 'bad-path' }); return 'bad-path'; }
+    // no waiting): it is then outside both, and no window opens. `Run` expands %VAR%, so `%` is refused like `"`. The holder writes its own pid to the runtime file.
+    if (args.some((x) => /["%]/.test(x))) { try { fs.unlinkSync(file); } catch { /* none */ } note(projectId, 'session.job.error', { reason: 'bad-path' }); return 'bad-path'; }
     let child;
     try {
       child = (deps.spawn || spawn)(wscript, ['//B', '//Nologo', HIDDEN_RUN, shell, ...args],

@@ -97,6 +97,11 @@ test('start(): no wscript.exe means no holder and an event, never another way of
   assert.strictEqual(sessionjob.start(f.pid, {}, 4243, deps), 'bad-path');
   assert.strictEqual(calls.length, 0);
   assert.ok(!fs.existsSync(sessionjob.pidFile(f.pid, 4243)));
+  // a percent sign is refused too: WScript.Shell.Run expands %VAR% in the command line
+  calls.length = 0;
+  assert.strictEqual(sessionjob.start(f.pid, {}, 4244, { ...deps, script: 'C:/a/%TEMP%/x.ps1' }), 'bad-path');
+  assert.strictEqual(calls.length, 0);
+  assert.ok(!fs.existsSync(sessionjob.pidFile(f.pid, 4244)));
 });
 
 test('hidden-run.vbs: arguments with spaces reach the program intact, and it opens no window', { skip: !WIN || !sessionjob.findWscript(), timeout: 60000 }, async (t) => {
