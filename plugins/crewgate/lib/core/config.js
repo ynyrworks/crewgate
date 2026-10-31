@@ -27,6 +27,8 @@ const DEFAULTS = Object.freeze({
     max_parallel_workers: 3,
     parallel_enforce: 'block',
     process_priority: 'below_normal',
+    session_cpu_percent: 60,
+    session_cleanup: 'on',
     max_returns_before_takeover: 2,
     report_max_tokens: 1500,
     orchestrator_read_warn_lines: 300,
@@ -100,6 +102,12 @@ const SCHEMA = [
   f('limits.process_priority', 'string', d(
     'Priority of the Claude Code process, set at session start in a registered crew project: below_normal (it and everything it starts, such as shells and test runs, yield CPU to your other apps) or normal (leave it alone). It is only ever lowered, and only when the parent process is identified as Claude Code.',
     '工作階段開始時（限已註冊的 crew 專案）Claude Code 行程的優先權：below_normal（它與它啟動的 shell、測試等都會把 CPU 讓給你的其他應用程式）或 normal（不動）。只會降低，且只在確認上層行程是 Claude Code 時才動。'), { enum: ['below_normal', 'normal'] }),
+  f('limits.session_cpu_percent', 'integer', d(
+    'Windows only, in a registered crew project: the most CPU the Claude Code process and everything it starts after session start may use together, as a percentage of the whole machine (a Job Object hard cap). 100 means no cap. Children that started before the job was set up are not covered.',
+    '僅 Windows、限已註冊的 crew 專案：Claude Code 行程與其之後啟動的所有行程合計最多可用的 CPU，以整台機器的百分比計（Job Object 硬上限）。100 代表不設上限。在建立 job 之前就已啟動的子行程不受限。'), { min: 10, max: 100 }),
+  f('limits.session_cleanup', 'string', d(
+    'Windows only: when the Claude Code process exits, on stops the processes left in its job (never the running board or what the board started) and records how many; off only lists and records them.',
+    '僅 Windows：Claude Code 行程結束時，on 會停止留在它 job 裡的行程（不會動執行中的看板與看板啟動的行程）並記錄數量；off 只列出並記錄，不停止。'), { enum: ['on', 'off'] }),
   f('limits.max_returns_before_takeover', 'integer', d('Send-backs allowed before the orchestrator takes the task over.', '退回幾次後改由統籌接手。'), { min: 1, max: 20 }),
   f('limits.report_max_tokens', 'integer', d('Maximum worker report size (estimated as characters / 4).', 'worker 報告長度上限（以字元數 / 4 估算）。'), { min: 100, max: 20000 }),
   f('limits.orchestrator_read_warn_lines', 'integer', d('Warn when the orchestrator reads a file longer than this without a range.', '統籌不帶範圍讀超過此行數的檔案時提醒。'), { min: 1, max: 100000 }),
