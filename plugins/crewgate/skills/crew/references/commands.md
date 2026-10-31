@@ -46,6 +46,9 @@ A plan is a tree of steps in `.crew/plans/<slug>.md` (slug `[a-z0-9-]{1,40}`, at
 - `crew review dismiss <task> <finding-id> --scope once|always --reason "..."`
 - `crew review followup <task> <finding-id> --done-when "..." [--text "..."] [--plan SLUG] [--round N]`: proposes a finding of a finalized round as a `[?]` step next to the task's plan step (or at the top of `--plan SLUG`)
 
+## Release record
+- `crew release record <version> [--from REF] [--to REF] [--plan SLUG]... [--conclusion-file F] [--dir D] [--force]`: writes `<release.record_dir>/<version>.md` (default `.crew/releases`): the merged tasks of the range with review rounds, surviving findings, NOT RE-REVIEWED / NO REVIEW flags, linked plans, gates and the conclusion between `<!-- crew:conclusion -->` markers. `--to` defaults to tag `v<version>` else HEAD, `--from` to the nearest earlier tag; an unknown ref writes nothing. Running again keeps the conclusion unless `--conclusion-file` is given; a file without the markers needs `--force`. Reads only, never commits or tags.
+
 ## Handoff and lessons
 - `crew handoff create --title T --body-file F [--task <id>]`, `list [--all]`, `show <id>`, `accept <id>`, `cancel <id>`
 - `crew lesson add --key slug --text "..." [--kind correction|send-back|dismissal|takeover]`, `list`, `suggest`,

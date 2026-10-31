@@ -82,5 +82,8 @@
     "promote_after_days": 3,
     "rules_cap": 15,
     "rules_file": "CLAUDE.md"
+  },
+  "release": {
+    "record_dir": ".crew/releases"
   }
 }
