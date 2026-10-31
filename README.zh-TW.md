@@ -53,7 +53,7 @@ crewgate 把這些都變成強制或自動記錄的機制：缺段落就拒收�
 經過過濾的審查流程、尚未審查或仍在背景執行時的收尾提醒，以及只有你點頭才會升格成規則的經驗。
 模型仍然是被「要求」照流程走；crewgate 做的是，一旦沒照做，你看得到。
 
-現況：實驗性的部分都在出現的地方標示出來：Codex 支援、選用的辦公室附加元件，以及 `confirm` 模式在 bypass-permissions 模式下的行為（尚未驗證）。
+現況：實驗性的部分都在出現的地方標示出來：Codex 支援和選用的辦公室附加元件。已知問題列在[路線圖](docs/ROADMAP.md)。
 沒有任何執行期相依套件，需要 Node.js 18 以上，Windows、macOS、Linux 都能用。唯一的對外連線是看板選用的更新檢查
 （一天向 GitHub 一次，見「隱私與安全」，可用 `updates.check` 關閉）。
 
@@ -313,7 +313,7 @@ crew plan show 0-14
 `gates.require_user_turn`（預設 `true`）對三種模式都多加一條規則：手動記錄的核准，要在 `gate ask` 與 `gate answer yes`
 之間，在發出 ask 的那個工作階段有你送出的訊息才算數（回答被記錄時判斷一次；不知道工作階段 id 時，例如 Codex CLI，專案中任何工作階段有訊息就算，這個判斷較弱）。這能防止模型一口氣自問自答；防不了你寫了不相干的訊息後它回答「yes」。三種模式都是盡力攔截，不是硬關卡：偵測讀的是 Bash 與 PowerShell 工具的指令，包在 `bash -c`、`eval`、`powershell -c`、`cmd /c`、`npx` 或行內 `git -c alias.x=y` 裡的也算；
 會推送的腳本、已設定的 alias、變數（`$GIT push`）、其他工具的推送都看不到，hook 當掉或逾時也會放行。要真正擋住，請用伺服器端的分支保護。`cd`／`git -C` 指到的專案決定採用哪份設定，
-未註冊的專案永遠不攔。Codex 工作階段維持 `remind`。逐步流程、限制與建議設定見 [docs/DESIGN.md §8.1](docs/DESIGN.md)。
+未註冊的專案永遠不攔。Codex 無法詢問，所以 `confirm` 下會和 `block` 一樣拒絕；`remind` 下則是事後回報。逐步流程、限制與建議設定見 [docs/DESIGN.md §8.1](docs/DESIGN.md)。
 
 ## 用 Codex 或其他 CLI 當審查員
 
@@ -356,8 +356,8 @@ codex plugin add crewgate@crewgate
 - 實作者的隔離方式是 worktree 加上指示，不是容器。
 - 看板的工作階段清單是讀取本機 Claude Code 與 Codex 的紀錄；除非在全域設定打開 `board.show_text`，否則不顯示訊息文字。工作階段統計（時長、提示、工具呼叫、token、費用）只有數字，依對話紀錄快取在 `~/.crewgate/cache/sessions`。
 - Git 與關卡偵測只讀 Bash 與 PowerShell 工具的指令文字。會推送的腳本、已設定的 alias、變數（`$GIT push`）、`-EncodedCommand`，或其他工具（IDE、Git 圖形介面、MCP 伺服器）的推送都看不到；關卡防的是模型的一般習慣，不是蓄意繞過。
-- `gates.enforce: confirm` 依賴 Claude Code 遵守 PreToolUse 的 `ask`；在 bypass-permissions（以及 `dontAsk`）模式下的行為尚未驗證。`gate.confirmed` 的意思是「指令在回傳 ask 之後執行了」，不代表真有人點過。
-- Codex 工作階段維持 `remind`：Codex 是否遵守 hook 回傳的 `ask`／`deny` 尚未確認。不知道工作階段 id 時（Codex CLI），`gates.require_user_turn` 會退回較弱的「專案」判斷：專案中任何工作階段的訊息都算。
+- `gates.enforce: confirm` 依賴 Claude Code 遵守 PreToolUse 的 `ask`；在 `claude -p`（2.1.308）的 `default`、`dontAsk`、`bypassPermissions` 模式下指令都沒有執行，互動式的 bypass-permissions 工作階段也照樣會詢問。`gate.confirmed` 的意思是「指令在回傳 ask 之後執行了」，不代表真有人點過。
+- Codex（CLI 0.164）會遵守 hook 回傳的 `deny`，但 `ask` 會失效並讓指令照常執行，所以 crewgate 只會回 `deny`。這是用 `.codex/hooks.json` 裡的 hook 量測的，透過外掛安裝的 hook 尚未驗證。不知道工作階段 id 時（Codex CLI），`gates.require_user_turn` 會退回較弱的「專案」判斷：專案中任何工作階段的訊息都算。
 - 選用的辦公室附加元件是實驗性的，只呈現活動、不呈現結果：指令是否成功不在它收到的資料裡。以 Codex 當統籌屬實驗性；不支援 Gemini。
 
 ## 參與貢獻

@@ -8,6 +8,7 @@ the [CHANGELOG](../CHANGELOG.md).
 
 One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.md).
 
+- **0.18** — Under Codex, a `never` gate and an unapproved `ask` gate under `confirm` or `block` are denied before the command runs; sessions show their Claude account and a project can name the one it expects; a board killed outright can be dated.
 - **0.17** — A task notification no longer counts as a user message for the gate rule; workers and reviewers are told to keep changes to the brief; `crew doctor` reports stale agent copies, a broken CLI path and project gates; the board's session counts match the Sessions page.
 - **0.16** — Projects can add their own gates, and their scripts get a CLI path that stays the same across versions; `crew task accept` refuses review findings that skipped the refuter unless a reason is given; `crew plan clarify` keeps settled questions with the plan; `crew lesson score` shows whether a promoted rule helped.
 - **0.15.1** — Plan tree step 3: `crew review followup` proposes work a code review found as a `[?]` step that counts only once accepted, next to the task's step or in another plan.
@@ -24,12 +25,29 @@ One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.m
 Nothing yet: `main` matches the latest release.
 
 
+## Known issues
+
+Open problems in the latest release, and what has not been checked.
+
+- **The board is sometimes killed outright.** The cause is not established; closing or updating the desktop app is the untested suspect. It logs nothing when this happens. Since 0.18 it records when it was last alive, so the next death can be dated. `board.autostart` brings it back at the next session.
+- **Timing-sensitive tests.** `board-autostart` failed once in a full run and has not failed again in 32 repeats, so the 0.15.1 fix is unconfirmed. The SessionStart latency check in `hooks-contract` failed once while a real board ran beside it, and passed on a rerun.
+- **Gates are best effort.** Scripts, configured aliases, variables and other tools are not seen. Use branch protection on the server for a hard stop.
+- **Codex.** Hooks installed through the plugin are not verified, only hooks in `.codex/hooks.json`, and a real run covered only `never`. The Office add-on install through Codex is not verified. Codex versions older than 0.164 were not measured.
+- **Account labels.** Only new sessions in crew projects have one. The History page does not show them. Editing `account.expected` on the board's Settings page is not checked; set it in `crew.json`.
+- **One-click update.** `crew update apply` worked on the GitHub marketplace from the CLI. The board's button has been tested through its API only, not clicked.
+
+## To do
+
+Decided, not started or not finished.
+
+- **HD Office.** Frozen as v0.1.0 on the `feat/webgl-office` branch, not in a release. Known gaps: warm tone, foreground, performance, install flow.
+- **Codex.** Verification on more platforms and versions, and on plugin-installed hooks.
+
 ## Later
 
-- **Per-account labelling of sessions.** Show which Claude account or plan a session used, with an optional "expected account" warning per project. Idea stage: it is not verified that the account can be detected from what Claude Code exposes locally.
 - **Office view: test-result reactions** (a celebration or a slump when checks pass or fail; the result is not in the data the office receives today) and **bigger character sprites**.
-- **Enhanced WebGL Office.** A first version is on the `feat/webgl-office` branch, not in a release. In the same optional `crewgate-office` plugin, sharing its data model, with the pixel-art view as the fallback for browsers without WebGL or too slow for it. The main plugin gains no dependency.
-- **Codex.** Verification on more platforms and Codex versions, honouring hook `ask` / `deny` if Codex supports it, and Codex subagent workers once their sandbox can commit.
+- **Enhanced WebGL Office.** In the same optional `crewgate-office` plugin, sharing its data model, with the pixel-art view as the fallback for browsers without WebGL or too slow for it. The main plugin gains no dependency.
+- **Codex subagent workers,** once their sandbox can commit. Codex CLI 0.164 still cannot: `git add` in a worktree fails with permission denied.
 
 ## Exploring
 

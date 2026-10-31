@@ -59,8 +59,7 @@ will not accept incomplete, edit and big-read guards, state taken from hook even
 stop reminders for unreviewed or still-running work, and lessons promoted into rules only when you say yes.
 The model is still asked to follow the process; crewgate makes it visible when it does not.
 
-Status: experimental parts are labelled where they appear: Codex support, the optional Office add-on, and `confirm` mode
-in bypass-permissions mode (not verified). Zero runtime dependencies. Node.js 18 or newer. Works on Windows,
+Status: experimental parts are labelled where they appear: Codex support and the optional Office add-on. Known issues are listed in the [roadmap](docs/ROADMAP.md). Zero runtime dependencies. Node.js 18 or newer. Works on Windows,
 macOS and Linux. The only network request is the board's optional update check (one request a day to GitHub, see
 Privacy and safety; turn it off with `updates.check`).
 
@@ -349,7 +348,7 @@ hard stop: detection reads the command of the Bash and PowerShell tools, includi
 `cmd /c`, `npx` or an inline `git -c alias.x=y`. A script that pushes, a configured alias, a variable (`$GIT push`) or a push by
 another tool is not seen, and a hook that crashes or times out lets the command through. For a hard stop use branch protection on
 the server. The target repo of `cd` / `git -C`
-decides which project's config applies, and an unregistered repo is never enforced. Codex sessions stay on `remind`.
+decides which project's config applies, and an unregistered repo is never enforced. Codex cannot ask, so under `confirm` it denies like `block`; under `remind` it reports afterwards.
 Step by step, limits and recommended settings: [docs/DESIGN.md §8.1](docs/DESIGN.md).
 
 ## Using Codex or another CLI as the reviewer
@@ -398,8 +397,8 @@ codex plugin add crewgate@crewgate
   `board.show_text` in the global config. Session statistics (duration, prompts, tool calls, tokens, cost) are numbers only;
   they are cached per transcript under `~/.crewgate/cache/sessions`.
 - Git and gate detection reads only the command text of the Bash and PowerShell tools. A script that pushes, a configured alias, a variable (`$GIT push`), `-EncodedCommand` or a push by another tool (IDE, Git GUI, MCP server) is not seen; the gates guard against the model's ordinary habits, not against a determined bypass.
-- `gates.enforce: confirm` relies on Claude Code honouring a PreToolUse `ask`; in `claude -p` (2.1.308) the command did not run in `default`, `dontAsk` or `bypassPermissions` mode, while an interactive session in bypass-permissions mode is not verified. `gate.confirmed` means the command ran after an ask was returned, not that a human clicked.
-- Codex sessions stay on `remind`: whether Codex honours `ask` / `deny` from a hook is not established. Where the session id is unknown (Codex CLI), `gates.require_user_turn` falls back to the weaker `"project"` check: a message in any session of the project counts.
+- `gates.enforce: confirm` relies on Claude Code honouring a PreToolUse `ask`; in `claude -p` (2.1.308) the command did not run in `default`, `dontAsk` or `bypassPermissions` mode, and an interactive session in bypass-permissions mode still asked. `gate.confirmed` means the command ran after an ask was returned, not that a human clicked.
+- Codex (CLI 0.164) honours a hook's `deny`, but `ask` fails open and the command runs, so crewgate only ever sends it `deny`. This was measured with hooks in `.codex/hooks.json`; hooks installed through the plugin are not verified. Where the session id is unknown (Codex CLI), `gates.require_user_turn` falls back to the weaker `"project"` check: a message in any session of the project counts.
 - The optional Office add-on is experimental and shows activity, not results: whether a command passed is not in the data it receives. A Codex orchestrator is experimental; there is no Gemini support.
 
 ## Contributing

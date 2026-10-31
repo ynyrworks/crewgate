@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.18.0 — 2026-10-31
+
+### Behaviour changes
+
+- **Codex now denies gated commands before they run.** A detected push, PR or merge under a `never` gate is denied, and so is one under an `ask` gate with no valid approval when `gates.enforce` is `block` or `confirm`. Measured with Codex CLI 0.164: a hook's `deny` stops the command, while `ask` fails open and the command runs. So Codex is never sent `ask`, and `confirm` there denies with text on how to record an approval. `remind` is unchanged, and a Codex that ignores `deny` still gets the after-the-fact `gate.missing`.
+
+### New
+
+- Sessions show their Claude account. SessionStart records a short account id and the plan on `session.start`, from `CLAUDE_CODE_ACCOUNT_UUID` and `oauthAccount` in `~/.claude.json`. The email and organization stay in `~/.crewgate/accounts.json`, are never written to events, and are hidden in the board's private mode. The Sessions page, the session page and `crew doctor` show the account.
+- `account.expected` in `crew.json` names the account a project should run under: an email address, organization name or account UUID. A session under another account gets a line in its brief, an `account.mismatch` event and a need. It never blocks.
+- A running board stamps `alive` in `board.json` once a minute. A board killed outright now reports when it was last alive in `board.log`, `crew board status` (`--json`: `last_alive`) and `crew doctor`.
+
+### Checked
+
+- `gates.enforce: confirm` in an interactive bypass-permissions session (2.1.308): the push waited at the permission prompt until a person allowed it.
+- `gates.push: never` in a real `codex exec` run (0.164, hooks in `.codex/hooks.json`): the push did not run.
+- A sandboxed Codex worker still cannot commit in a worktree (0.164), so `crew task run` keeps committing for it.
+- `board-autostart` passed 25 further repeats, 10 of them under load. The failure seen once has not come back, so the 0.15.1 fix stays unconfirmed.
+
+### Known issues
+
+The open list is in [docs/ROADMAP.md](docs/ROADMAP.md).
+
+### Upgrade notes
+
+- `hooks/codex-hooks.json` gained a Bash entry for PreToolUse, so Codex asks you to re-approve the hooks in `/hooks`. `hooks/hooks.json` is unchanged.
+- A Codex project with `gates.enforce` set to `confirm` is now denied until an approval is recorded, where it used to be reminded afterwards.
+
 ## 0.17.0 — 2026-10-31
 
 ### New

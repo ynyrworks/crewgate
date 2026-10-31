@@ -331,7 +331,7 @@ enforced (and never registered). A dynamic directory (`cd "$DIR"`) falls back to
 **Permission modes (`confirm`).** Claude Code documents PreToolUse `ask` as "prompt the user for this tool call". In
 real `claude -p` runs (2.1.308, 2026-10-31) a gated `git push` did not run in `default`, `dontAsk` or `bypassPermissions`
 mode: `gate.prompted` was recorded, no `gate.confirmed`, and the remote stayed unchanged. So an unattended run is stopped,
-not waved through. An interactive session in `bypassPermissions` is **not verified**: do not rely on `confirm` there. The hook records the `permission_mode` it saw in `gate.prompted` / `gate.confirmed`, so a
+not waved through. An interactive session in `bypassPermissions` also asked (2.1.308, 2026-10-31): the push waited at the permission prompt until a person allowed it. The hook records the `permission_mode` it saw in `gate.prompted` / `gate.confirmed`, so a
 run can be audited afterwards. crewgate cannot tell from a hook whether a prompt was really shown, so `gate.confirmed`
 means "the command ran after an ask was returned", not "a human clicked".
 

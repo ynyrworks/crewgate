@@ -1,6 +1,6 @@
 {
   "name": "crewgate",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "description": "Delegated development: an orchestrator dispatches workers and reviewers in git worktrees, a deterministic review filter keeps only real findings, and hooks record progress on a local board. Codex support is experimental.",
   "author": {
     "name": "Ynyr"
