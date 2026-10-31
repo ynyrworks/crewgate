@@ -17,6 +17,7 @@ const SPECS = {
     },
   },
 };
+SPECS.check = { positionals: [], options: { '--commit': { dest: 'commit' } } };
 const VERSION_RE = /^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/;
 
 function record(argv, ctx) {
@@ -47,10 +48,28 @@ function record(argv, ctx) {
   return 0;
 }
 
+// Reads CI results through `gh` (ctx.gh replaces it in tests). Blocks nothing and pushes nothing; the exit code is the answer.
+function check(argv, ctx) {
+  const a = parse(argv, SPECS.check);
+  const r = rel.checkCi({ root: ctx.workTree(), commit: a.commit, gh: ctx.gh });
+  const short = r.commit.slice(0, 12);
+  const lines = [ctx.t('release.checkHead', { commit: short, state: r.state })];
+  const tail = (x) => (x.conclusion ? ` (${x.conclusion})` : '');
+  for (const run of r.runs) {
+    lines.push(ctx.t('release.checkRun', { id: run.id, name: run.name, status: run.status, conclusion: tail(run) }));
+    for (const j of run.jobs) lines.push(ctx.t('release.checkJob', { name: j.name, status: j.status, conclusion: tail(j) }));
+  }
+  if (r.state === 'none') lines.push(ctx.t('release.checkNone', { commit: short }));
+  if (r.state === 'pending') lines.push(ctx.t('release.checkPending'));
+  if (r.state === 'failed') lines.push(ctx.t('release.checkFailed'));
+  ctx.emit(r, lines);
+  return r.state === 'green' ? 0 : 1;
+}
+
 function run(argv, ctx) {
   const sub = argv[0];
   if (!Object.prototype.hasOwnProperty.call(SPECS, sub)) throw new UsageError('release.usage');
-  return record(argv.slice(1), ctx);
+  return sub === 'check' ? check(argv.slice(1), ctx) : record(argv.slice(1), ctx);
 }
 
 module.exports = {
@@ -60,8 +79,8 @@ module.exports = {
     'zh-TW': '寫出某個版本內容與查核結果的紀錄檔（要提交進版本庫）',
   },
   usage: {
-    en: '  crew release record <version> [--from REF] [--to REF] [--plan SLUG]... [--conclusion-file F] [--dir D] [--force] [--json]   (--lang en|zh-TW sets the language)',
-    'zh-TW': '  crew release record <version> [--from REF] [--to REF] [--plan SLUG]... [--conclusion-file F] [--dir D] [--force] [--json]   （--lang en|zh-TW 設定語言）',
+    en: '  crew release record <version> [--from REF] [--to REF] [--plan SLUG]... [--conclusion-file F] [--dir D] [--force] [--json]   (--lang en|zh-TW sets the language)\n  crew release check [--commit SHA] [--json]   (CI of the commit through gh; exit 0 only when every job succeeded)',
+    'zh-TW': '  crew release record <version> [--from REF] [--to REF] [--plan SLUG]... [--conclusion-file F] [--dir D] [--force] [--json]   （--lang en|zh-TW 設定語言）\n  crew release check [--commit SHA] [--json]   （用 gh 查該提交的 CI；每個 job 都成功才回 0）',
   },
   run,
 };

@@ -321,4 +321,43 @@ function extractConclusion(text) {
   return text.slice(a + OPEN.length, b).replace(/^\r?\n/, '').replace(/\r?\n$/, '');
 }
 
-module.exports = { returnedAfterRound, collect, render, sanitize, extractConclusion, resolveRange, OPEN, CLOSE };
+// ---------------------------------------------------------------- CI check (read-only, `gh` injected)
+// defaultGh(args, cwd) -> { status, stdout, stderr, error }. Only runs `gh`; no token is read here.
+function defaultGh(args, cwd) {
+  const r = require('child_process').spawnSync('gh', args, { cwd, encoding: 'utf8', timeout: 60000, windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
+  return { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '', error: r.error ? { code: r.error.code, message: r.error.message } : null };
+}
+
+function ghJson(gh, args, cwd) {
+  const r = gh(args, cwd);
+  if (r && r.error) {
+    if (r.error.code === 'ENOENT') throw new CrewError('release.ghMissing');
+    throw new CrewError('release.ghFailed', { detail: clean(String(r.error.message || r.error.code), 200) });
+  }
+  if (!r || r.status !== 0) throw new CrewError('release.ghFailed', { detail: clean(String((r && r.stderr) || '').split('\n')[0] || `exit ${r && r.status}`, 200) });
+  try { return JSON.parse(r.stdout || 'null'); } catch { throw new CrewError('release.ghFailed', { detail: 'unreadable JSON' }); }
+}
+
+// checkCi({ root, commit?, gh? }) -> { commit, state: 'green'|'failed'|'pending'|'none', runs:[{ id, name, status, conclusion, jobs:[{ name, status, conclusion }] }] }
+// green only when at least one run exists and every job of every run is completed with conclusion success.
+// A failed job wins over a pending one. Reads only.
+function checkCi(o) {
+  const gh = o.gh || defaultGh;
+  const commit = resolveCommit(o.root, o.commit || 'HEAD');
+  if (!commit) throw new CrewError('release.badRef', { ref: String(o.commit || 'HEAD') });
+  const list = ghJson(gh, ['run', 'list', '--commit', commit, '--limit', '50', '--json', 'databaseId,workflowName,status,conclusion'], o.root);
+  const runs = (Array.isArray(list) ? list : []).map((r) => ({ id: r.databaseId, name: r.workflowName || '', status: r.status || '', conclusion: r.conclusion || '', jobs: [] }));
+  for (const r of runs) {
+    const v = ghJson(gh, ['run', 'view', String(r.id), '--json', 'jobs'], o.root);
+    r.jobs = ((v && v.jobs) || []).map((j) => ({ name: j.name || '', status: j.status || '', conclusion: j.conclusion || '' }));
+  }
+  const bad = (x) => x.status === 'completed' && x.conclusion !== 'success';
+  const open = (x) => x.status !== 'completed';
+  let state = 'green';
+  if (!runs.length) state = 'none';
+  else if (runs.some((r) => bad(r) || r.jobs.some(bad))) state = 'failed';
+  else if (runs.some((r) => open(r) || !r.jobs.length || r.jobs.some(open))) state = 'pending';
+  return { commit, state, runs };
+}
+
+module.exports = { checkCi, defaultGh, returnedAfterRound, collect, render, sanitize, extractConclusion, resolveRange, OPEN, CLOSE };

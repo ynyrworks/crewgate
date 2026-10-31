@@ -125,6 +125,17 @@ Before tagging a release, run `crew release record <version>` (see `references/c
 NO REVIEW, no user turn, gate.missing, not placed), then write the conclusion in a file and pass it with `--conclusion-file`: what was
 verified, what was not, which assumptions still stand. Commit the record with the release. Do not leave the TODO in it.
 
+### Release order: CI before the tag
+Never tag a commit CI has not passed. In this order:
+1. Push the branch (a push gate: ask, see Gates) and wait for CI on it.
+2. Run `crew release check` (it reads the runs of HEAD through `gh`; add `--commit SHA` for another commit). Exit 0 means at least one run exists
+   and every job succeeded. Pending, failed or no run exits non-zero and says which. It blocks nothing and pushes nothing; the decision is yours.
+3. Only then merge to main (step 10) and tag.
+
+CI must have run on the same commit that gets tagged. A fast-forward merge keeps the commit, so the check stays valid. If main moved and the merge made
+a new merge commit (or you rebased), that commit has not been through CI: push it (or the branch it is on), wait, and run `crew release check` again on it before tagging.
+A green check of an earlier commit does not cover a later one. If `gh` is missing the command says so; then check the run on GitHub by hand and do not tag on a guess.
+
 ## Gates
 
 `gates` in the config decide what needs the user. For each of `push`, `open_pr`, `merge`,
@@ -148,7 +159,10 @@ verified, what was not, which assumptions still stand. Commit the record with th
   chat, wait, then `crew gate answer <gate-id> yes` and retry. Never try to get around a block.
 
 `gates.require_user_turn` (default on): an answer counts only if the user wrote a message after your `gate ask`. So ask,
-end your turn, and answer only after the user replied, in the same session that asked (the CLI reads `CLAUDE_CODE_SESSION_ID`; the verdict is fixed when `crew gate answer` runs). `crew gate answer` warns when it saw no user message since the ask.
+end your turn, and answer only after the user replied, in the same session that asked (the CLI reads `CLAUDE_CODE_SESSION_ID`; the verdict is fixed when `crew gate answer` runs).
+A gate answer needs a real user reply. `crew gate answer <id> yes` is refused (non-zero, nothing recorded as approved, a `gate.refused` event) when a session is known and no user message came after the ask:
+a turn started by a task notification, or the same turn that asked, is not a reply. A `no` is always accepted. When no session is known at all, the old verdict stays (`project` or false) and a warning is printed.
+An earlier approval does not carry over: a yes for one push, one merge or one version covers that action only. A new version, a new commit to tag, or the next push asks again.
 
 Workers are told never to push, use the network or touch remote hosts; if a task needs one, that
 is a gate decision for you and the user, not the worker.

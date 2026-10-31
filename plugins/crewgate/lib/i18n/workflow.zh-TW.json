@@ -215,5 +215,15 @@
   "wf.doctor.accountExpected": "預期 {expected}",
   "wf.doctor.accountNoExpected": "未設定預期帳號（account.expected）",
   "wf.doctor.accountMismatch": "這不是預期的帳號。",
-  "wf.doctor.accountUnknown": "無法判斷帳號，因此無法檢查。"
+  "wf.doctor.accountUnknown": "無法判斷帳號，因此無法檢查。",
+
+  "gate.needUserReply": "已拒絕：關卡 {id} 沒有被回答。使用者必須先在聊天裡回覆（詢問之後這個工作階段沒有使用者訊息）。請問使用者、結束這一輪，等他回覆後再回答。沒有任何核准被記錄。",
+  "release.checkHead": "{commit} 的 CI：{state}",
+  "release.ghMissing": "PATH 上找不到 GitHub CLI（gh），無法檢查 CI。請安裝並登入 gh，或到 GitHub 手動確認。",
+  "release.ghFailed": "gh 失敗：{detail}",
+  "release.checkRun": "run {id} {name}：{status}{conclusion}",
+  "release.checkJob": "  job {name}：{status}{conclusion}",
+  "release.checkNone": "{commit} 沒有任何 workflow run。請先推送並等 CI。",
+  "release.checkPending": "仍在進行中：等 CI 跑完再執行一次。",
+  "release.checkFailed": "失敗：不要合併或打這個提交的 tag。"
 }

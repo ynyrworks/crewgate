@@ -363,7 +363,7 @@ version the CLI read only `CLAUDE_SESSION_ID`, which Claude Code does not set, s
 `"project"` is weaker: with several sessions open on one project, a message in another session satisfies it. A parent /
 subagent link is not followed. `prompt_ts` is the list the `UserPromptSubmit` hook keeps in the session file (time in ms,
 never the text, newest 20); it is read while fresh, right after your reply. The automatic yes of an `auto` gate needs
-no verdict. `crew gate answer ... yes` prints a warning when the verdict is `false`. A `gate.answered` written before
+no verdict. `crew gate answer ... yes` is **refused** (`CrewError gate.needUserReply`, exit 1, a `gate.refused` event with the gate id and no note, nothing stored as answered) when `require_user_turn` is on, the verdict is `false` and at least one of the two sessions is known; a `no` is always recorded. When neither session is known (outside a session) the verdict stays as in the table (`"project"` or `false`) and `false` only prints a warning. `gates.answer` refuses only when the caller passes `requireUserTurn: true` (the CLI does). A `gate.answered` written before
 this field existed has no verdict (unknown) and is **not valid** while `require_user_turn` is `true`. With `false` the old
 rule applies (any yes of the last 30 minutes). The rule applies in all three modes.
 
@@ -789,6 +789,8 @@ about; only accepted nodes count. Code: `lib/core/plan-review.js`, CLI in `lib/c
   `board.show_text`. The page lists pending proposals first with copyable commands (read-only), shows the round history under Show growth.
 
 ## 18. Release record
+
+`crew release check [--commit SHA]` (`checkCi` in `lib/features/release.js`) lists the workflow runs of a commit with `gh run list --commit` and the jobs of each with `gh run view --json jobs`. The `gh` call is injected (`ctx.gh`), so tests need no network. Exit 0 only when at least one run exists and every job is completed with `success` (a skipped job is not a success); a failed job wins over a pending one; no run, pending and failed exit 1. A missing `gh` is `release.ghMissing`. It reads only, never pushes and reads no token. Why: 0.20.0 was tagged before CI and came out red (`docs/postmortems/2026-10-31-machine-load.md`).
 
 `crew release record <version>` writes one Markdown file per version (`<release.record_dir>/<version>.md`, default `.crew/releases`, or `--dir`)
 that is meant to be committed with the release. Code: `lib/commands/release.js`, `lib/features/release.js`.

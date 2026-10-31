@@ -82,7 +82,10 @@ function userTurnVerdict(asked, session, opts, nowMs) {
 }
 
 // answer(projectId, gateId, 'yes'|'no', note, opts) -> { id, gate, answer, user_turn }
-// opts: src, session, prompts, promptsOf(sessionId), projectPrompts(). The ask is found by its id (the whole log, no time cutoff).
+// opts: src, session, prompts, promptsOf(sessionId), projectPrompts(), requireUserTurn. The ask is found by its id (the whole log, no time cutoff).
+// With opts.requireUserTurn === true a `yes` is refused (CrewError gate.needUserReply, a gate.refused event without the note) when a
+// session is known (the asking or the answering one) and the verdict is false. When no session is known at all the verdict stays as
+// before ('project' or false) and the answer is stored. A `no` is always recorded.
 // data.user_turn (true | false | 'project') and data.ask_session are stored on the gate.answered event.
 function answer(projectId, gateId, reply, note, opts = {}) {
   if (reply !== 'yes' && reply !== 'no') throw new UsageError('args.badChoice', { name: 'answer', choices: 'yes, no' });
@@ -92,6 +95,13 @@ function answer(projectId, gateId, reply, note, opts = {}) {
   const done = all.find((e) => e.type === 'gate.answered' && e.data && e.data.id === gateId);
   if (done) throw new CrewError('gate.alreadyAnswered', { id: gateId, answer: done.data.answer });
   const userTurn = userTurnVerdict(asked, opts.session, opts, Date.now());
+  if (reply === 'yes' && opts.requireUserTurn === true && userTurn === false && (asked.session || opts.session)) {
+    events.append(projectId, {
+      type: 'gate.refused', src: opts.src || 'cli', session: opts.session, task: asked.task || undefined,
+      data: { id: gateId, gate: asked.data.gate, answer: reply, reason: 'no_user_turn', ask_session: asked.session || '' },
+    });
+    throw new CrewError('gate.needUserReply', { id: gateId });
+  }
   events.append(projectId, {
     type: 'gate.answered', src: opts.src || 'cli', session: opts.session, task: asked.task || undefined, key: `${gateId}:answered`,
     data: { id: gateId, gate: asked.data.gate, answer: reply, auto: false, note: note || '', user_turn: userTurn, ask_session: asked.session || '' },

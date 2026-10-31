@@ -35,10 +35,11 @@ When a gate is `ask`, ask once, concretely, and wait:
 Not: "Should I continue?". Name the action, the target and what you checked. Run `crew gate ask <gate> --task <id> --detail "..."` first (it prints a gate id), ask in chat, and only
 after the user answers run `crew gate answer <gate-id> yes|no --note "<their words>"`. Record nothing as
 approved until the user answers in chat. If the user says yes to one push, the next push asks again.
+A gate answer needs a real user reply: `crew gate answer ... yes` is refused when no user message of the session came after the ask (a task notification is not one). An earlier approval does not carry over to a new version: ask again for it.
 
 Two settings change what a recorded answer is worth. `gates.require_user_turn` (default true): the answer counts only
 when a user message of the same session arrived between your `gate ask` and your `gate answer yes` (judged when `crew gate answer` runs), so never run both in the same turn;
-ask, stop, and answer after the user replied (`crew gate answer` warns when it saw no user message). `gates.enforce`
+ask, stop, and answer after the user replied (`crew gate answer yes` is refused when it saw no user message; with no session known it warns and keeps the old verdict). `gates.enforce`
 (`remind` | `confirm` | `block`): with `confirm` Claude Code itself asks the user before the push, PR or merge runs when
 there is no valid answer (wait for the user, do not rephrase the command to avoid it); with `block` the command is
 denied until a valid answer exists.

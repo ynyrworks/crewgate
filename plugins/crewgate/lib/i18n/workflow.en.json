@@ -215,5 +215,15 @@
   "wf.doctor.accountExpected": "expected {expected}",
   "wf.doctor.accountNoExpected": "no expected account (account.expected)",
   "wf.doctor.accountMismatch": "This is not the expected account.",
-  "wf.doctor.accountUnknown": "The account could not be determined, so it cannot be checked."
+  "wf.doctor.accountUnknown": "The account could not be determined, so it cannot be checked.",
+
+  "gate.needUserReply": "Refused: gate {id} was not answered. The user must reply in chat first (no user message of this session came after the ask). Ask the user, end your turn, and answer after their reply. Nothing was recorded as approved.",
+  "release.checkHead": "CI for {commit}: {state}",
+  "release.ghMissing": "The GitHub CLI (gh) was not found on PATH, so CI cannot be checked. Install and sign in to gh, or check the run on GitHub by hand.",
+  "release.ghFailed": "gh failed: {detail}",
+  "release.checkRun": "run {id} {name}: {status}{conclusion}",
+  "release.checkJob": "  job {name}: {status}{conclusion}",
+  "release.checkNone": "No workflow run exists for {commit}. Push it and wait for CI.",
+  "release.checkPending": "Still pending: wait for CI to finish, then run this again.",
+  "release.checkFailed": "Failed: do not merge or tag this commit."
 }
