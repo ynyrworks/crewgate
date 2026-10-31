@@ -16,6 +16,7 @@ const gates = require('../core/gates');
 const G = require('./gatecheck');
 const { SHELL_TOOLS, LIMIT_WORDS } = require('./prefilter');
 const limits = require('./agentlimits');
+const leftovers = require('./leftovers');
 
 const MAX_READ_BYTES = 20 * 1024 * 1024;
 
@@ -68,7 +69,9 @@ function onAgent(payload) {
     }
   } catch { /* an illegal transition must not stop the dispatch */ }
 
-  sess.remember(h.pid, key, { task: id, type, bg, worker, ts: Date.now(), agent: null, stopped: false, session: h.sid || null, ...(eng.engine ? { codex: true } : {}) });
+  // The live pids at dispatch, so the stop can tell what the worker started (leftovers.js). Never blocks the dispatch.
+  const snap = worker ? leftovers.snapshot() : null;
+  sess.remember(h.pid, key, { task: id, type, bg, worker, ts: Date.now(), agent: null, stopped: false, session: h.sid || null, ...(snap ? { snap } : {}), ...(eng.engine ? { codex: true } : {}) });
   sess.touch(h, (s) => sess.addTask(s, id));
 
   if (over) return C.withContext('PreToolUse', h.t('warn.parallel', over));
@@ -94,7 +97,8 @@ function onSend(payload) {
     if (lim.parallel_enforce !== 'warn') return C.deny(h.t('deny.parallel', vars));
     return C.withContext('PreToolUse', h.t('warn.parallel', vars));
   }
-  sess.remember(h.pid, rec.id, { ...rec, id: undefined, stopped: false, resumed: true, ts: Date.now(), session: h.sid || null });
+  const snap = leftovers.snapshot();
+  sess.remember(h.pid, rec.id, { ...rec, id: undefined, stopped: false, stopped_at: undefined, resumed: true, ts: Date.now(), session: h.sid || null, snap: snap || undefined });
   return null;
 }
 

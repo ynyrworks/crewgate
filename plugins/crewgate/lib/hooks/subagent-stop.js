@@ -6,6 +6,7 @@ const events = require('../core/events');
 const tasks = require('../core/tasks');
 const C = require('./common');
 const sess = require('./session');
+const leftovers = require('./leftovers');
 const { typeFields } = require('../core/agents');
 
 const HEAD = 64 * 1024;
@@ -64,6 +65,22 @@ function hasStart(h, agentId) {
   try { return events.read(h.pid, { types: 'subagent.start' }).some((e) => e.agent === agentId); } catch { return true; }
 }
 
+// Worker stop: look for what it left running and record task.leftovers (count, program names, shared). Reports only.
+function noteLeftovers(h, found, agentId) {
+  try {
+    if (!found.rec.worker || !found.rec.snap) return;
+    const others = Object.entries(sess.readUses(h.pid))
+      .filter(([k, r]) => k !== found.rec.id && r && r.worker && r.task !== found.id && Date.now() - (r.ts || 0) < 6 * 3600 * 1000)
+      .map(([, r]) => r);
+    const res = leftovers.check(h.pid, found.rec, others);
+    if (!res) return;
+    events.append(h.pid, {
+      type: 'task.leftovers', src: 'hook', session: h.sid, agent: agentId || null, task: found.id,
+      data: res, key: `${found.rec.id}:${found.rec.ts || 0}:${found.rec.stopped_at || 0}`,
+    });
+  } catch { /* a report only: never stops the stop */ }
+}
+
 function run(payload) {
   const h = C.open(payload);
   if (!h) return null;
@@ -98,6 +115,7 @@ function run(payload) {
       noReport = true;
     } catch { return null; }
   }
+  if (found.rec) noteLeftovers(h, found, agentId);
   if (found.rec) sess.markStopped(h.pid, found.rec.id);
   sess.touch(h, (s) => sess.addTask(s, found.id));
   if (task.state !== 'returned') return null;
