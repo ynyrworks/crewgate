@@ -44,7 +44,7 @@ const freePort = () => new Promise((resolve) => {
 function diagnose(E, t0) {
   const read = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch (e) { return `(unreadable: ${e.code})`; } };
   return [
-    `waited ${Date.now() - t0} ms`,
+    `${Date.now() - t0} ms since the start`,
     `lock exists: ${fs.existsSync(E.lock)}`,
     `board.json: ${read(E.state)}`,
     `board.log:\n${read(E.log)}`,
@@ -121,7 +121,7 @@ test('SessionStart starts the board when board.autostart is on, without waiting 
   h.start(F);
   // the second start's detached check must have finished (and found the board) before the board is stopped,
   // or it could outlive this test and start a new board
-  assert.ok(await until(() => /autostart check: running/.test(fs.readFileSync(log, 'utf8'))), `the detached check ran; board.log:\n${fs.readFileSync(log, 'utf8')}`);
+  assert.ok(await until(() => /autostart check: running/.test(fs.readFileSync(log, 'utf8')), 60000), `the detached check did not run within 60 s; board.log:\n${fs.readFileSync(log, 'utf8')}`);
   assert.equal(JSON.parse(fs.readFileSync(state, 'utf8')).pid, st.pid, 'no second board');
   assert.equal(crew(['board', 'stop']).code, 0);
 });
