@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.19.0 — 2026-10-31
 
 ### New
 
@@ -14,6 +14,14 @@
 - The `crew` skill says what only the orchestrator can record: the user's decisions and their reasons with `crew log add`, and items that outlive one task with `crew work set`. It also gains a release record step. These are instructions to the model, not checks.
 - `office_api` is now 2: the board also serves the assets an add-on lists in `office.json`, and passes `store` and `refresh` to its page. A 0.15 add-on with a newer board, or the other way round, is not loaded and shows the update commands. One-click update handles both.
 - "Drawn by code with no external assets" now applies to the pixel view only. Where the HD art comes from and its limits are in `plugins/crewgate-office/ART.md`.
+
+### Known issues
+
+The open list is in [docs/ROADMAP.md](docs/ROADMAP.md), and what was checked for this version is in [docs/releases/0.19.0.md](docs/releases/0.19.0.md).
+
+### Upgrade notes
+
+- The board and the add-on must both be 0.19.0, because `office_api` is now 2. Agent copies are unchanged, so no `crew init --force` is needed.
 
 ## 0.18.1 — 2026-10-31
 

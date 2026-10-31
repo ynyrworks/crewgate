@@ -8,6 +8,7 @@ the [CHANGELOG](../CHANGELOG.md).
 
 One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.md).
 
+- **0.19** — `crew release record` writes one committed record per version, flagging changes that were not re-reviewed; the project page shows recent merges and task activity when its cards are empty; the HD Office view ships as an opt-in test version in the optional add-on.
 - **0.18.1** — After a one-click update the page shows the result, even when the new board answers before the page notices the restart.
 - **0.18** — Under Codex, a `never` gate and an unapproved `ask` gate under `confirm` or `block` are denied before the command runs; sessions show their Claude account and a project can name the one it expects; a board killed outright can be dated.
 - **0.17** — A task notification no longer counts as a user message for the gate rule; workers and reviewers are told to keep changes to the brief; `crew doctor` reports stale agent copies, a broken CLI path and project gates; the board's session counts match the Sessions page.
@@ -23,8 +24,7 @@ One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.m
 
 ## Unreleased / next release
 
-- `crew release record <version>` writes one committed record per version: the plan, each task's review and refutation results, the gate approvals and the orchestrator's conclusion. It flags a task whose last changes were not re-reviewed. Crewgate's records are in [docs/releases](releases/).
-- The project page no longer looks broken for a project in the normal flow: with no merge requests it shows recent merges and pushes, with no log lines it shows the task activity, and empty work and validation cards fold into one line. The skill says what only the orchestrator can record.
+Nothing yet: `main` matches the latest release. Each version's record is in [docs/releases](releases/).
 
 
 ## Known issues
@@ -36,19 +36,22 @@ Open problems in the latest release, and what has not been checked.
 - **Gates are best effort.** Scripts, configured aliases, variables and other tools are not seen. Use branch protection on the server for a hard stop.
 - **Codex.** Hooks installed through the plugin are not verified, only hooks in `.codex/hooks.json`, and a real run covered only `never`. The Office add-on install through Codex is not verified. Codex versions older than 0.164 were not measured.
 - **Account labels.** Only new sessions in crew projects have one. The History page does not show them. Editing `account.expected` on the board's Settings page is not checked; set it in `crew.json`.
-- **One-click update.** Clicking the board's button updated 0.17.0 to 0.18.0 on the GitHub marketplace. The page kept the old "update available" banner for up to a minute because the new board answered first. The fix is in 0.18.1 and shows only from the update after that, since the old page runs the update.
+- **One-click update.** Clicking the board's button updated 0.17.0 to 0.18.0 on the GitHub marketplace. The page kept the old "update available" banner for up to a minute because the new board answered first. The fix is in 0.18.1 and shows only from the update after that, since the old page runs the update. It has not been seen working yet.
+- **HD Office test version.** Tone and foreground are unfinished. Performance on integrated graphics is not measured. The no-WebGL and load-failure messages have unit tests only.
+- **Agent instructions are not limits.** A reviewer told to use only `git diff`, `git log` and `git show` ran `git checkout` in the main working tree, and a worker closed every `chrome.exe` to stop its own test browser. These are instructions to the model, and nothing enforces them.
+- **Project page.** The orchestrator's log and work items depend on an instruction in the skill, so they can be missed. The events scan reads up to 8 MB each time a project's events file changes, which is cheap at today's sizes of under 100 KB.
 
 ## To do
 
 Decided, not started or not finished.
 
-- **HD Office.** Frozen as v0.1.0 on the `feat/webgl-office` branch, not in a release. Known gaps: warm tone, foreground, performance, install flow.
+- **HD Office.** The look stays frozen as v0.1.0 for now. Still to do before it can be the default: warm tone, foreground, and performance on integrated graphics.
+- **`board-autostart` on Windows CI.** Find why the board sometimes does not come up in time, then fix the cause or the test.
 - **Codex.** Verification on more platforms and versions, and on plugin-installed hooks.
 
 ## Later
 
 - **Office view: test-result reactions** (a celebration or a slump when checks pass or fail; the result is not in the data the office receives today) and **bigger character sprites**.
-- **Enhanced WebGL Office.** In the same optional `crewgate-office` plugin, sharing its data model, with the pixel-art view as the fallback for browsers without WebGL or too slow for it. The main plugin gains no dependency.
 - **Codex subagent workers,** once their sandbox can commit. Codex CLI 0.164 still cannot: `git add` in a worktree fails with permission denied.
 
 ## Exploring
