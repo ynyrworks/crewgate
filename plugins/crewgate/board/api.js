@@ -203,8 +203,9 @@ function str(body, key, max = 2000) {
 // ---------------------------------------------------------------- the API
 // opts: { version, watcher, usage, stats }
 function createApi(opts = {}) {
-  const accountIndex = createSessionEnds(() => projects.list().map((p) => paths.eventsFile(p.id)));   // session.start account ids
-  const watcher = opts.watcher || createWatcher({ sessionEnds: createSessionEnds(() => projects.list().map((p) => paths.eventsFile(p.id))) });
+  // one shared index (session.end + session.start account ids): the watcher and the API read the same instance
+  const accountIndex = opts.sessionEnds || createSessionEnds(() => projects.list().map((p) => paths.eventsFile(p.id)));
+  const watcher = opts.watcher || createWatcher({ sessionEnds: accountIndex });
   const usage = opts.usage || createUsage();
   const sessionStats = opts.stats || createSessionStats();
   const history = opts.history || createHistory({ claudeRoot: watcher.claudeRoot, codexRoot: watcher.codexRoot });
