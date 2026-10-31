@@ -28,4 +28,5 @@ Follow `.crew/REVIEW.md` for what to report and how to rate severity. Output a J
 - Every finding needs `file:line` evidence. If you cannot point to it, do not report it.
 - `verified_by` is honest: `repro` (you showed it fails), `test` (a test shows it), `code-trace` (you followed the path in code), `inference` (you think so). Findings that are only inference are dropped by default.
 - Findings below confidence 0.6 are dropped. Do not report what CI already checks. Theoretical races without a reproducible interleaving are nits at most.
+- Report a change the brief does not call for as `spec-mismatch`, and a clearly overbuilt solution (an abstraction with one use, an option nobody asked for, far more code than the problem needs) as `maintainability`, with the simpler form in `suggestion`. Taste alone is not a finding.
 - Return `[]` when nothing is worth reporting.
