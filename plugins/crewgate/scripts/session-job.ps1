@@ -3,7 +3,7 @@
 # TerminateJobObject: if this process dies first, the session and its children simply carry on.
 param(
   [int]$ClaudePid, [string]$ProjectId, [string]$PidFile, [string]$CrewHome, [string]$NodeExe, [string]$RecordScript,
-  [int]$CapPercent = 60, [string]$Cleanup = 'on', [int64]$HookStart = 0, [string]$TestKeepFile = ''
+  [int]$CapPercent = 60, [string]$Cleanup = 'off', [int64]$HookStart = 0, [string]$TestKeepFile = ''
 )
 $ErrorActionPreference = 'Stop'
 
@@ -183,7 +183,8 @@ try {
     }
     Start-Sleep -Milliseconds 300
   }
-  $extra = @("found=$($foundSet.Count)", "stopped=$($stoppedSet.Count)", "kept=$($keptSet.Count)", "cleanup=$Cleanup")
+  $wouldStop = @($foundSet.Keys | Where-Object { -not $keptSet.ContainsKey($_) }).Count
+  $extra = @("found=$($foundSet.Count)", "stopped=$($stoppedSet.Count)", "kept=$($keptSet.Count)", "would_stop=$wouldStop", "cleanup=$Cleanup")
   if ($err) { $extra += "error=$err" }
   Record 'session.cleanup' $extra
 } finally { Done }

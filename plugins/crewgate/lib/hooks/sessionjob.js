@@ -66,7 +66,7 @@ function start(projectId, limits, claudePid = process.ppid, deps = {}) {
     const shell = deps.shell || findShell();
     if (!shell) { note(projectId, 'session.job.error', { reason: 'no-powershell' }); return 'no-shell'; }
     const hookStart = Date.now();
-    const cleanup = limits && limits.session_cleanup === 'off' ? 'off' : 'on';
+    const cleanup = limits && limits.session_cleanup === 'on' ? 'on' : 'off';
     const file = pidFile(projectId, claudePid);
     const args = ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', deps.script || SCRIPT,
       '-ClaudePid', String(claudePid), '-ProjectId', projectId, '-PidFile', file, '-CrewHome', require('../core/paths').home(),

@@ -37,7 +37,7 @@
     "parallel_enforce": "block",
     "process_priority": "below_normal",
     "session_cpu_percent": 60,
-    "session_cleanup": "on",
+    "session_cleanup": "off",
     "max_returns_before_takeover": 2,
     "report_max_tokens": 1500,
     "orchestrator_read_warn_lines": 300,
