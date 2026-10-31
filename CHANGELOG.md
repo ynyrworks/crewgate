@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- `crew release record <version> [--from REF] [--to REF] [--plan SLUG] [--conclusion-file F] [--dir D] [--lang en|zh-TW] [--force]` writes one Markdown record per version, for committing: the plan and its assumptions, each task's returns and review results, the gate approvals, and the orchestrator's conclusion, which is kept when it runs again. A task returned after its last finalized review round is flagged as not re-reviewed. Text is redacted, email addresses are masked, the home directory becomes `~`, and reports, briefs and session ids are left out. New config key `release.record_dir` (default `.crew/releases`).
+- The project page shows what events already know. With no merge requests, the card becomes "Recent merges", listing merged tasks and pushes. With no log lines, the log shows the task activity. Empty work and validation cards fold into one line, and validation is never filled automatically. Cards with data look as before.
+
+### Changed
+
+- The `crew` skill says what only the orchestrator can record: the user's decisions and their reasons with `crew log add`, and items that outlive one task with `crew work set`. It also gains a release record step. These are instructions to the model, not checks.
+
 ## 0.18.1 — 2026-10-31
 
 ### Fixed

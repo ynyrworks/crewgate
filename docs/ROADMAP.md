@@ -23,7 +23,8 @@ One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.m
 
 ## Unreleased / next release
 
-Nothing yet: `main` matches the latest release.
+- `crew release record <version>` writes one committed record per version: the plan, each task's review and refutation results, the gate approvals and the orchestrator's conclusion. It flags a task whose last changes were not re-reviewed. Crewgate's records are in [docs/releases](releases/).
+- The project page no longer looks broken for a project in the normal flow: with no merge requests it shows recent merges and pushes, with no log lines it shows the task activity, and empty work and validation cards fold into one line. The skill says what only the orchestrator can record.
 
 
 ## Known issues
@@ -31,7 +32,7 @@ Nothing yet: `main` matches the latest release.
 Open problems in the latest release, and what has not been checked.
 
 - **The board is sometimes killed outright.** The cause is not established; closing or updating the desktop app is the untested suspect. It logs nothing when this happens. Since 0.18 it records when it was last alive, so the next death can be dated. `board.autostart` brings it back at the next session.
-- **Timing-sensitive tests.** `board-autostart` failed once in a full run and has not failed again in 32 repeats, so the 0.15.1 fix is unconfirmed. The SessionStart latency check in `hooks-contract` failed once while a real board ran beside it, and passed on a rerun.
+- **Timing-sensitive tests.** `board-autostart` ("the board came up on the configured port") failed on Windows CI in both 0.18.1 runs and passed on rerun, while 32 local repeats passed, so the 0.15.1 fix did not cure it. The SessionStart latency check in `hooks-contract` failed once while a real board ran beside it, and passed on a rerun.
 - **Gates are best effort.** Scripts, configured aliases, variables and other tools are not seen. Use branch protection on the server for a hard stop.
 - **Codex.** Hooks installed through the plugin are not verified, only hooks in `.codex/hooks.json`, and a real run covered only `never`. The Office add-on install through Codex is not verified. Codex versions older than 0.164 were not measured.
 - **Account labels.** Only new sessions in crew projects have one. The History page does not show them. Editing `account.expected` on the board's Settings page is not checked; set it in `crew.json`.
