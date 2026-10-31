@@ -501,3 +501,9 @@ test('accept and release record agree on a task that was sent back after its las
   assert.equal(rec.code, 0, rec.err);
   assert.match(fs.readFileSync(path.join(repo, '.crew', 'releases', '0.0.2.md'), 'utf8'), /NOT RE-REVIEWED/);
 });
+
+test('reviewerInstructions tells the reviewer to check Machine impact when the brief has it', () => {
+  const text = rv.reviewerInstructions({ task: { id: 't-20261101-abcd' }, briefPath: 'b.md', reviewPath: 'r.md', diffCmd: 'git diff', categories: ['machine-impact', 'nit'], round: 1, rawPath: 'raw.json', cli: 'crew' });
+  assert.match(text, /If the brief has a "Machine impact" section/);
+  assert.match(text, /report as machine-impact any work whose real cost differs/);
+});

@@ -37,7 +37,7 @@ test('example agents are rendered and carry the project rules', () => {
   assert.match(fs.readFileSync(path.join(EX, '.claude', 'agents', 'crew-worker.md'), 'utf8'), /## Project rules \(todo-cli\)/);
 });
 
-test('example brief has all five sections; REVIEW.md has two project rules; one lesson is a candidate', () => {
+test('example brief has all six sections; REVIEW.md has two project rules; one lesson is a candidate', () => {
   assert.equal(tasks.validateBrief(fs.readFileSync(path.join(EX, 'briefs', 'add-due-dates.md'), 'utf8')).ok, true);
   const review = fs.readFileSync(path.join(EX, '.crew', 'REVIEW.md'), 'utf8');
   const rules = review.split('## Project-specific rules')[1].split('\n').filter((l) => l.startsWith('- '));
