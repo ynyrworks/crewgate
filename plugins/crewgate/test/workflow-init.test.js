@@ -244,3 +244,54 @@ function freePort() {
     s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => ok(p)); });
   });
 }
+
+test('doctor: no stale warning right after init, also with CRLF and non-default config', () => {
+  const repo = u.initRepo();
+  let r = u.crewJson(['doctor'], repo);
+  assert.ok(!r.data.checks.some((c) => c.name === 'agents'));
+  for (const n of AGENTS) {
+    const f = path.join(repo, '.claude', 'agents', `${n}.md`);
+    fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/\n/g, '\r\n'));
+  }
+  r = u.crewJson(['doctor'], repo);
+  assert.ok(!r.data.checks.some((c) => c.name === 'agents'));
+  const repo2 = h.makeRepo();
+  fs.mkdirSync(path.join(repo2, '.claude'), { recursive: true });
+  u.writeCfg(repo2, { language: 'zh-TW', checks: ['npm test', 'lint `x`'], forbidden: { paths: ['secrets/**'], actions: ['deploy'] } });
+  assert.equal(h.crew(['init'], repo2).code, 0);
+  r = u.crewJson(['doctor'], repo2);
+  assert.ok(!r.data.checks.some((c) => c.name === 'agents'), JSON.stringify(r.data.checks));
+});
+
+test('doctor: warns on a changed copy or config, names files, exit code like other warnings, never writes', () => {
+  const repo = u.initRepo();
+  const f = path.join(repo, '.claude', 'agents', 'crew-worker.md');
+  fs.appendFileSync(f, '\nold line\n');
+  const before = fs.readFileSync(f, 'utf8');
+  let r = u.crewJson(['doctor'], repo);
+  const c = r.data.checks.find((x) => x.name === 'agents');
+  assert.equal(c.status, 'warn');
+  assert.match(c.detail, /crew-worker\.md/);
+  assert.ok(!/crew-reviewer/.test(c.detail));
+  assert.match(c.detail, /older plugin version or a local edit/);
+  assert.match(c.detail, /crew init --force/);
+  assert.equal(fs.readFileSync(f, 'utf8'), before);
+  const plain = h.crew(['doctor'], repo);
+  assert.match(plain.out, /WARN {2}Agent copies/);
+  assert.equal(plain.code, h.crew(['doctor'], u.initRepo()).code);
+  // a config change alters the rendering (only the worker template uses checks)
+  const repo2 = u.initRepo();
+  u.patchCfg(repo2, (cfg) => { cfg.checks = ['make verify']; });
+  r = u.crewJson(['doctor'], repo2);
+  const c2 = r.data.checks.find((x) => x.name === 'agents');
+  assert.equal(c2.status, 'warn');
+  assert.match(c2.detail, /crew-worker.md/);
+});
+
+test('doctor: a missing copy is reported only by the files check', () => {
+  const repo = u.initRepo();
+  fs.rmSync(path.join(repo, '.claude', 'agents', 'crew-refuter.md'));
+  const r = u.crewJson(['doctor'], repo);
+  assert.ok(!r.data.checks.some((x) => x.name === 'agents'));
+  assert.match(r.data.checks.find((x) => x.name === 'files').detail, /crew-refuter\.md/);
+});

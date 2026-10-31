@@ -14,6 +14,7 @@ const gates = require('../core/gates');
 const clishim = require('../core/clishim');
 const plans = require('../core/plans');
 const boardCmd = require('./board');
+const initFeature = require('../features/init');
 
 // GET http://127.0.0.1:<port>/api/health -> { state: 'running'|'down'|'other', detail }
 function probeBoard(port, timeoutMs = 1500) {
@@ -78,6 +79,16 @@ async function run(argv, ctx) {
     const shim = clishim.check();
     add('shim', shim.state === 'ok' ? 'ok' : 'warn', shim.state === 'ok' ? shim.target
       : ctx.t(shim.state === 'missing' ? 'wf.doctor.shimMissing' : 'wf.doctor.shimStale', { file: shim.file, target: shim.target }));
+    if (loaded.exists && !loaded.errors.length) {
+      // a copy that is missing is the files check's business; only copies that exist are compared (line endings ignored)
+      const lf = (x) => x.replace(/\r\n?/g, '\n');
+      const stale = initFeature.AGENTS.filter((n) => {
+        let have;
+        try { have = fs.readFileSync(path.join(dir, '.claude', 'agents', `${n}.md`), 'utf8'); } catch { return false; }
+        return lf(have) !== lf(initFeature.renderAgent(n, loaded.config));
+      }).map((n) => `.claude/agents/${n}.md`);
+      if (stale.length) add('agents', 'warn', ctx.t('wf.doctor.agentsStale', { files: stale.join(', ') }));
+    }
     const nPlans = plans.slugs(dir).length;
     if (nPlans) {
       const deep = plans.deepNodes(dir);
