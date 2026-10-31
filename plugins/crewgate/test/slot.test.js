@@ -168,3 +168,33 @@ test('a command that does not exist reports it and exits 127', () => {
   assert.match(r.stderr, /Could not start crew-no-such-command-xyz/);
   assert.ok(!fs.existsSync(SLOT0));
 });
+
+test('after a timeout or a failure the command carries a marker, so a nested call does not wait again', () => {
+  reset();
+  const live = sleeper();
+  try {
+    fs.mkdirSync(SLOTS, { recursive: true });
+    fs.writeFileSync(SLOT0, JSON.stringify({ pid: live.pid, started: new Date().toISOString() }));
+    const inner = [process.execPath, BIN, 'slot', 'run', '--max-wait', '30', '--', 'node', '-e', "console.log('inner ok')"];
+    const t0 = Date.now();
+    const r = slot(['--max-wait', '1', '--', ...inner]);
+    assert.equal(r.status, 0);
+    assert.match(r.stdout, /inner ok/);
+    assert.ok(Date.now() - t0 < 10000, 'the inner call did not wait again');
+    assert.doesNotMatch(r.stderr.split('anyway')[1] || '', /Waiting/);
+    // a failure in the slot code: same marker
+    const file = path.join(HOME, 'not-a-folder2');
+    fs.writeFileSync(file, 'x');
+    const r2 = slot(['--', ...inner], { env: { CREWGATE_HOME: file } });
+    assert.equal(r2.status, 0);
+    assert.match(r2.stdout, /inner ok/);
+    // the marker is not set on a normal run with a free slot, and a dead wrapper's marker is ignored
+    reset();
+    const r3 = slot(['--', 'node', '-e', 'console.log(process.env.CREWGATE_SLOT_HELD)']);
+    assert.match(r3.stdout.trim(), /^\d+:0$/);
+    fs.mkdirSync(SLOTS, { recursive: true });
+    fs.writeFileSync(SLOT0, JSON.stringify({ pid: live.pid, started: new Date().toISOString() }));
+    const r4 = spawnSync(process.execPath, [BIN, 'slot', 'run', '--max-wait', '1', '--', 'node', '-e', 'console.log(1)'], { encoding: 'utf8', env: { ...env(), CREWGATE_SLOT_HELD: `free:${deadPid()}` } });
+    assert.match(r4.stderr, /running the command anyway/);   // it waited, so the stale marker did not count
+  } finally { live.kill(); }
+});

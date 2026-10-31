@@ -9,6 +9,7 @@
 //   - exit code, output and stdin of the command pass through (stdio is inherited).
 // Nesting: the holder puts CREWGATE_SLOT_HELD=<pid>:<index> into the environment of its command. A process that
 // finds it, with that slot file still holding that live pid, runs at once, so children share the holder's slot.
+// When the command runs anyway (timeout or failure) the marker is `free:<pid>` (the wrapper's pid, valid while it lives).
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -77,7 +78,10 @@ function release(i) {
 
 // Is this process already inside a slot (its parent holds one)?
 function held(env) {
-  const m = /^(\d+):(\d+)$/.exec((env && env[ENV_HELD]) || '');
+  const v = (env && env[ENV_HELD]) || '';
+  const f = /^free:(\d+)$/.exec(v);   // set when the command ran anyway: valid while that wrapper lives
+  if (f) return alive(Number(f[1]));
+  const m = /^(\d+):(\d+)$/.exec(v);
   if (!m) return false;
   const cur = readSlot(Number(m[2]));
   return !!cur && cur !== 'half' && cur.pid === Number(m[1]) && alive(cur.pid);
@@ -136,6 +140,7 @@ async function run(argv, opts = {}) {
   const env = opts.env || process.env;
   const maxWaitMs = opts.maxWaitSeconds === undefined ? DEFAULT_MAX_WAIT_S * 1000 : opts.maxWaitSeconds * 1000;
   let got = null;
+  let ranAnyway = false;
   const killRef = { kill: null };
   const onSig = (sig) => () => {
     if (killRef.kill) killRef.kill(sig);
@@ -155,13 +160,17 @@ async function run(argv, opts = {}) {
           say('slot.timeout', { seconds: Math.round(maxWaitMs / 1000) });
           try { if (opts.onTimeout) opts.onTimeout({ waitedSeconds: Math.round(maxWaitMs / 1000) }); } catch { /* best effort */ }
           got = null;
+          ranAnyway = true;
         }
       }
     } catch (e) {
       say('slot.failed', { reason: e && e.message });
       got = null;
+      ranAnyway = true;
     }
-    const childEnv = got ? { ...env, [ENV_HELD]: `${process.pid}:${got.index}` } : env;
+    // No slot (timeout or failure): mark the command as running anyway so a nested caller does not wait again.
+    // Set here and only here; an inherited marker (nested case, held) is passed on unchanged.
+    const childEnv = got ? { ...env, [ENV_HELD]: `${process.pid}:${got.index}` } : (ranAnyway ? { ...env, [ENV_HELD]: `free:${process.pid}` } : env);
     return await exec(argv, childEnv, say, killRef);
   } finally {
     for (const s of Object.keys(handlers)) process.removeListener(s, handlers[s]);

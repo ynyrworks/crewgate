@@ -688,7 +688,7 @@ It can never hang work for good:
 - A holder whose pid is dead frees its slot: the next caller takes the file over (it deletes it only if it is still the file it read; a file that cannot be parsed yet is a holder still writing and counts as stale after 5 s).
 - After the maximum wait the command runs anyway, with one stderr line and a `slot.timeout` event in the project of the cwd (when there is one).
 - Any failure in the slot code (unwritable or missing home folder, no pid check) prints one line and runs the command anyway; `run-tests.js` runs the tests anyway when it cannot load the slot code. With no home folder or on CI the run is the same as before, plus that line.
-- Nesting: the holder puts `CREWGATE_SLOT_HELD=<pid>:<index>` into the environment of its command. A `crew slot run` or `npm test` below it finds this, checks that slot file still holds that live pid, and runs at once, so children share the holder's slot and never wait on it. A stale or foreign value (dead pid, other home) is ignored.
+- Nesting: the holder puts `CREWGATE_SLOT_HELD=<pid>:<index>` into the environment of its command. A `crew slot run` or `npm test` below it finds this, checks that slot file still holds that live pid, and runs at once, so children share the holder's slot and never wait on it. A stale or foreign value (dead pid, other home) is ignored. When the command runs anyway (timeout or failure in the slot code) the marker is `CREWGATE_SLOT_HELD=free:<pid>` of the wrapper, set only on that path and valid while that pid lives, so a nested `npm test` under `crew slot run --max-wait 500 -- npm test` does not wait again.
 
 What it does not cover:
 - A worker that does not use it (the rule is in the worker agent files and `SKILL.md`; nothing enforces it).
