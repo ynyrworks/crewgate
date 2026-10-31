@@ -20,7 +20,7 @@ One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.m
 
 ## Unreleased / next release
 
-Nothing yet: `main` matches the latest release.
+What is on `main` and will ship in the next version (details under "Unreleased" in the [CHANGELOG](../CHANGELOG.md)): the doctor reports stale agent copies, a broken CLI path and project gates.
 
 
 ## Later

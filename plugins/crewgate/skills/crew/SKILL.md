@@ -82,7 +82,7 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
    `git worktree add <path> -b feat/x` from the main checkout. Use a sibling folder, never a path
    inside the repo.
 6. **Dispatch.** (Codex orchestrator: workers always go through `crew task run <id> --engine codex`,
-   see "Running in Codex".) Call the Agent tool with `subagent_type` from the task output (`crew-worker`), the
+   see "Running in Codex".) Call the Agent tool with `subagent_type` from the task output (`crew-worker`; if the tool does not know that name, as after `crew init` in a running session, use `crewgate:crew-worker`, and the same for the reviewer and refuter), the
    printed prompt (it contains the marker line, which links the subagent to the task), and
    `run_in_background: true` for anything that takes more than a minute. Never run more workers than
    `max_parallel_workers`; start the next one when a task returns.

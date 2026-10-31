@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- `crew doctor` warns when a project's `.claude/agents/crew-*.md` copies differ from what the running plugin generates, whether from an older version or a local edit. These copies take priority over the plugin's agents, so a project could keep old instructions after an upgrade. `crew init --force` refreshes them and backs up first.
+- `crew doctor` checks `~/.crewgate/bin/crew.js` and warns when it is missing or points at a plugin version that was removed.
+
+### Changed
+
+- `crew init` also writes `~/.crewgate/bin/crew.js`, so a project's scripts work before the first session.
+
+### Fixed
+
+- The doctor's gates line names a project's own gates and their modes; it used to say "ask gates: -" when only those were set to ask.
+- The test suite passes when the checkout is itself a crew project.
+
 ## 0.16.0 — 2026-10-31
 
 ### New
