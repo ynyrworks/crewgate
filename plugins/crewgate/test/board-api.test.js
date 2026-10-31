@@ -235,13 +235,22 @@ test('sessions endpoint hides paths and text by default and links sessions to pr
   assert.ok(!r.text.includes('PRIVATE'), 'no prompt or reply text');
   assert.ok(!r.text.includes(repo), 'no full path');
   const ov = await get('/api/overview');
-  assert.equal(ov.json.projects[0].live.sessions, 1);
+  // subagent rows (waiting and working) never count as sessions
+  const sub = path.join(dir, 'a', 'subagents');
+  fs.mkdirSync(sub, { recursive: true });
+  const now = new Date().toISOString();
+  const subLine = (m) => JSON.stringify({ type: m.role, cwd: repo, timestamp: now, message: m }) + '\n';
+  fs.writeFileSync(path.join(sub, 'agent-w1.jsonl'), subLine({ role: 'user', content: 'go' }));
+  fs.writeFileSync(path.join(sub, 'agent-d1.jsonl'), subLine({ role: 'assistant', model: 'm', stop_reason: 'end_turn', content: [{ type: 'text', text: 'ok' }] }));
+  const withSubs = await get('/api/overview');
+  assert.equal(withSubs.json.projects[0].live.sessions, 1);
+  assert.equal(withSubs.json.projects[0].live.subagents, 1);
   // opt in through the global config
   await post('/api/config', { config: { board: { show_text: true } } });
   const t = await get('/api/sessions');
   assert.equal(t.json.show_text, true);
-  assert.match(t.json.sessions[0].last_reply, /PRIVATE REPLY/);
-  assert.match(t.json.sessions[0].last_prompt, /PRIVATE PROMPT/);
+  assert.match(t.json.sessions.find((x) => !x.subagent).last_reply, /PRIVATE REPLY/);
+  assert.match(t.json.sessions.find((x) => !x.subagent).last_prompt, /PRIVATE PROMPT/);
   await post('/api/config', { config: { board: { show_text: false } } });
 });
 
