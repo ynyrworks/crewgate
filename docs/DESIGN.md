@@ -724,7 +724,31 @@ What escapes the job: any process that started before the assign (the hook's own
 - Linux: is `systemd-run` present, does `systemd-run --user --scope` work, does `busctl --user` reach a manager, what does `/proc/self/cgroup` show, is the cgroup writable, and can a transient scope take a sleeping child's pid with `CPUQuota`?
 - macOS: is `taskpolicy` present, does `taskpolicy -b -p <sleeping process>` succeed without root, and does a child started after it report the same with `ps -o pri`?
 
-Results (to be filled in from CI): not yet recorded.
+Results from CI run 41227043173 (2026-11-01, GitHub-hosted runners, one run per job, Node 18, 20 and 22). The raw lines are in [PLUGIN-FACTS.md](PLUGIN-FACTS.md), section "POSIX probe".
+
+| Measured | Linux (x64, 4 cores, systemd 255) | macOS (arm64, 3 cores) |
+|---|---|---|
+| Nice value inherited through `bash -c`, `&` and nested `bash -c` with `&` | Yes, all 3 jobs | Yes, all 3 jobs |
+| Timer probe's worst delay, spinners at the probe's priority / at +10 | 4 / 2, 4 / 3, 4 / 3 ms (2 spinners, all pinned to cpu 0) | 7 / 5, 4 / 4, 3 / 4 ms (1 spinner, unpinned) |
+| A tool that takes an existing process and works without root | Not found: `systemd-run --scope` with `PIDs=` is refused, and the cgroup is not writable | `taskpolicy -b -p <pid>`: exit 0, `ps` priority 20 to 4 |
+| Later children follow | Not applicable | Yes (4), while a child started before it stays at 20 |
+
+What this does not show. The delays show no effect of nice in either direction: 1 to 2 ms is too small to read, and the macOS runs did not saturate the machine at all. On Linux only cpu 0 was busy. Unlike the Windows table, nothing here measures a loaded machine, a real CPU quota on spinners, the effect of `taskpolicy -b` on delay, or a user's desktop: a runner's process lives in a system service's cgroup, which a desktop session does not. Exit 64 from `taskpolicy -g -p` is the probe's own wrong syntax (`-g` expects a policy), so it says nothing about `-g`.
+
+Decisions (plan steps `n13` and `n8`):
+
+| Option | Decision | Why |
+|---|---|---|
+| Below-normal priority by nice, both platforms | Keep as is | Inheritance is shown. No benefit is shown, and none is claimed |
+| Linux: cap by moving a running session into a scope with `systemd-run` | Do not build | `systemd-run` refuses `PIDs=` (`Unknown assignment`) and the child did not move |
+| Linux: cap by writing to the cgroup directly | Do not build | Not writable on the runner (EACCES). Not measured on a desktop, and it would need a cgroup delegated to the user |
+| Linux: wrap each command with `systemd-run --user --scope` | Do not build | The scope starts, but wrapping through `updatedInput` changes what permission rules match, which can break a user's allow list (see the postmortem) |
+| Linux: `StartTransientUnit` through `busctl --user` with an existing pid | Measure first | `busctl --user status` reached a manager, but this call was not tried |
+| macOS: `taskpolicy -b -p` on the session at start | Measure first | It works without root and later children follow. Whether it helps, and how much it slows the session's own work, was not measured, and that needs a saturated Mac |
+| macOS: a CPU cap | Do not build | No tool was probed that gives a cap; `taskpolicy` changes priority only |
+| Orphan cleanup, both platforms | Do not build | Not probed, and no orphan has been seen there. Even on Windows cleanup defaults to off. `task.leftovers` reports what a worker left |
+
+So 0.21 builds nothing new for macOS and Linux beyond what is shared: test concurrency, priority, test slots, the dispatch CPU check and `task.leftovers`. Their machine safety stays weaker than on Windows, with no CPU cap.
 
 ## 16. Codex (experimental)
 

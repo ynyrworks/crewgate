@@ -105,7 +105,26 @@ Plugin skills are invoked namespaced: `/crewgate:crew`. Frontmatter: `name`,
 - CPU cap and test time: `npm test` (833 tests, concurrency from `scripts/run-tests.js`) ran in 88.7 s with no cap and 93.4 s as a child of a session capped at 60% (one run each).
 - CPU cap enforced (orchestrator, 2026-10-31, one run each, 32 threads): 8 self-ending 5 s loops at below normal used 35.8 CPU seconds in 4.5 s with no job cap, and 14.5 with a 10% cap (10% of 32 threads over 4.5 s is 14.4).
 - Leftovers at a real exit (orchestrator, 2026-10-31, `claude -p` 2.1.308, throwaway projects): a sleeper started from the Bash tool as a `detached` Node child, with `&`, with `setsid`, or with `run_in_background` was gone within 9 s of ending the Claude process, whether `session_cleanup` was on or off, and the holder's list was empty (`found` 0). So under `claude -p` something other than this cleanup already ends them (most likely the runtime's own kill-on-close job). The incident's six loops survived a desktop-app quit, and that path was not reproduced here. Cleanup itself is proven only with stand-in sessions; watch the `found` and `stopped` counts of `session.cleanup` in real desktop sessions.
+- Real dispatch with the 0.21 candidate (orchestrator, 2026-11-01, `claude -p` 2.1.308, throwaway project, isolated `CREWGATE_HOME`, user settings skipped, one run each). With every CPU sample forced to 100% through the test preload, the Agent call was denied, `dispatch.load` was recorded with percent 100 and limit 85, and the task did not move. The same dispatch without the preload ran, and when the worker stopped `task.leftovers` recorded count 3 (`bash.exe`, `nohup.exe`, `node.exe`), the sleeper it was told to leave, and `crew task show` warned. `session.cleanup` read found 0 when the sessions ended, and the sleeper was gone afterwards, as in the leftovers item above.
+- Windows during that dispatch (same runs): `win-watch` polled every 10 ms through both sessions, and no new console or terminal window appeared (baseline 0). The watcher had no deliberate window here, because the control opens a window. The CI control shows the same kind of watch seeing one: "control seen", 2 windows, on all three Windows jobs of run 41227043173.
 - Not measured: the whole machine at saturation.
+
+## POSIX probe (CI run 41227043173, 2026-11-01, one run per job)
+
+From `plugins/crewgate/test/posix-load.test.js`, read in the `POSIX-FACT` lines. GitHub-hosted runners, not a user's machine. The test runner sets itself to nice 10 (`runner-nice=10`), so "the probe's priority" is 10 and +10 is 20. Decisions: [DESIGN.md](DESIGN.md), "POSIX load probe".
+
+- Both platforms: at target nice 10, `bash -c`, `&` and nested `bash -c` with `&` all report 10.
+- Linux (ubuntu-latest, x64, 4 cores, systemd 255), all three jobs alike:
+  - `taskset` present. 2 spinners and the probe pinned to cpu 0, 2 s spinners outlasting the 1 s probe window: worst delay 4 ms at nice 10 and 2, 3 and 3 ms at nice 20. Only cpu 0 was busy.
+  - `systemd-run --user --scope true` exits 0. `busctl --user status` exits 0.
+  - `/proc/self/cgroup` is `0::/system.slice/hosted-compute-agent.service`. That directory and its `cgroup.procs` are not writable (EACCES).
+  - `systemd-run` with `PIDs=<child>` and `CPUQuota=50%` exits 1, `Unknown assignment: PIDs=...`. The child's cgroup did not change.
+- macOS (macos-latest, arm64, 3 cores), all three jobs alike except for the delays:
+  - `taskset` absent. 1 spinner, unpinned, so the machine was not saturated: worst delay 7, 4 and 3 ms at nice 10, and 5, 4 and 4 ms at nice 20. This shows nothing about nice.
+  - `taskpolicy -b -p <sleeping parent>` exits 0 as uid 501. `ps` priority goes from 20 to 4, nice stays 10.
+  - A child started after that reports priority 4. A control child started before it stays at 20.
+  - `taskpolicy -g -p <child>` exits 64: the probe's wrong syntax, not a limit of the tool.
+- Not probed: a quota applied to spinners, `StartTransientUnit` with an existing pid, the delay under `taskpolicy -b`, orphan behaviour, a desktop session.
 
 # Codex CLI facts (measured with Codex CLI 0.160 on Windows, 2026-10)
 
