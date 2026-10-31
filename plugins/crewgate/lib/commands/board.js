@@ -1,7 +1,8 @@
 'use strict';
 
 // crew board start|stop|status|serve — the local board (127.0.0.1 only).
-// State file: <home>/board.json = { pid, port, started }. `start` launches `serve` detached.
+// State file: <home>/board.json = { pid, port, started, alive }; `alive` is refreshed every minute
+// so a board killed outright can be dated. `start` launches `serve` detached.
 const fs = require('fs');
 const net = require('net');
 const http = require('http');
@@ -18,6 +19,7 @@ const SEARCH_SPAN = 20;
 const START_WAIT_MS = 15000;
 const LOCK_WAIT_MS = 8000;  // how long a manual start waits for an autostart in progress
 const LOCK_MS = 30000;   // an autostart lock older than this is stale (the board it was for never came up)
+const HEARTBEAT_MS = 60000;   // how often a running board stamps `alive` in board.json
 const BIN = path.join(__dirname, '..', '..', 'bin', 'crew.js');
 
 const stateFile = () => path.join(paths.home(), 'board.json');
@@ -49,6 +51,11 @@ function staleState() {
   return st && !alive(st.pid) ? st : null;
 }
 
+// Template values for the board.stale message.
+function staleVars(st) {
+  return { pid: st.pid, started: st.started || '?', alive: st.alive || 'unknown', log: logFile() };
+}
+
 // GET /api/health -> parsed body or null
 function health(port, timeoutMs = 1500) {
   return new Promise((resolve) => {
@@ -67,7 +74,7 @@ async function running() {
   const st = readState();
   if (!st) return null;
   if (alive(st.pid) && await health(st.port)) return st;
-  if (!alive(st.pid)) logLine(`previous board (pid ${st.pid}, started ${st.started || 'unknown'}) is gone and left no stop line; state file removed`);
+  if (!alive(st.pid)) logLine(`previous board (pid ${st.pid}, started ${st.started || 'unknown'}) is gone and left no stop line (last known alive ${st.alive || 'unknown'}); state file removed`);
   try { fs.unlinkSync(stateFile()); } catch { /* already gone */ }
   return null;
 }
@@ -114,7 +121,22 @@ function openBrowser(url) {
 }
 
 function writeState(port) {
-  json.save(stateFile(), { pid: process.pid, port, started: new Date().toISOString() });
+  const now = new Date().toISOString();
+  json.save(stateFile(), { pid: process.pid, port, started: now, alive: now });
+}
+
+// Stamps `alive` in board.json once a minute (CREWGATE_BOARD_HEARTBEAT_MS shortens it for tests). A board killed
+// outright leaves no stop line, so this is the only evidence of when it died. Never keeps the process alive, never
+// throws, never touches a state file that names another pid.
+function startHeartbeat(ms = Number(process.env.CREWGATE_BOARD_HEARTBEAT_MS) || HEARTBEAT_MS) {
+  const timer = setInterval(() => {
+    try {
+      const st = readState();
+      if (st && st.pid === process.pid) json.save(stateFile(), { ...st, alive: new Date().toISOString() });
+    } catch { /* best effort */ }
+  }, ms);
+  timer.unref();
+  return timer;
 }
 
 // Prefixes every line written through a stream with an ISO timestamp (board.log has none otherwise).
@@ -194,6 +216,7 @@ async function serve(ctx, port, search) {
   };
   process.on('exit', cleanup);
   installStopLog();
+  startHeartbeat();
   const stop = () => { board.close().then(() => process.exit(0)); };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
@@ -341,8 +364,8 @@ async function status(ctx) {
   const cur = await running();
   if (!cur) {
     if (stale) {
-      ctx.emit({ running: false, stale: true, pid: stale.pid, started: stale.started || null },
-        [ctx.t('board.notRunning'), ctx.t('board.stale', { pid: stale.pid, started: stale.started || '?', log: logFile() })]);
+      ctx.emit({ running: false, stale: true, pid: stale.pid, started: stale.started || null, last_alive: stale.alive || null },
+        [ctx.t('board.notRunning'), ctx.t('board.stale', staleVars(stale))]);
       return 1;
     }
     ctx.emit({ running: false }, ctx.t('board.notRunning'));
@@ -386,6 +409,8 @@ module.exports = {
   ensureChecked,
   installStopLog,
   staleState,
+  staleVars,
+  startHeartbeat,
   logFile,
   stampLines,
   readState,

@@ -88,6 +88,8 @@ Runtime data layout:
   config.json                          global: port, usage prices, language default
   hook-errors.jsonl                    one line per hook failure (§8); rotated at 1 MiB to hook-errors.1.jsonl
   board.log                            output of the board server, each line with an ISO timestamp
+  board.json                           running board: { pid, port, started, alive }; `alive` is re-stamped every minute, so a board
+                                       killed without a stop line is reported (log, `board status`, `doctor`) with its last-alive time
   cache/sessions/                      per-transcript session statistics (counters only, §14)
   projects.json                        registry: id -> { path, name, added }
   projects/<id>/
