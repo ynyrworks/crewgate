@@ -47,6 +47,7 @@
   "wf.lesson.score.not-helping": "not helping",
   "wf.task.acceptedNoReview": "Note: no review round was recorded for this task.",
   "wf.task.acceptedUnfinalized": "Note: review round {round} was never finalized, so its {n} finding(s) did not go through the refuter.",
+  "wf.task.acceptedNotReReviewed": "Note: the task was sent back after review round {round} was finalized, and its last changes were not re-reviewed.",
   "wf.task.acceptUnfinalized": "Task {id} was not accepted: review round {round} has {n} finding(s) that did not go through the refuter. Run crew review filter and the refuter, then crew review finalize. To accept anyway, say why with --skip-refuter \"reason\".",
   "wf.task.merged": "Task {id} recorded as merged (no git command was run).",
   "wf.task.mergeNever": "The merge gate is set to \"never\" in .claude/crew.json; do not merge this task",

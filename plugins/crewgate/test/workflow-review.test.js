@@ -413,3 +413,90 @@ test('external engine: explicit --engine on a claude-default project, failures a
   const t3 = u.createTask(other);
   assert.equal(h.crew(['review', 'run', t3.id, '--engine', 'missing'], other).code, 1);
 });
+
+// ---------------------------------------------------------------- accept: last changes not re-reviewed
+function finalizedTask(findings = []) {
+  const s = setup();
+  run(s.repo, 'task', 'report', s.t.id, '--report-file', u.reportFiles().report);
+  s.submit(findings);
+  run(s.repo, 'review', 'filter', s.t.id);
+  assert.equal(run(s.repo, 'review', 'finalize', s.t.id).code, 0);
+  return s;
+}
+
+test('accept notes a task sent back after its last finalized round and reported again, in both languages', () => {
+  const { repo, t } = finalizedTask();
+  assert.equal(run(repo, 'task', 'send-back', t.id, '--note', 'fix it').code, 0);
+  assert.equal(run(repo, 'task', 'report', t.id, '--report-file', u.reportFiles().report).code, 0);
+  const en = h.crew(['--lang', 'en', 'task', 'accept', t.id], repo);
+  assert.equal(en.code, 0, en.err);
+  assert.match(en.out, /sent back after review round 1 was finalized.*not re-reviewed/);
+  assert.equal(en.out.split('\n').filter((l) => /re-reviewed/.test(l)).length, 1);
+
+  const again = finalizedTask();
+  run(again.repo, 'task', 'send-back', again.t.id, '--note', 'fix it');
+  run(again.repo, 'task', 'report', again.t.id, '--report-file', u.reportFiles().report);
+  const zh = h.crew(['--lang', 'zh-TW', 'task', 'accept', again.t.id], again.repo);
+  assert.match(zh.out, /第 1 輪審查定案後被退回/);
+
+  const js = finalizedTask();
+  run(js.repo, 'task', 'send-back', js.t.id, '--note', 'fix it');
+  run(js.repo, 'task', 'report', js.t.id, '--report-file', u.reportFiles().report);
+  const acc = u.crewJson(['task', 'accept', js.t.id], js.repo);
+  assert.equal(acc.code, 0);
+  assert.deepEqual(acc.data.review_gap, { kind: 'not_re_reviewed', round: 1 });
+  const accepted = events.read(project.findByCwd(js.repo).id, { types: 'task.accepted' });
+  assert.equal(accepted.length, 1);
+  assert.equal(accepted[0].data.review_gap, undefined, 'the note is not stored on the event: it is derived from events that are already there');
+});
+
+test('accept gives no re-review note when the task was sent back and re-reviewed, or never sent back', () => {
+  const never = finalizedTask();
+  assert.equal(u.crewJson(['task', 'accept', never.t.id], never.repo).data.review_gap, null);
+
+  const { repo, t, submit } = finalizedTask();
+  run(repo, 'task', 'send-back', t.id, '--note', 'fix it');
+  run(repo, 'task', 'report', t.id, '--report-file', u.reportFiles().report);
+  submit([], ['--round', '2']);
+  run(repo, 'review', 'filter', t.id);
+  assert.equal(run(repo, 'review', 'finalize', t.id).code, 0);
+  const acc = u.crewJson(['task', 'accept', t.id], repo);
+  assert.equal(acc.code, 0, acc.err);
+  assert.equal(acc.data.review_gap, null);
+});
+
+test('accept with an unfinalized round after a send-back keeps the unfinalized gap', () => {
+  const { repo, t, submit } = finalizedTask();
+  run(repo, 'task', 'send-back', t.id, '--note', 'fix it');
+  run(repo, 'task', 'report', t.id, '--report-file', u.reportFiles().report);
+  const sub = submit([u.finding('b')], ['--round', '2']);
+  assert.equal(sub.code, 0, sub.err);
+  run(repo, 'review', 'filter', t.id);
+  assert.notEqual(run(repo, 'task', 'accept', t.id).code, 0);
+  const acc = u.crewJson(['task', 'accept', t.id, '--skip-refuter', 'why'], repo);
+  assert.deepEqual(acc.data.review_gap, { kind: 'unfinalized', round: 2, n: 1 });
+});
+
+test('accept and release record agree on a task that was sent back after its last finalized round', { skip: !h.hasGit() }, () => {
+  const { repo, t } = finalizedTask();
+  h.git(repo, 'tag', 'v0.0.1');
+  h.git(repo, 'checkout', '-q', '-b', 'feat/agree');
+  fs.writeFileSync(path.join(repo, 'agree.txt'), 'x\n');
+  h.git(repo, 'add', '.');
+  h.git(repo, 'commit', '-q', '-m', 'work');
+  h.git(repo, 'checkout', '-q', '-');
+  h.git(repo, 'merge', '-q', '--no-ff', '-m', 'merge', 'feat/agree');
+  h.git(repo, 'tag', 'v0.0.2');
+  const file = path.join(paths.taskDir(project.findByCwd(repo).id, t.id), 'task.json');
+  const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
+  doc.branch = 'feat/agree';
+  fs.writeFileSync(file, JSON.stringify(doc, null, 2));
+  run(repo, 'task', 'send-back', t.id, '--note', 'fix it');
+  run(repo, 'task', 'report', t.id, '--report-file', u.reportFiles().report);
+  const acc = u.crewJson(['task', 'accept', t.id], repo);
+  assert.equal(acc.data.review_gap.kind, 'not_re_reviewed');
+  assert.equal(run(repo, 'task', 'merge', t.id).code, 0);
+  const rec = h.crew(['--lang', 'en', 'release', 'record', '0.0.2'], repo);
+  assert.equal(rec.code, 0, rec.err);
+  assert.match(fs.readFileSync(path.join(repo, '.crew', 'releases', '0.0.2.md'), 'utf8'), /NOT RE-REVIEWED/);
+});

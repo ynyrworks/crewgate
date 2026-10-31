@@ -47,6 +47,7 @@
   "wf.lesson.score.not-helping": "沒有幫助",
   "wf.task.acceptedNoReview": "注意：此任務沒有任何審查輪次的紀錄。",
   "wf.task.acceptedUnfinalized": "注意：第 {round} 輪審查沒有定案，其中 {n} 筆發現沒有經過反駁。",
+  "wf.task.acceptedNotReReviewed": "注意：任務在第 {round} 輪審查定案後被退回，最後的修改沒有重新審查。",
   "wf.task.acceptUnfinalized": "任務 {id} 未被接受：第 {round} 輪審查有 {n} 筆發現沒有經過反駁。請執行 crew review filter 和 refuter，再執行 crew review finalize。若仍要接受，請用 --skip-refuter \"原因\" 說明原因。",
   "wf.task.merged": "任務 {id} 已記錄為合併（沒有執行任何 git 指令）。",
   "wf.task.mergeNever": ".claude/crew.json 把合併關卡設為 \"never\"；請勿合併此任務",

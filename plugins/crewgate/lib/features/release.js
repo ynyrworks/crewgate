@@ -124,6 +124,13 @@ function finalizedAt(dir, round, taskEvs) {
   try { return fs.statSync(rv.roundFile(dir, round, 'json')).mtimeMs; } catch { return 0; }
 }
 
+// The rule behind the "not re-reviewed" flag, shared with `crew task accept`: the task was sent back after
+// the given finalized round was finalized.
+function returnedAfterRound(dir, round, taskEvs) {
+  const at = finalizedAt(dir, round, taskEvs);
+  return taskEvs.some((e) => e.type === 'task.returned' && Date.parse(e.ts) > at);
+}
+
 function describeTask(projectId, entry, evs, allPlans) {
   const { task, merge } = entry;
   const dir = paths.taskDir(projectId, task.id);
@@ -134,9 +141,7 @@ function describeTask(projectId, entry, evs, allPlans) {
   if (!finals.length) review = { kind: 'none' };
   else {
     const last = lastOf(finals);
-    const at = finalizedAt(dir, last.round, mine);
-    const after = mine.filter((e) => e.type === 'task.returned' && Date.parse(e.ts) > at);
-    review = after.length ? { kind: 'stale', round: last.round } : { kind: 'ok', round: last.round };
+    review = returnedAfterRound(dir, last.round, mine) ? { kind: 'stale', round: last.round } : { kind: 'ok', round: last.round };
   }
   const skips = mine.filter((e) => e.type === 'task.accepted' && e.data && e.data.skip_refuter)
     .map((e) => ({ reason: String(e.data.skip_refuter), round: e.data.review_gap && e.data.review_gap.round }));
@@ -316,4 +321,4 @@ function extractConclusion(text) {
   return text.slice(a + OPEN.length, b).replace(/^\r?\n/, '').replace(/\r?\n$/, '');
 }
 
-module.exports = { collect, render, sanitize, extractConclusion, resolveRange, OPEN, CLOSE };
+module.exports = { returnedAfterRound, collect, render, sanitize, extractConclusion, resolveRange, OPEN, CLOSE };
