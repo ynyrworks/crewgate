@@ -8,6 +8,7 @@ the [CHANGELOG](../CHANGELOG.md).
 
 One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.md).
 
+- **0.16** — Projects can add their own gates, and their scripts get a CLI path that stays the same across versions; `crew task accept` refuses review findings that skipped the refuter unless a reason is given; `crew plan clarify` keeps settled questions with the plan; `crew lesson score` shows whether a promoted rule helped.
 - **0.15.1** — Plan tree step 3: `crew review followup` proposes work a code review found as a `[?]` step that counts only once accepted, next to the task's step or in another plan.
 - **0.15** — The pixel-art Office becomes an optional plugin, `crewgate-office`; plans guard their goal (a warning without one, an `off-goal` review finding, clarifying before a non-trivial plan); a gate set to `never` is denied before the command runs, and detection covers the PowerShell tool and wrapped commands.
 - **0.14** — Plans: a tree of steps kept as Markdown in the repo, and plan review that turns what a reviewer finds into proposed `[?]` steps. The board says why it stopped and can start itself (`board.autostart`).
@@ -19,18 +20,14 @@ One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.m
 
 ## Unreleased / next release
 
-What is on `main` and will ship in the next version (details under "Unreleased" in the [CHANGELOG](../CHANGELOG.md)).
+Nothing yet: `main` matches the latest release.
 
-- **Review findings cannot skip the refuter unnoticed.** `crew task accept` refuses a round that was never finalized unless a reason is given.
-- **Project gates and a stable CLI path.** A project adds its own gates in `crew.json`, and its scripts call `~/.crewgate/bin/crew.js`.
-- **`crew lesson score`.** Shows whether the lessons behind each promoted rule stopped coming back.
-- **`crew plan clarify`.** Settled questions are kept with the plan and shown by `plan show`, the board and plan review.
 
 ## Later
 
 - **Per-account labelling of sessions.** Show which Claude account or plan a session used, with an optional "expected account" warning per project. Idea stage: it is not verified that the account can be detected from what Claude Code exposes locally.
 - **Office view: test-result reactions** (a celebration or a slump when checks pass or fail; the result is not in the data the office receives today) and **bigger character sprites**.
-- **Enhanced WebGL Office (planned for 0.16).** In the same optional `crewgate-office` plugin, sharing its data model, with the pixel-art view as the fallback for browsers without WebGL or too slow for it. The main plugin gains no dependency.
+- **Enhanced WebGL Office.** A first version is on the `feat/webgl-office` branch, not in a release. In the same optional `crewgate-office` plugin, sharing its data model, with the pixel-art view as the fallback for browsers without WebGL or too slow for it. The main plugin gains no dependency.
 - **Codex.** Verification on more platforms and Codex versions, honouring hook `ask` / `deny` if Codex supports it, and Codex subagent workers once their sandbox can commit.
 
 ## Exploring

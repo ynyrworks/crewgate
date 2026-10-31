@@ -1,13 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.16.0 — 2026-10-31
 
 ### New
 
 - `crew plan clarify <slug> --question "..." --answer "..." [--by user|assumed]` keeps a settled question under `## Clarified` at the end of the plan. `plan show` and the board's plan page list these, and a plan review treats them as settled. They were instructions in the skill only, and `plan show` did not show them.
-
 - `crew lesson score` shows, for each promoted rule, the lessons under its key before and after it was promoted, per day: too early, no repeats, fewer repeats or not helping. It counts recorded lessons only, so a correction nobody recorded is not seen.
-
 - A project can add its own gates: any other lowercase key under `gates` in `crew.json` set to `auto`, `ask` or `never`, such as `"release": "ask"`, works with `crew gate ask`. The hooks do not detect what such a gate is about.
 - A session in a crewgate project writes `~/.crewgate/bin/crew.js`, which runs the plugin version that last started a session, so a project's own scripts need no version folder in their path.
 
