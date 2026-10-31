@@ -333,9 +333,12 @@ not waved through. An interactive session in `bypassPermissions` is **not verifi
 run can be audited afterwards. crewgate cannot tell from a hook whether a prompt was really shown, so `gate.confirmed`
 means "the command ran after an ask was returned", not "a human clicked".
 
-**Codex.** The Codex hook table does not register the Bash PreToolUse entry, and a payload with a `turn_id` (Codex) is
-answered with `{}`: whether Codex honours `ask` / `deny` from PreToolUse is not in the facts crewgate holds
-(docs/PLUGIN-FACTS.md), so Codex sessions stay on `remind`. `crew doctor` says so.
+**Codex.** The Codex hook table registers the Bash PreToolUse entry. Measured (docs/PLUGIN-FACTS.md): Codex honours
+`deny` (the command does not run) but `ask` fails open (the hook shows as failed and the command runs), so a payload
+with a `turn_id` is never sent `ask`. A `never` gate is denied; an `ask` gate without a valid approval is denied under
+`block` and, because Codex cannot ask, also under `confirm`, with text on how to record an approval. Under `remind`
+Codex stays on after-the-fact reporting. An older Codex that ignores `deny` still gets the PostToolUse `gate.missing`.
+`crew doctor` says so.
 
 **User-turn rule (`gates.require_user_turn`, default `true`).** An approval made by hand counts only if a *user message*
 arrived between its `gate.asked` and its `gate.answered yes`. The rule is judged **once, when the answer is recorded**

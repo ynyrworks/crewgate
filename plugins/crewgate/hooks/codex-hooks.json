@@ -57,6 +57,17 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" pre-tool-use",
+            "commandWindows": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/crew-hook.js\" pre-tool-use",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUse": [

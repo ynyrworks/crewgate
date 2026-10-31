@@ -43,7 +43,7 @@ function makeHandleFor(payload, h) {
   };
 }
 
-// Codex payloads carry turn_id; its PreToolUse is not known to honour "ask", so Codex stays on remind.
+// Codex payloads carry turn_id; its PreToolUse honours "deny" but "ask" fails open, so Codex is only ever sent deny.
 const isCodex = (payload) => typeof payload.turn_id === 'string' && payload.turn_id !== '';
 
 // The gates a set of detected commands falls under -> Map gate -> display text of the first command.

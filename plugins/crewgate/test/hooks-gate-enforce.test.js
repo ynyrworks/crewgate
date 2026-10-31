@@ -158,20 +158,64 @@ test('an unregistered target is never enforced', () => {
   assert.equal(project.list().length, before);
 });
 
-test('Codex payload (turn_id) falls back to remind', () => {
+const cx = { turn_id: 'turn-1' };
+
+test('Codex: a never gate is denied in every mode', () => {
+  for (const mode of ['remind', 'confirm', 'block']) {
+    const f = fixture(mode, { push: 'never' });
+    const r = pre(f, 'git push origin main', `kn-${mode}`, cx);
+    assert.equal(decision(r), 'deny', mode);
+    assert.match(reason(r), /"push" gate is set to never/);
+  }
+});
+
+test('Codex: ask + block without approval is denied; with approval nothing is decided', () => {
   const f = fixture('block');
-  assert.equal(pre(f, 'git push', 'k1', { turn_id: 'turn-1' }).out, '{}');
-  const p = post(f, 'git push', 'k1', { turn_id: 'turn-1' });
+  const r = pre(f, 'git push', 'kb1', cx);
+  assert.equal(decision(r), 'deny');
+  assert.match(reason(r), /gate ask push/);
+  approve(f);
+  assert.equal(pre(f, 'git push', 'kb2', cx).out, '{}');
+});
+
+test('Codex: ask + confirm without approval is denied (never ask), saying Codex cannot ask and how to approve', () => {
+  const f = fixture('confirm');
+  for (const c of ['git push', 'gh pr create --fill', 'git merge x']) {
+    const r = pre(f, c, `kc-${c}`, cx);
+    assert.equal(decision(r), 'deny', c);
+    assert.match(reason(r), /Codex cannot ask/);
+    assert.match(reason(r), /gate ask /);
+    assert.match(reason(r), /gate answer/);
+  }
+  assert.equal(events.read(f.pid, { types: 'gate.prompted' }).length, 0);
+  assert.ok(events.read(f.pid, { types: 'gate.blocked' }).length >= 3);
+  approve(f);
+  assert.equal(pre(f, 'git push', 'kc-ok', cx).out, '{}');
+});
+
+test('Codex: ask + remind decides nothing and PostToolUse still reports gate.missing', () => {
+  const f = fixture('remind');
+  assert.equal(pre(f, 'git push', 'k1', cx).out, '{}');
+  const p = post(f, 'git push', 'k1', cx);
   assert.match(p.json.hookSpecificOutput.additionalContext, /"push" gate/);
   assert.equal(missing(f.pid).length, 1);
 });
 
-test('hooks.json registers PreToolUse for Bash; the Codex table does not', () => {
+test('Codex: ordinary commands and auto gates are not touched', () => {
+  const f = fixture('block', { push: 'auto' });
+  assert.equal(pre(f, 'git push', 'ka1', cx).out, '{}');
+  assert.equal(pre(f, 'ls -la', 'ka2', cx).out, '{}');
+});
+
+test('hooks.json and codex-hooks.json both register PreToolUse for Bash', () => {
   const dir = path.join(__dirname, '..', 'hooks');
   const claude = JSON.parse(fs.readFileSync(path.join(dir, 'hooks.json'), 'utf8')).hooks;
   const codex = JSON.parse(fs.readFileSync(path.join(dir, 'codex-hooks.json'), 'utf8')).hooks;
   assert.ok(claude.PreToolUse.some((g) => g.matcher === 'Bash'));
-  assert.ok(!codex.PreToolUse.some((g) => g.matcher === 'Bash'));
+  const cb = codex.PreToolUse.find((g) => g.matcher === 'Bash');
+  assert.ok(cb);
+  assert.match(cb.hooks[0].command, /crew-hook\.js" pre-tool-use$/);
+  assert.equal(cb.hooks[0].type, 'command');
   for (const ev of ['PreToolUse', 'PostToolUse']) assert.ok(claude[ev].some((g) => g.matcher === 'PowerShell'), ev);
 });
 
@@ -415,11 +459,12 @@ test('crew gate answer does not warn when require_user_turn is false', () => {
   assert.doesNotMatch(r.out, /will not count/);
 });
 
-test('crew doctor shows the enforce mode and the Codex fallback', () => {
+test('crew doctor shows the enforce mode and what Codex does', () => {
   const f = fixture('confirm');
   const r = crew(['doctor'], f.repo);
   assert.match(r.out, /enforce confirm/);
-  assert.match(r.out, /Codex sessions fall back to remind/);
+  assert.match(r.out, /Codex cannot ask, so there .* denied before it runs/);
+  assert.doesNotMatch(r.out, /fall back to remind/);
 });
 
 test('user-turn rule: a task notification between ask and answer is not a user turn', () => {

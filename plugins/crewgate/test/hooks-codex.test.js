@@ -67,8 +67,8 @@ test('a codex spawn without a marker changes nothing', () => {
 test('codex-hooks.json mirrors hooks.json: same events, timeouts and matchers, single-string commands', () => {
   const dir = path.join(__dirname, '..', 'hooks');
   const claude = JSON.parse(fs.readFileSync(path.join(dir, 'hooks.json'), 'utf8')).hooks;
-  // The Bash PreToolUse entry (gates.enforce confirm / block) is Claude Code only: Codex "ask" support is unverified.
-  claude.PreToolUse = claude.PreToolUse.filter((g) => g.matcher !== 'Bash' && g.matcher !== 'PowerShell');
+  // The Bash PreToolUse entry is shared (Codex honours deny and is never sent ask); PowerShell is Claude Code only.
+  claude.PreToolUse = claude.PreToolUse.filter((g) => g.matcher !== 'PowerShell');
   // PowerShell is a Claude Code tool; Codex has no such tool name.
   claude.PostToolUse = claude.PostToolUse.filter((g) => g.matcher !== 'PowerShell');
   const codex = JSON.parse(fs.readFileSync(path.join(dir, 'codex-hooks.json'), 'utf8')).hooks;
