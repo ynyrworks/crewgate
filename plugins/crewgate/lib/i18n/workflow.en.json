@@ -31,6 +31,7 @@
   "wf.task.packetAt": "Full packet (read only if needed): {path}",
   "wf.task.leftovers": "WARNING: {count} process(es) left running after this worker stopped: {programs}. Check them before you accept.",
   "wf.task.leftoversShared": " Another worker ran at the same time, so these may not be this worker's.",
+  "wf.task.leftoversSkipped": "Leftover check was skipped ({why}): nothing is known about processes this worker left.",
   "wf.task.noPacket": "No packet was filed.",
   "wf.task.findingsHead": "--- Findings, round {round}: {total} ({sev}) ---",
   "wf.task.noFindings": "No finalized review findings yet.",

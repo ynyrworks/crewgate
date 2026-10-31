@@ -70,7 +70,7 @@ function onAgent(payload) {
   } catch { /* an illegal transition must not stop the dispatch */ }
 
   // The live pids at dispatch, so the stop can tell what the worker started (leftovers.js). Never blocks the dispatch.
-  const snap = worker ? leftovers.snapshot() : null;
+  const snap = worker ? leftovers.snapshot({}, leftovers.budgetLeft('pre-tool-use')) : null;
   sess.remember(h.pid, key, { task: id, type, bg, worker, ts: Date.now(), agent: null, stopped: false, session: h.sid || null, ...(snap ? { snap } : {}), ...(eng.engine ? { codex: true } : {}) });
   sess.touch(h, (s) => sess.addTask(s, id));
 
@@ -97,7 +97,7 @@ function onSend(payload) {
     if (lim.parallel_enforce !== 'warn') return C.deny(h.t('deny.parallel', vars));
     return C.withContext('PreToolUse', h.t('warn.parallel', vars));
   }
-  const snap = leftovers.snapshot();
+  const snap = leftovers.snapshot({}, leftovers.budgetLeft('pre-tool-use'));
   sess.remember(h.pid, rec.id, { ...rec, id: undefined, stopped: false, stopped_at: undefined, resumed: true, ts: Date.now(), session: h.sid || null, snap: snap || undefined });
   return null;
 }

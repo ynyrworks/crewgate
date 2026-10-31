@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { spawn } = require('child_process');
+const { spawnSync } = require('child_process');
 const L = require('../lib/hooks/leftovers');
 const H = require('./hooks-helpers');
 const sess = require('../lib/hooks/session');
@@ -41,7 +41,7 @@ test('the board, the holder, this hook and Claude Code are excluded, with their 
 
 test('a pid in another running worker\'s dispatch-time set is not this worker\'s, and the result is shared', () => {
   const other = { id: 'tu-2', task: 't-2', worker: true, stopped: false, ts: 1500, snap: { pids: [100, 200, 300, 450], ts: 1500 } };
-  const r = chk([...base, row(450, 100, 'a.exe'), row(460, 100, 'b.exe')], rec(), [other]);
+  const r = chk([...base, row(450, 9999, 'a.exe'), row(460, 9999, 'b.exe')], rec(), [other]);
   assert.strictEqual(r.count, 1);
   assert.deepStrictEqual(r.programs, { 'b.exe': 1 });
   assert.strictEqual(r.shared, true);
@@ -65,19 +65,58 @@ test('parsers read the Windows and ps lines and keep the base name only', () => 
   assert.deepStrictEqual(L.parsePosix('  1     0 /sbin/init\n 22  1 my prog\n'), [row(1, 0, 'init'), row(22, 1, 'my prog')]);
 });
 
-test('real listing: a sleeping detached child is found and then stopped by its pid', () => {
+test('real listing: a sleeping child started detached, whose parent is gone, is counted; then stopped by its pid', () => {
   const before = L.snapshot();
   assert.ok(before && before.pids.length > 5, 'listing works');
-  const child = spawn(process.execPath, ['-e', 'setTimeout(()=>{},30000)'], { detached: true, stdio: 'ignore', windowsHide: true });
-  child.unref();
+  // an intermediate process starts the sleeper detached, prints its pid and exits: the sleeper's parent is gone
+  const mid = spawnSync(process.execPath, ['-e',
+    "const c=require('child_process').spawn(process.execPath,['-e','setTimeout(()=>{},30000)'],{detached:true,stdio:'ignore',windowsHide:true});c.unref();console.log(c.pid)"],
+  { encoding: 'utf8', windowsHide: true });
+  const childPid = Number(mid.stdout.trim());
+  assert.ok(childPid > 0, 'child started');
   try {
-    const r = L.check('p', { snap: before, ts: before.ts }, [], { claudePid: process.pid, selfPid: 1, roots: [], withPids: true });
+    // claudePid is a pid that is not in the sleeper's chain, so only the dead parent can make it count
+    const r = L.check('p', { snap: before, ts: before.ts }, [], { claudePid: 1, selfPid: process.pid, roots: [], withPids: true });
     assert.ok(r, 'check ran');
-    assert.ok(r.pids.includes(child.pid), `child ${child.pid} in ${JSON.stringify(r)}`);
-    assert.ok(r.count >= 1 && Object.keys(r.programs).length >= 1);
+    assert.ok(r.pids.includes(childPid), `child ${childPid} in ${JSON.stringify(r)}`);
+    assert.ok(r.programs[Object.keys(r.programs).find((k) => /^node/i.test(k))] >= 1);
   } finally {
-    try { process.kill(child.pid); } catch { /* already gone */ }
+    try { process.kill(childPid); } catch { /* already gone */ }
   }
+});
+
+test('system helpers (conhost, WMI host, svchost, updaters, ps) are not counted, a node with a dead parent is', () => {
+  const rows = [...base, row(1, 0, 'init'), row(400, 100, 'conhost.exe'), row(401, 9999, 'WmiPrvSE.exe'), row(402, 9999, 'svchost.exe'),
+    row(403, 9999, 'MicrosoftEdgeUpdate.exe'), row(404, 100, 'ps'), row(405, 9999, 'node.exe')];
+  const r = chk(rows, rec());
+  assert.deepStrictEqual(r.programs, { 'node.exe': 1 });
+});
+
+test('shared (another subagent, a background run) counts only what clearly outlived its parent, not a live shell or child', () => {
+  const rows = [...base, row(1, 0, 'init'), row(400, 100, 'bash.exe'), row(401, 100, 'node.exe'), row(402, 9999, 'node.exe')];
+  const solo = chk(rows, rec());
+  assert.deepStrictEqual([solo.count, solo.shared, solo.programs], [2, false, { 'node.exe': 2 }]);   // the shell is never counted
+  const shared = chk(rows, rec(), [], { sharedHint: true });
+  assert.deepStrictEqual([shared.count, shared.shared, shared.unclear], [1, true, 2]);
+});
+
+test('a list over the cap is skipped and recorded as skipped, never cut', () => {
+  const big = Array.from({ length: 3001 }, (_, i) => row(1000 + i, 1, 'x'));
+  const snap = L.snapshot({ list: () => big });
+  assert.deepStrictEqual(Object.keys(snap).sort(), ['skipped', 'ts']);
+  assert.deepStrictEqual(L.check('p', rec({ snap }), [], { list: () => base, claudePid: CLAUDE, roots: [] }).skipped, 'too-many-processes');
+  const ok = L.snapshot({ list: () => base });
+  assert.strictEqual(L.check('p', rec({ snap: ok }), [], { list: () => big, claudePid: CLAUDE, roots: [] }).skipped, 'too-many-processes');
+});
+
+test('the listing timeout follows the budget; a short budget lists nothing and gives no snapshot', () => {
+  const seen = [];
+  const deps = { list: () => { seen.push(1); return base; } };
+  assert.strictEqual(L.snapshot(deps, 2000), null);
+  assert.strictEqual(seen.length, 0);
+  assert.ok(L.snapshot(deps, 4000));
+  assert.strictEqual(L.check('p', rec(), [], { list: () => { seen.push(2); return base; }, budgetMs: 1500, claudePid: CLAUDE, roots: [] }), null);
+  assert.strictEqual(seen.length, 1);
 });
 
 test('hook flow: dispatch records the snapshot, the stop records task.leftovers, task show warns', () => {

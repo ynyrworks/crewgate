@@ -118,6 +118,7 @@ function lastLeftovers(projectId, taskId) {
     const all = events.read(projectId, { types: 'task.leftovers' }).filter((e) => e.task === taskId);
     const e = all[all.length - 1];
     if (!e || !e.data) return null;
+    if (e.data.skipped) return { skipped: String(e.data.skipped).slice(0, 60), count: 0, programs: {}, shared: false, ts: e.ts };
     return { count: Number(e.data.count) || 0, programs: e.data.programs || {}, shared: e.data.shared === true, ts: e.ts };
   } catch { return null; }
 }
@@ -147,6 +148,7 @@ function showLines(ctx, d, max) {
   ];
   if (t.branch) L.push(ctx.t('wf.task.branch', { branch: t.branch, worktree: t.worktree || '-' }));
   if (t.last_note) L.push(ctx.t('wf.task.lastNote', { note: t.last_note }));
+  if (d.leftovers && d.leftovers.skipped) L.push(ctx.t('wf.task.leftoversSkipped', { why: d.leftovers.skipped }));
   if (d.leftovers && d.leftovers.count > 0) {
     const programs = Object.entries(d.leftovers.programs).map(([k, v]) => `${k} x${v}`).join(', ');
     L.push(ctx.t('wf.task.leftovers', { count: d.leftovers.count, programs: programs || '-' }) + (d.leftovers.shared ? ctx.t('wf.task.leftoversShared') : ''));
