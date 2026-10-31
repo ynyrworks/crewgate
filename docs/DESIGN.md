@@ -156,7 +156,7 @@ All fields are optional; defaults below. The board's Settings page edits this fi
     "report_inference": false,
     "nit_cap": 5,
     "categories": ["correctness", "security-exploitable", "data-loss", "regression",
-                   "spec-mismatch", "test-gap", "maintainability", "nit"],
+                   "spec-mismatch", "test-gap", "maintainability", "machine-impact", "nit"],
     "downgrade_to_nit": ["theoretical-race", "style"]
   },
   "checks": [],
@@ -250,8 +250,11 @@ Brief (`brief.md`) required sections — `crew task create` refuses a brief miss
 2. Scope — files/areas allowed, files/areas forbidden
 3. Must not regress — existing behaviour that must keep working, and who fixes
    out-of-scope fallout
-4. Acceptance — how done is checked (tests, commands, observable behaviour)
-5. Context — pointers (paths, line ranges), never pasted file dumps
+4. Machine impact — what running the work costs the user's machine: what runs, how many
+   processes, for how long ("Light: tests only" is a normal answer); a load or stress test
+   states its count (at most half the cores) and a time limit after which it ends by itself
+5. Acceptance — how done is checked (tests, commands, observable behaviour)
+6. Context — pointers (paths, line ranges), never pasted file dumps
 
 The brief embeds a marker line `crew-task: <task-id>` so hooks can link a subagent to
 its task.

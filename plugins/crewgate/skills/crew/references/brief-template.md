@@ -1,7 +1,7 @@
 # Brief template
 
-`crew task create` refuses a brief that lacks any of these five sections or leaves one empty.
-Headings may be in English or Traditional Chinese (`目標`, `範圍`, `不可退化`, `驗收`, `脈絡`).
+`crew task create` refuses a brief that lacks any of these six sections or leaves one empty.
+Headings may be in English or Traditional Chinese (`目標`, `範圍`, `不可退化`, `機器影響`, `驗收`, `脈絡`).
 
 ```markdown
 # Goal
@@ -15,6 +15,12 @@ Forbidden: files and folders the worker must not touch (generated files, other o
 Existing behaviour that must keep working (name the tests or commands that prove it).
 Out-of-scope fallout: if the change breaks something outside Scope, who fixes it (usually: the worker
 reports it and the orchestrator decides; the worker does not widen its own scope).
+
+# Machine impact
+What running this work costs the user's machine: what will run, how many processes, for how long.
+"Light: tests only" is a normal answer. A load or stress test must state its process count (at most
+half the CPU cores) and a time limit, and every process must end by itself. Review compares this
+section with what the diff really does.
 
 # Acceptance
 How "done" is checked, as commands and observable results:
@@ -32,6 +38,7 @@ related earlier task `t-...`. Decisions already made and why.
 - State the boundary as a list of paths. Vague scope is the main cause of regressions outside it.
 - Put acceptance in commands the worker can run. "Works well" is not acceptance.
 - Name the tests that must keep passing under "Must not regress".
+- Say what the work costs the machine under "Machine impact"; a load test needs a count and a time limit.
 - Point to line ranges instead of pasting code; the worker reads the files itself.
 - Examples in a brief use documentation addresses only (192.0.2.x) and no real hostnames or secrets.
 - One task, one reviewable change. If the brief needs "and also", make two tasks.
@@ -49,6 +56,9 @@ Forbidden: src/commands/add.js, package.json, any file under docs/
 # Must not regress
 `todo list` without flags prints all items in the same format as today (test/list.test.js "prints all").
 If the store format must change, stop and report; do not migrate data.
+
+# Machine impact
+Light: tests only, one full `npm test`; no load test.
 
 # Acceptance
 - `npm test` passes with new tests for `--done` (some done, none done, empty store)

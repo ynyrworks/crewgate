@@ -87,6 +87,7 @@ config.saveGlobal({
 function brief(goal, allow) {
   return ['# Goal', goal, '', '# Scope', `Allowed: ${allow}. Forbidden: package.json, todos.json.`, '',
     '# Must not regress', 'Existing tests keep passing; old todos files still load.', '',
+    '# Machine impact', 'Light: tests only.', '',
     '# Acceptance', 'node --test passes with new tests for the behaviour.', '',
     '# Context', 'See src/todo.js and test/todo.test.js.', ''].join('\n');
 }

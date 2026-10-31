@@ -21,6 +21,7 @@ const SRC = 'const total = compute(1);\nmodule.exports = total;\n';
 test('validateFinding reports every problem instead of throwing', () => {
   const cats = cfgOf().review.categories;
   assert.deepEqual(rv.validateFinding(u.finding('f1'), cats), []);
+  assert.deepEqual(rv.validateFinding(u.finding('f1', { category: 'machine-impact' }), cats), [], 'machine-impact is a default category');
   assert.deepEqual(rv.validateFinding(null, cats), ['not an object']);
   assert.deepEqual(rv.validateFinding('x', cats), ['not an object']);
   const p = rv.validateFinding({ id: 'a', category: 'bogus', severity: 'huge', line: 0, evidence: [], verified_by: 'guess', confidence: 3 }, cats);
@@ -499,4 +500,10 @@ test('accept and release record agree on a task that was sent back after its las
   const rec = h.crew(['--lang', 'en', 'release', 'record', '0.0.2'], repo);
   assert.equal(rec.code, 0, rec.err);
   assert.match(fs.readFileSync(path.join(repo, '.crew', 'releases', '0.0.2.md'), 'utf8'), /NOT RE-REVIEWED/);
+});
+
+test('reviewerInstructions tells the reviewer to check Machine impact when the brief has it', () => {
+  const text = rv.reviewerInstructions({ task: { id: 't-20261101-abcd' }, briefPath: 'b.md', reviewPath: 'r.md', diffCmd: 'git diff', categories: ['machine-impact', 'nit'], round: 1, rawPath: 'raw.json', cli: 'crew' });
+  assert.match(text, /If the brief has a "Machine impact" section/);
+  assert.match(text, /report as machine-impact any work whose real cost differs/);
 });

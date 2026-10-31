@@ -310,6 +310,7 @@ function reviewerInstructions({ task, briefPath, reviewPath, diffCmd, categories
     `Read, in this order: the brief (${briefPath}), the review rules (${reviewPath}), then the change: ${diffCmd}.`,
     'You deliberately do NOT get the worker\'s own description of its work; judge the diff against the brief.',
     `Allowed categories: ${categories.join(', ')}.`,
+    'If the brief has a "Machine impact" section, read it and report as machine-impact any work whose real cost differs from what it states (many processes, no time limit, something left running, a window opened, a changed process priority). A brief without that section has nothing to compare.',
     SCHEMA_TEXT,
     `Save the array by piping it to: ${cli} review submit ${task.id} --round ${round}  (JSON on stdin; it is stored as ${rawPath}).`,
     'Your final message must only say how many findings you saved.',

@@ -14,6 +14,10 @@ Forbidden: `package.json`, anything under `.claude/` or `.crew/`, the `todos.jso
 - `todo done <id>` and `todo list` behave exactly as before for items without a due date.
 - The existing four tests keep passing; if one has to change, say why in the report.
 
+# Machine impact
+
+Light: tests only, one `node --test` run.
+
 # Acceptance
 
 - `node --test` passes, including new tests for: adding with a due date, rejecting a malformed date (`--due tomorrow`),

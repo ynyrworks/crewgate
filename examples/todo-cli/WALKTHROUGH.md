@@ -57,7 +57,7 @@ Put this exact line into the Agent prompt so the task is linked to its worker:
 crew-task: t-20261029-qe0v
 ```
 
-A brief missing one of the five sections would have been refused here.
+A brief missing one of the six sections would have been refused here.
 
 4. Calls the Agent tool with `subagent_type: crew-worker`, the printed prompt and `run_in_background: true`.
 

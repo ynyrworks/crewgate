@@ -40,7 +40,7 @@ const DEFAULTS = Object.freeze({
     report_inference: false,
     nit_cap: 5,
     categories: ['correctness', 'security-exploitable', 'data-loss', 'regression',
-      'spec-mismatch', 'test-gap', 'maintainability', 'nit'],
+      'spec-mismatch', 'test-gap', 'maintainability', 'machine-impact', 'nit'],
     downgrade_to_nit: ['theoretical-race', 'style'],
   },
   plan: { max_proposals_per_round: 5, max_rounds: 3, large_growth: 5 },

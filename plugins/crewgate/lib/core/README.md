@@ -98,7 +98,7 @@ Conventions
 ## tasks.js
 - `STATES`, `TRANSITIONS`, `BRIEF_SECTIONS`, `REPORT_SECTIONS`.
 - `createTask(projectId, { title, brief, role?, branch?, worktree?, scope?: { allow, deny }, acceptance?, repro? }, { src?, session? })`
-  -> task. The brief must have the five sections (en or zh-TW headings, non-empty) or
+  -> task. The brief must have the six sections (en or zh-TW headings, non-empty) or
   `CrewError task.briefInvalid` (`err.missing`, `err.empty`). A `crew-task: <id>` first line is written to `brief.md`.
 - `load(projectId, taskId)`, `list(projectId, { state? })`, `readBrief`, `readReport`, `findMarker(text)` (task id or null).
 - `transition(projectId, taskId, to, { note, src, session, agent, maxReturns, fields: { branch, worktree }, data })` -> task.

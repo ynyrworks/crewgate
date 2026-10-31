@@ -28,6 +28,7 @@ const BRIEF_SECTIONS = [
   { key: 'goal', label: 'Goal', names: ['goal', '目標'] },
   { key: 'scope', label: 'Scope', names: ['scope', '範圍'] },
   { key: 'must_not_regress', label: 'Must not regress', names: ['must not regress', '不可退化', '不得退化'] },
+  { key: 'machine_impact', label: 'Machine impact', names: ['machine impact', '機器影響', '機器負載'] },
   { key: 'acceptance', label: 'Acceptance', names: ['acceptance', '驗收'] },
   { key: 'context', label: 'Context', names: ['context', '脈絡', '背景'] },
 ];
