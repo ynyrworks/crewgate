@@ -17,8 +17,22 @@ const G = require('./gatecheck');
 const { SHELL_TOOLS, LIMIT_WORDS } = require('./prefilter');
 const limits = require('./agentlimits');
 const leftovers = require('./leftovers');
+const load = require('./machineload');
 
 const MAX_READ_BYTES = 20 * 1024 * 1024;
+
+// A worker run starts only when the machine is not already busy (limits.dispatch_max_cpu). -> a deny, or null.
+function denyLoad(h, id, lim) {
+  const hit = load.overLimit(lim.dispatch_max_cpu);
+  if (!hit) return null;
+  try {
+    events.append(h.pid, {
+      type: 'dispatch.load', src: 'hook', session: h.sid, task: id,
+      data: { percent: hit.pct, limit: lim.dispatch_max_cpu, task: id }, key: `${id}:load:${Date.now()}`,
+    });
+  } catch { /* ignore */ }
+  return C.deny(h.t('deny.load', { id, pct: hit.pct, max: lim.dispatch_max_cpu }));
+}
 
 // ---------------------------------------------------------------- Agent / Task
 function onAgent(payload) {
@@ -52,6 +66,8 @@ function onAgent(payload) {
       over = { id, count: others.length + 1, max: lim.max_parallel_workers, ids: others.join(', ') };
       if (lim.parallel_enforce !== 'warn') return C.deny(h.t('deny.parallel', over));
     }
+    const busy = denyLoad(h, id, lim);
+    if (busy) return busy;
   }
 
   try {
@@ -95,8 +111,10 @@ function onSend(payload) {
   const vars = { id: rec.task, count: others.length + 1, max: lim.max_parallel_workers, ids: others.join(', ') };
   if (lim.max_parallel_workers > 0 && vars.count > vars.max) {
     if (lim.parallel_enforce !== 'warn') return C.deny(h.t('deny.parallel', vars));
-    return C.withContext('PreToolUse', h.t('warn.parallel', vars));
+    return denyLoad(h, rec.task, lim) || C.withContext('PreToolUse', h.t('warn.parallel', vars));
   }
+  const busy = denyLoad(h, rec.task, lim);
+  if (busy) return busy;
   const snap = rec.worker ? leftovers.snapshot({}, leftovers.budgetLeft('pre-tool-use')) : null;
   sess.remember(h.pid, rec.id, { ...rec, id: undefined, stopped: false, stopped_at: undefined, resumed: true, ts: Date.now(), session: h.sid || null, snap: snap || undefined });
   return null;

@@ -237,3 +237,182 @@ test('a worker woken by SendMessage counts whatever its task state, until it sto
   assert.equal(pre(f, H.agentPayload(f, c)).out, '{}');
   void a;
 });
+
+// ---------------------------------------------------------------- dispatch_max_cpu (sampler stubbed: no real load)
+const load = require('../lib/hooks/machineload');
+const preTool = require('../lib/hooks/pre-tool-use');
+
+// Runs the hook in this process with the sampler returning `values` in turn (a function is called as is).
+function withSampler(values, fn) {
+  const calls = [];
+  const seq = Array.isArray(values) ? values.slice() : null;
+  load.setSampler(() => {
+    calls.push(1);
+    if (!seq) return values();
+    return seq.length > 1 ? seq.shift() : seq[0];
+  });
+  try { return fn(calls); } finally { load.setSampler(null); }
+}
+const cpuCfg = (max) => ({ config: { limits: { dispatch_max_cpu: max } } });
+const inproc = (p) => { const r = preTool.run(p); return r ? r.hookSpecificOutput : undefined; };
+
+test('config: dispatch_max_cpu defaults to 85 and is documented in both languages', () => {
+  assert.equal(config.DEFAULTS.limits.dispatch_max_cpu, 85);
+  const e = config.SCHEMA.find((x) => x.path === 'limits.dispatch_max_cpu');
+  assert.ok(e && e.description.en && e.description['zh-TW']);
+  assert.equal(e.max, 100);
+});
+
+test('dispatch above dispatch_max_cpu is denied with the percent, the limit and what to do; nothing is recorded but dispatch.load', () => {
+  const f = H.fixture(cpuCfg(85));
+  H.start(f);
+  const a = H.newTask(f, 'A');
+  const out = withSampler([97], () => inproc(H.agentPayload(f, a)));
+  assert.equal(out.permissionDecision, 'deny');
+  const why = out.permissionDecisionReason;
+  assert.ok(why.includes('97%') && why.includes('85%') && why.includes('dispatch_max_cpu') && /wait/i.test(why) && why.includes('=100'), why);
+  assert.equal(tasks.load(f.pid, a.id).state, 'created');
+  const ev = H.evs(f, ['dispatch.load']);
+  assert.equal(ev.length, 1);
+  assert.equal(ev[0].data.percent, 97);
+  assert.equal(ev[0].data.limit, 85);
+  assert.equal(ev[0].task, a.id);
+  assert.ok(!JSON.stringify(ev[0]).includes('do it'), 'no prompt text');
+});
+
+test('at the limit and under it the dispatch goes on, with one sample only', () => {
+  for (const pct of [85, 20]) {
+    const f = H.fixture(cpuCfg(85));
+    H.start(f);
+    const a = H.newTask(f, 'A');
+    const out = withSampler([pct], (calls) => { const o = inproc(H.agentPayload(f, a)); assert.equal(calls.length, 1); return o; });
+    assert.equal(out, undefined);
+    assert.equal(tasks.load(f.pid, a.id).state, 'dispatched');
+  }
+});
+
+test('a short spike is not enough: the second sample decides', () => {
+  const f = H.fixture(cpuCfg(85));
+  H.start(f);
+  const a = H.newTask(f, 'A');
+  const out = withSampler([99, 30], (calls) => { const o = inproc(H.agentPayload(f, a)); assert.equal(calls.length, 2); return o; });
+  assert.equal(out, undefined);
+  assert.equal(H.evs(f, ['dispatch.load']).length, 0);
+});
+
+test('dispatch_max_cpu 100 turns the check off and never samples', () => {
+  const f = H.fixture(cpuCfg(100));
+  H.start(f);
+  const a = H.newTask(f, 'A');
+  const out = withSampler(() => { throw new Error('must not sample'); }, (calls) => { const o = inproc(H.agentPayload(f, a)); assert.equal(calls.length, 0); return o; });
+  assert.equal(out, undefined);
+});
+
+test('a sampler that throws lets the dispatch through', () => {
+  const f = H.fixture(cpuCfg(85));
+  H.start(f);
+  const a = H.newTask(f, 'A');
+  const out = withSampler(() => { throw new Error('boom'); }, () => inproc(H.agentPayload(f, a)));
+  assert.equal(out, undefined);
+  assert.equal(tasks.load(f.pid, a.id).state, 'dispatched');
+});
+
+test('a reviewer dispatch (task in review) and a subagent call are not sampled', () => {
+  const f = H.fixture(cpuCfg(85));
+  H.start(f);
+  const a = dispatched(f, 'A');
+  tasks.transition(f.pid, a.id, 'returned');
+  tasks.transition(f.pid, a.id, 'reviewing');
+  withSampler(() => { throw new Error('must not sample'); }, (calls) => {
+    const o = inproc(H.agentPayload(f, a, { tool_input: { prompt: `crew-task: ${a.id}\n`, subagent_type: 'crew-reviewer' } }));
+    assert.equal(o, undefined);
+    assert.equal(preTool.run(H.agentPayload(f, a, { agent_id: 'ag-x' })), null);
+    assert.equal(calls.length, 0);
+  });
+});
+
+test('SendMessage that wakes a stopped worker is checked; another message is not', () => {
+  const f = H.fixture(cpuCfg(85));
+  H.start(f);
+  const b = dispatched(f, 'B');
+  record(f, b, { agent: 'ag-b', stopped: true });
+  const send = (to) => H.base(f, { tool_name: 'SendMessage', tool_use_id: 'tu-s', tool_input: { to, message: 'go' } });
+  const out = withSampler([95], (calls) => {
+    assert.equal(inproc(send('someone-else')), undefined);
+    assert.equal(calls.length, 0);
+    return inproc(send('ag-b'));
+  });
+  assert.equal(out.permissionDecision, 'deny');
+  assert.ok(out.permissionDecisionReason.includes('95%'));
+  assert.equal(withSampler([10], () => inproc(send('ag-b'))), undefined);
+});
+
+test('sample(): whole-machine percent from two readings, in 0-100', () => {
+  const p = load.sample(20);
+  assert.ok(Number.isInteger(p) && p >= 0 && p <= 100, String(p));
+});
+
+test('SendMessage over max_parallel_workers with parallel_enforce=warn is still denied for CPU load', () => {
+  const f = H.fixture({ config: { limits: { max_parallel_workers: 1, parallel_enforce: 'warn', dispatch_max_cpu: 85 } } });
+  H.start(f);
+  const a = dispatched(f, 'A');
+  const b = dispatched(f, 'B');
+  record(f, a);
+  record(f, b, { agent: 'ag-b', stopped: true });
+  const send = H.base(f, { tool_name: 'SendMessage', tool_use_id: 'tu-s', tool_input: { to: 'ag-b', message: 'go' } });
+  const out = withSampler([96], () => inproc(send));
+  assert.equal(out.permissionDecision, 'deny');
+  assert.ok(out.permissionDecisionReason.includes('96%'));
+  const warn = withSampler([10], () => inproc(send));
+  assert.equal(warn.permissionDecision, undefined);
+  assert.ok(warn.additionalContext);
+});
+
+// ---------------------------------------------------------------- every spawn-based dispatch path is safe from load
+const path = require('path');
+const fs = require('fs');
+const FORCE = path.join(__dirname, 'force-cpu-100.js');
+const forced = { NODE_OPTIONS: `--require ${JSON.stringify(FORCE)}` };
+
+test('H.runHook turns the CPU limit off for every dispatch tool, so a busy machine cannot fail an unrelated test', () => {
+  const none = H.fixture(); // no config at all: the default limit of 85 applies unless the helper turns it off
+  H.start(none);
+  for (const tool of H.DISPATCH_TOOLS) {
+    if (tool === 'SendMessage') continue;
+    const f = H.fixture();
+    H.start(f);
+    const t = H.newTask(f, tool);
+    const input = tool === 'collaborationspawn_agent'
+      ? { task_name: 'crew-worker', message: `crew-task: ${t.id}\n` }
+      : { prompt: `crew-task: ${t.id}\n`, subagent_type: 'crew-worker' };
+    const r = H.runHook('pre-tool-use', H.base(f, { tool_name: tool, tool_use_id: 'tu-1', tool_input: input }), { cwd: f.repo, env: forced });
+    assert.notEqual(decision(r), 'deny', `${tool}: ${reason(r)}`);
+    assert.equal(tasks.load(f.pid, t.id).state, 'dispatched', tool);
+  }
+  const f = H.fixture();
+  H.start(f);
+  const b = dispatched(f, 'B');
+  record(f, b, { agent: 'ag-b', stopped: true });
+  const r = H.runHook('pre-tool-use', H.base(f, { tool_name: 'SendMessage', tool_use_id: 'tu-s', tool_input: { to: 'ag-b', message: 'go' } }), { cwd: f.repo, env: forced });
+  assert.notEqual(decision(r), 'deny', reason(r));
+  assert.equal(sess.running(f.pid, null).length, 1);
+});
+
+test('the forced 100% sampler does deny when the limit is set: keepCpu leaves the limit alone', () => {
+  const f = H.fixture(cpuCfg(85));
+  H.start(f);
+  const t = H.newTask(f, 'A');
+  const r = H.runHook('pre-tool-use', H.agentPayload(f, t), { cwd: f.repo, env: forced, keepCpu: true });
+  assert.equal(decision(r), 'deny');
+  assert.ok(reason(r).includes('100%'), reason(r));
+});
+
+test('no test spawns the hook except through hooks-helpers.js (a direct spawn would skip the dispatch safety)', () => {
+  const dirs = [__dirname, path.join(__dirname, '..', '..', '..', 'test')];
+  for (const dir of dirs) {
+    for (const file of fs.readdirSync(dir).filter((x) => x.endsWith('.js') && x !== 'hooks-helpers.js' && x !== 'hooks-hard-limits.test.js')) {
+      const src = fs.readFileSync(path.join(dir, file), 'utf8');
+      assert.ok(!/\.HOOK/.test(src) && !(/crew-hook\.js['"`]?\s*,/.test(src) && /spawn|exec/.test(src)), `${file} spawns the hook directly: use H.runHook`);
+    }
+  }
+});

@@ -90,6 +90,8 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
    `run_in_background: true` for anything that takes more than a minute. Never run more workers than
    `max_parallel_workers`; start the next one when a task returns. A worker you send back counts: the hook only
    warns, so count before you dispatch or resend, and wait when the limit is reached.
+   If the dispatch is denied for CPU load (`limits.dispatch_max_cpu`), do not retry in a tight loop: wait for a
+   worker's notification, or for the test run or other load to end, then dispatch again.
 7. **When a worker returns** (the background notification arrives; the stop hooks only show the user a reminder, they tell you nothing):
    `crew task show <id>`. You get the state, return count, the capped report, the diff stat of the
    branch and the packet path. If the report is invalid or missing, the worker did not finish: send

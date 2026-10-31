@@ -13,8 +13,25 @@ const sess = require('../lib/hooks/session');
 
 const HOOK = path.join(__dirname, '..', 'scripts', 'crew-hook.js');
 
+// Hook calls that start or wake a worker are the ones limits.dispatch_max_cpu looks at (a real CPU sample). The helper turns
+// the limit off in the project config of the call's cwd (even a crew.json from `crew init`, which names the default), so no test that runs a
+// dispatch through here can be denied by a busy machine. A test of the check itself passes { keepCpu: true }.
+// Written only for these calls: a crew.json in other fixtures would change what those tests see (the board port).
+const DISPATCH_TOOLS = new Set([...require('../lib/hooks/common').AGENT_TOOLS, 'SendMessage']);
+function isDispatch(event, payload) {
+  return /^pre-?tool-?use$/i.test(String(event).replace(/_/g, '-')) && payload && typeof payload === 'object' && DISPATCH_TOOLS.has(payload.tool_name);
+}
+function cpuOff(dir) {
+  const file = path.join(dir, '.claude', 'crew.json');
+  let cfg = {};
+  try { cfg = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* none yet */ }
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ ...cfg, limits: { ...(cfg.limits || {}), dispatch_max_cpu: 100 } }));
+}
+
 // runHook('stop', payload, { cwd, env, raw }) -> { code, out, json, ms, err }
 function runHook(event, payload, opts = {}) {
+  if (!opts.keepCpu && isDispatch(event, payload)) cpuOff(String(payload.cwd || opts.cwd || process.cwd()));
   const input = opts.raw !== undefined ? opts.raw : JSON.stringify(payload);
   const t0 = process.hrtime.bigint();
   const r = spawnSync(process.execPath, [HOOK, event], {
@@ -69,4 +86,4 @@ const agentPayload = (f, task, extra) => base(f, {
   tool_input: { prompt: `crew-task: ${task.id}\n\ndo it`, subagent_type: 'crew-worker', description: 'x' }, ...extra,
 });
 
-module.exports = { HOOK, runHook, fixture, writeConfig, prompt, approve, base, start, evs, newTask, agentPayload };
+module.exports = { HOOK, DISPATCH_TOOLS, runHook, fixture, writeConfig, prompt, approve, base, start, evs, newTask, agentPayload };

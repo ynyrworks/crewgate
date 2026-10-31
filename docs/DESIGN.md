@@ -145,6 +145,7 @@ All fields are optional; defaults below. The board's Settings page edits this fi
   "limits": {
     "max_parallel_workers": 3,
     "parallel_enforce": "block",
+    "dispatch_max_cpu": 85,
     "max_returns_before_takeover": 2,
     "report_max_tokens": 1500,
     "orchestrator_read_warn_lines": 300,
@@ -426,6 +427,16 @@ aliases are seen. The main session and other subagent types are never limited. T
 cannot recognise (a script file, a variable, an unusual wrapper) passes, and so does any failure of the check; the
 agent templates state the same rules in words. Scripts and files are never read (`node run.js` with a loop inside
 passes), so the busy-loop rule is best effort, and nothing here limits a process once it runs.
+
+**Machine load.** The agent count says nothing about cost (one `npm test` took 97% of 32 threads), so a worker dispatch
+(the same two paths as above: Agent / Task for a task in `created` or `dispatched`, and SendMessage to a stopped worker) also
+looks at the CPU. `lib/hooks/machineload.js` takes two `os.cpus()` readings 200 ms apart (one `Atomics.wait`, no busy loop)
+and gives whole-machine busy percent. Above `limits.dispatch_max_cpu` (default 85; 100 is off and never samples) the dispatch
+is denied with the measured percent, the limit, what to do (wait for a worker or the test run, then dispatch again) and how
+to turn it off; `dispatch.load` `{ percent, limit, task }` is recorded, no prompt text. One sample can be a spike, so when the
+first is over a second is taken and the dispatch is denied only if both are over (the second is reported). Cost: about 200 ms
+per worker dispatch, about 400 ms when the first is over, against a 5 s hook timeout (the in-process guard answers at 4 s);
+reviewers, refuters, subagent calls and other tools never reach it. Any failure of the sampler lets the dispatch through. The test helper `runHook` sets `limits.dispatch_max_cpu` to 100 in the project config of every worker dispatch or wake it runs (unless `keepCpu`), and a test checks that every dispatch tool is covered; the load tests stub the sampler in process. `test/force-cpu-100.js` (a `--require` preload through `NODE_OPTIONS`) makes every sample read 100% to prove a full run does not depend on machine load.
 
 **Parallel workers.** A dispatch through Agent / Task, or a SendMessage to a stopped worker (`tool_input.to`, read from
 the tool's documented input, not measured), that would pass `limits.max_parallel_workers` is denied when
