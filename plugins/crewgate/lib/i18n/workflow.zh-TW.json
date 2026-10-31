@@ -148,6 +148,8 @@
   "wf.doctor.name.registration": "登錄",
   "wf.doctor.name.worktree": "工作樹",
   "wf.doctor.worktree": "連結的 worktree {workTree}（專案根目錄：{root}）；專案檔案從此工作樹讀取",
+  "wf.doctor.name.agents": "Agent 副本",
+  "wf.doctor.agentsStale": "agent 副本與目前外掛版本會產生的內容不同：{files}。原因可能是外掛版本較舊或本機有修改。.claude/agents 內的副本優先於外掛自帶的 agent；執行 `crew init --force` 可更新（會先備份舊檔）。",
   "wf.doctor.name.files": "專案檔案",
   "wf.doctor.name.hooks": "外掛 hooks",
   "wf.doctor.name.board": "看板",

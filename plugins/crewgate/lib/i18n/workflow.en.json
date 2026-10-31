@@ -148,6 +148,8 @@
   "wf.doctor.name.registration": "Registration",
   "wf.doctor.name.worktree": "Work tree",
   "wf.doctor.worktree": "linked worktree {workTree} (project root: {root}); repo files are read from the work tree",
+  "wf.doctor.name.agents": "Agent copies",
+  "wf.doctor.agentsStale": "agent copies differ from what this plugin version would generate: {files}. The cause can be an older plugin version or a local edit. Copies in .claude/agents take priority over the plugin's own agents; run `crew init --force` to refresh them (the old files are backed up first).",
   "wf.doctor.name.files": "Project files",
   "wf.doctor.name.hooks": "Plugin hooks",
   "wf.doctor.name.board": "Board",

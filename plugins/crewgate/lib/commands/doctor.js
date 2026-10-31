@@ -13,6 +13,7 @@ const hooklog = require('../core/hooklog');
 const gates = require('../core/gates');
 const plans = require('../core/plans');
 const boardCmd = require('./board');
+const initFeature = require('../features/init');
 
 // GET http://127.0.0.1:<port>/api/health -> { state: 'running'|'down'|'other', detail }
 function probeBoard(port, timeoutMs = 1500) {
@@ -72,6 +73,16 @@ async function run(argv, ctx) {
     const expected = ['.claude/agents/crew-worker.md', '.claude/agents/crew-reviewer.md', '.claude/agents/crew-refuter.md', '.crew/REVIEW.md', '.crew/LESSONS.md'];
     const missing = expected.filter((f) => !fs.existsSync(path.join(dir, ...f.split('/'))));
     add('files', missing.length ? 'warn' : 'ok', missing.length ? ctx.t('wf.doctor.filesMissing', { files: missing.join(', ') }) : ctx.t('wf.doctor.filesOk'));
+    if (loaded.exists && !loaded.errors.length) {
+      // a copy that is missing is the files check's business; only copies that exist are compared (line endings ignored)
+      const lf = (x) => x.replace(/\r\n?/g, '\n');
+      const stale = initFeature.AGENTS.filter((n) => {
+        let have;
+        try { have = fs.readFileSync(path.join(dir, '.claude', 'agents', `${n}.md`), 'utf8'); } catch { return false; }
+        return lf(have) !== lf(initFeature.renderAgent(n, loaded.config));
+      }).map((n) => `.claude/agents/${n}.md`);
+      if (stale.length) add('agents', 'warn', ctx.t('wf.doctor.agentsStale', { files: stale.join(', ') }));
+    }
     const nPlans = plans.slugs(dir).length;
     if (nPlans) {
       const deep = plans.deepNodes(dir);
