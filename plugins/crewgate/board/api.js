@@ -335,7 +335,7 @@ function createApi(opts = {}) {
           tasks_open: list.filter((tk) => !['merged', 'cancelled'].includes(tk.state)).length,
           needs: store.needList(p.id).length,
           live: {
-            sessions: mine.filter((s) => ['working', 'tool', 'waiting'].includes(s.status)).length,
+            sessions: mine.filter((s) => !s.subagent && ['working', 'tool', 'waiting'].includes(s.status)).length,
             subagents: mine.filter((s) => s.subagent && ['working', 'tool'].includes(s.status)).length,
           },
           last_activity: lastActivity(p.id, list, mine),
