@@ -398,6 +398,25 @@ counts as an approval.
 Main session vs subagent and main worktree vs linked worktree are detected from the
 hook payload and `git rev-parse`; see `lib/core/context.js`.
 
+### 8.2 Crew agent limits
+
+PreToolUse(Bash / PowerShell) denies, for a subagent of type `crew-worker`, `crew-reviewer` or `crew-refuter`
+(`crewgate:` prefix ignored), what its role forbids (`lib/hooks/agentlimits.js`):
+
+- reviewer and refuter: a git command that changes a working tree, the index, history or the branch list
+  (`checkout`, `switch`, `reset`, `merge`, `rebase`, `commit`, `stash`, `clean`, `restore`, `cherry-pick`, `push`,
+  `pull`, `revert`, `am`, `worktree` other than `list`, `branch` that creates, deletes, renames or copies).
+  `diff`, `log`, `show`, `status`, `rev-parse`, `merge-tree`, `merge-base` pass.
+- all three: killing by image name (`taskkill /IM`, `Stop-Process -Name`, a piped `Stop-Process`, `pkill`, `killall`).
+  Killing by pid passes.
+
+The command line is tokenised with `gitcmd.js`, so `git -C`, `cd x && ...`, `bash -c`, `powershell -Command` and git
+aliases are seen. The main session and other subagent types are never limited. The agent type is the payload's
+`agent_type`; when absent, the type SubagentStart recorded for the `agent_id`. A denial records `agent.limit`
+`{ agent_type, command (first word), tool_use_id }`, never the arguments. This is best effort: a command the parser
+cannot recognise (a script file, a variable, an unusual wrapper) passes, and so does any failure of the check; the
+agent templates state the same rules in words.
+
 ## 9. Review pipeline
 
 Three stages; the orchestrator only sees survivors.

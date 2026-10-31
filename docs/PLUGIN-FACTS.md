@@ -44,6 +44,13 @@ thread is (uncertain) — treat "no agent_id" as main thread).
 - Stop: `stop_hook_active`, `last_assistant_message`, `background_tasks`
 - SessionEnd: `reason` (clear|resume|logout|prompt_input_exit|other)
 - PreCompact: `trigger` (manual|auto)
+**Measured (claude -p, plugin loaded with `--plugin-dir`, 2026-10-31):** a PreToolUse payload for a Bash call made by a
+real `crewgate:crew-reviewer` subagent held the keys `session_id, transcript_path, cwd, scratchpad_dir, prompt_id,
+permission_mode, agent_id, agent_type, effort, hook_event_name, tool_name, tool_input, tool_use_id`, with
+`agent_type: "crewgate:crew-reviewer"` (plugin prefix kept; a project copy is plain `crew-reviewer`). So the type is in the
+payload and crewgate's map from SubagentStart is only a fallback. In that run the reviewer, asked to run
+`git checkout -b x`, declined on its own (its instructions forbid it), so the hook's denial was not seen in a real run; the
+`git diff` it ran passed the hook. Denial is tested with payloads of this shape.
 The tool that launches subagents is named `Agent` (older builds: `Task`); match both.
 Its `tool_input` contains `prompt`, `subagent_type`, `description`, optional `model`,
 `run_in_background` (field names beyond `prompt`/`subagent_type` are (uncertain) — read defensively).

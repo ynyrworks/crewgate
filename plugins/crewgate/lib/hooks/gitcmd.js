@@ -382,4 +382,4 @@ function mergesIn(output) {
   return out;
 }
 
-module.exports = { detect, tokenize, mergesIn, isDynamic };
+module.exports = { detect, tokenize, mergesIn, isDynamic, OPS, base, commandStart, gitOptions, wrappedCommand };

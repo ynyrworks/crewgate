@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const events = require('../core/events');
+const i18n = require('../core/i18n');
 const paths = require('../core/paths');
 const tasks = require('../core/tasks');
 const C = require('./common');
@@ -13,7 +14,8 @@ const glob = require('./glob');
 const gitcmd = require('./gitcmd');
 const gates = require('../core/gates');
 const G = require('./gatecheck');
-const { SHELL_TOOLS } = require('./prefilter');
+const { SHELL_TOOLS, LIMIT_WORDS } = require('./prefilter');
+const limits = require('./agentlimits');
 
 const MAX_READ_BYTES = 20 * 1024 * 1024;
 
@@ -142,9 +144,44 @@ function onRead(payload) {
 // remind (the default) is handled after the command by PostToolUse. Codex (measured: deny blocks, ask fails open)
 // gets deny in place of every ask. Only registered projects are looked at;
 // a cd / git -C target outside them is never enforced.
+// A crew worker / reviewer / refuter that runs something its role forbids (agentlimits.js) is denied. Best effort:
+// any failure here lets the command through.
+function onAgentLimit(payload, command) {
+  try {
+    let type = payload.agent_type ? C.normType(payload.agent_type) : '';
+    let h = null;
+    if (!type) {
+      h = C.open(payload);
+      const rec = h && sess.byAgent(h.pid, C.str(payload.agent_id));
+      type = rec ? C.normType(rec.type) : '';
+    }
+    if (!limits.limited(type)) return null;
+    const hit = limits.scan(command, type);
+    if (!hit) return null;
+    if (!h) h = C.open(payload);
+    const tuid = C.str(payload.tool_use_id);
+    if (h) {
+      try {
+        events.append(h.pid, {
+          type: 'agent.limit', src: 'hook', session: h.sid, agent: C.str(payload.agent_id) || undefined, tool_use_id: tuid,
+          data: { agent_type: type, command: C.snippet(hit.word, 40), tool_use_id: C.snippet(tuid, 80) || null },
+          key: `${tuid || Date.now()}:limit`,
+        });
+      } catch { /* ignore */ }
+    }
+    const lang = h ? h.lang() : 'en';
+    const key = hit.word === 'git' ? 'limit.git' : 'limit.kill';
+    return C.deny(i18n.t(lang, `hooks.${key}`, { type, word: hit.word }));
+  } catch { return null; }
+}
+
 function onBash(payload) {
   const codex = G.isCodex(payload); // Codex honours deny but not ask: it only ever gets deny or nothing
   const command = C.str(C.obj(payload.tool_input).command);
+  if (payload.agent_id && LIMIT_WORDS.test(command.slice(0, 20000))) {
+    const denied = onAgentLimit(payload, command);
+    if (denied) return denied;
+  }
   if (!G.GIT_WORDS.test(command.slice(0, 20000))) return null;
   const found = gitcmd.detect(command).filter((f) => gates.gateOf(f));
   if (!found.length) return null;

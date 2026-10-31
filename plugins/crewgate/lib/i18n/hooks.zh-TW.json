@@ -23,6 +23,8 @@
   "hooks.gate.missing": "你剛執行了 {what}，但「{gate}」關卡設為 ask，而且最近 30 分鐘內沒有記錄到核准。請告知使用者。下次動手前先執行 {cmd} gate ask {gate} --task <id>，在聊天裡問使用者，再執行 {cmd} gate answer <gate-id> yes|no。",
   "hooks.gate.confirm": "crewgate：{what}（專案「{project}」）屬於「{gate}」關卡。該關卡設為 ask，而且最近 30 分鐘內你沒有核准過。請選擇這次允許，或拒絕並讓 Claude 先問你。",
   "hooks.gate.codexConfirm": "crewgate 已擋下 {what}（專案「{project}」，gates.enforce=confirm）：「{gate}」關卡設為 ask，且沒有核准記錄。Codex 無法詢問使用者確認，所以直接拒絕。請先執行 {cmd} gate ask {gate} --task <id>，在聊天裡問使用者並等他回覆，再執行 {cmd} gate answer <gate-id> yes 後重試。只有使用者在 ask 之後送出訊息，這個回答才算數。",
+  "hooks.limit.git": "crewgate 已擋下這個指令：{type} 不得更動工作樹或歷史。要看其他分支請用 git show 或 git diff，需要的修改請寫進報告。",
+  "hooks.limit.kill": "crewgate 已擋下「{word}」：crew 代理只能依 pid 停止自己啟動的程序。依映像名稱結束程序可能關掉使用者自己的程式。",
   "hooks.gate.neverBlock": "crewgate 已擋下 {what}（專案「{project}」）：「{gate}」關卡設為 never，任何核准都無法解除。請告訴使用者是哪個關卡擋下的；只有使用者能改這個設定。",
   "hooks.gate.neverRan": "{what} 已經執行，但「{gate}」關卡設為 never。請立刻告訴使用者。",
   "hooks.gate.block":"crewgate 已擋下 {what}（專案「{project}」，gates.enforce=block）：「{gate}」關卡設為 ask，且沒有核准記錄。請先執行 {cmd} gate ask {gate} --task <id>，在聊天裡問使用者並等他回覆，再執行 {cmd} gate answer <gate-id> yes 後重試。只有使用者在 ask 之後送出訊息，這個回答才算數。",
