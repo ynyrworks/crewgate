@@ -8,6 +8,7 @@ the [CHANGELOG](../CHANGELOG.md).
 
 One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.md).
 
+- **0.20** — A crew session no longer takes over the machine: tests run at a quarter of the cores, sessions run at below-normal priority, and on Windows each session has a CPU cap and cleanup at exit. A hook enforces limits on crew agents and on dispatch. HD Office characters no longer pile up; `crew task accept` notes changes that were not re-reviewed; the History page shows accounts.
 - **0.19** — `crew release record` writes one committed record per version, flagging changes that were not re-reviewed; the project page shows recent merges and task activity when its cards are empty; the HD Office view ships as an opt-in test version in the optional add-on.
 - **0.18.1** — After a one-click update the page shows the result, even when the new board answers before the page notices the restart.
 - **0.18** — Under Codex, a `never` gate and an unapproved `ask` gate under `confirm` or `block` are denied before the command runs; sessions show their Claude account and a project can name the one it expects; a board killed outright can be dated.
@@ -32,13 +33,14 @@ Nothing yet: `main` matches the latest release. Each version's record is in [doc
 Open problems in the latest release, and what has not been checked.
 
 - **The board is sometimes killed outright.** The cause is not established; closing or updating the desktop app is the untested suspect. It logs nothing when this happens. Since 0.18 it records when it was last alive, so the next death can be dated. `board.autostart` brings it back at the next session.
-- **Timing-sensitive tests.** `board-autostart` ("the board came up on the configured port") failed on Windows CI in both 0.18.1 runs and passed on rerun, while 32 local repeats passed, so the 0.15.1 fix did not cure it. The SessionStart latency check in `hooks-contract` failed once while a real board ran beside it, and passed on a rerun.
+- **Machine load.** Cleanup at the end of a session is proven with stand-in sessions only: the desktop-app quit from the incident was not reproduced, and under `claude -p` leftovers were gone even with cleanup off. The whole machine at saturation and the 60% cap in real use are not measured. Processes started before the job is set up, and anything created through WMI, escape it. macOS and Linux have no cap and no cleanup. A Windows Terminal tab opened from a session can count as background and be stopped; not measured. If `wscript.exe` is disabled there is no cap and no cleanup.
+- **Timing-sensitive tests.** `board-autostart` waits up to 60 s and prints what it needs when it fails. The cause of the CI failures is most likely a slow start on a busy machine, not proven, and two runs under heavy load never came up within 60 s. The SessionStart latency check in `hooks-contract` has failed under load and passed alone.
 - **Gates are best effort.** Scripts, configured aliases, variables and other tools are not seen. Use branch protection on the server for a hard stop.
 - **Codex.** Hooks installed through the plugin are not verified, only hooks in `.codex/hooks.json`, and a real run covered only `never`. The Office add-on install through Codex is not verified. Codex versions older than 0.164 were not measured.
-- **Account labels.** Only new sessions in crew projects have one. The History page does not show them. Editing `account.expected` on the board's Settings page is not checked; set it in `crew.json`.
+- **Account labels.** Only new sessions in crew projects have one.
 - **One-click update.** Clicking the board's button updated 0.17.0 to 0.18.0 on the GitHub marketplace. The page kept the old "update available" banner for up to a minute because the new board answered first. The fix is in 0.18.1 and shows only from the update after that, since the old page runs the update. It has not been seen working yet.
-- **HD Office test version.** Tone and foreground are unfinished, and idle characters crowd together and overlap. It runs in Chrome, but in the Claude desktop app's built-in browser pane it often measures as too slow and falls back to the pixel view, even on a fast GPU; the cause is not established. Performance on integrated graphics is not measured. The no-WebGL and load-failure messages have unit tests only.
-- **Agent instructions are not limits.** A reviewer told to use only `git diff`, `git log` and `git show` ran `git checkout` in the main working tree, and a worker closed every `chrome.exe` to stop its own test browser. These are instructions to the model, and nothing enforces them.
+- **HD Office test version.** Tone and foreground are unfinished. Four seated and four idle characters were seen only while walking. It runs in Chrome, but in the Claude desktop app's built-in browser pane it often measures as too slow and falls back to the pixel view, even on a fast GPU; the cause is not established. Performance on integrated graphics is not measured. The no-WebGL and load-failure messages have unit tests only.
+- **Agent limits are best effort.** Since 0.20 a hook denies what it can recognise in a command line. Scripts, files and variables are not seen, a real reviewer being denied has not been seen, and the `SendMessage` field is read from the documentation.
 - **Project page.** The orchestrator's log and work items depend on an instruction in the skill, so they can be missed. The events scan reads up to 8 MB each time a project's events file changes, which is cheap at today's sizes of under 100 KB.
 
 ## To do
@@ -46,7 +48,8 @@ Open problems in the latest release, and what has not been checked.
 Decided, not started or not finished.
 
 - **HD Office.** The look stays frozen as v0.1.0 for now. Still to do before it can be the default: warm tone, foreground, and performance on integrated graphics.
-- **`board-autostart` on Windows CI.** Find why the board sometimes does not come up in time, then fix the cause or the test.
+- **Machine load in real use.** Check `session.cleanup` counts and the absence of windows in real desktop sessions.
+- **How this reached the user.** A root-cause review of why the crew flow let the load and window problems through, and what it should change.
 - **Codex.** Verification on more platforms and versions, and on plugin-installed hooks.
 
 ## Later

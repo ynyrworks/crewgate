@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.20.0 — 2026-10-31
+
+### Fixed
+
+- A crew session no longer takes over the machine. Measured on 32 threads: one `npm test` peaked at 97% CPU and 57 node processes, and everything an agent started had the same priority as the user's apps. In real use a worker's load test made the machine unusable, and six of its processes outlived the app by about two hours.
+  - `scripts/run-tests.js` runs `max(2, cores / 4)` test files at once (`CREW_TEST_CONCURRENCY` overrides it) at below-normal priority: about 40% CPU at peak, about 90 s instead of 58 s.
+  - SessionStart lowers the Claude Code process to below normal in a registered project, and children inherit it (`limits.process_priority`). With one core saturated, a normal-priority probe's worst delay went from 378.9 ms to 2.5 ms.
+  - Windows only: a holder started with `wscript` puts the session in a Job Object with a CPU hard cap (`limits.session_cpu_percent`, default 60) and, when Claude Code exits, stops background leftovers (`limits.session_cleanup`). The board and programs with a visible window are kept. It fails closed, and it never uses kill-on-close.
+  - Workers run related tests while working and the full suite once at the end. The orchestrator runs the full suite at merge. A load test needs a process count and a time limit.
+- HD Office: idle characters no longer overlap each other, seated characters or furniture. Their spots come from `standSpots`, a pure function, instead of a fixed list.
+- `board-autostart` test: a board that comes up late no longer fails it (up to 60 s, with the delay recorded), and a real failure prints the wait, the lock, `board.json` and `board.log`.
+- The Settings page shows `account.expected` when it is not set, and saving it empty removes the key.
+
+### New
+
+- A hook enforces limits on crew agents, where a command can be recognised. Reviewers and refuters cannot change a working tree or history with git. Workers, reviewers and refuters cannot kill by image name or start an inline unbounded loop or stress tool, or a shell loop of more background copies than half the cores. Each denial records `agent.limit`, with no arguments.
+- A worker dispatch over `limits.max_parallel_workers` is denied instead of warned about (`limits.parallel_enforce`: `block`, or `warn`), counting workers actually running. Resuming a stopped worker with `SendMessage` counts, read from the documented field. Tasks left behind by a quit app do not block.
+- `crew task accept` notes when a task was sent back after its last finalized review round (`review_gap.kind: not_re_reviewed`), by the same rule as `crew release record`.
+- The History page shows a session's account.
+
+### Changed
+
+- Agent templates: workers stop only their own processes by pid, repeat new tests that depend on time or files, and check for leftovers. Reviewers and refuters never change a working tree. Changing templates makes `crew doctor` flag project copies.
+
+### Known issues
+
+The open list is in [docs/ROADMAP.md](docs/ROADMAP.md), and what was checked for this version is in [docs/releases/0.20.0.md](docs/releases/0.20.0.md).
+
+### Upgrade notes
+
+- Going over `max_parallel_workers` is now denied. Lower priority and a CPU cap are on by default in registered projects. See the settings above to turn each off.
+- Run `crew init --force` in each project to update agent copies.
+
 ## 0.19.0 — 2026-10-31
 
 ### New
