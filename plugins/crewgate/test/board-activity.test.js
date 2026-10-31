@@ -170,15 +170,17 @@ test('activity model: row text, and private mode shows ids and types only', () =
 test('activity is cached while events.jsonl is unchanged, and rescanned when it grows; only UI fields come back', async () => {
   const p = newProject('cache');
   ev(p.id, 'task.merged', '2026-04-01T00:00:00.000Z', { key: 'c1', data: { branch: 'b1', note: 'n1', base: 'main', command: 'git merge', title: 'x' } });
+  // a whole-second mtime survives the float round trip through utimesSync on Windows
+  const fixed = 1775000000;
+  fs.utimesSync(paths.eventsFile(p.id), fixed, fixed);
   const first = (await get(`/api/project/${p.id}`)).json.activity;
   assert.equal(first.length, 1);
   assert.deepEqual(Object.keys(first[0].data).sort(), ['branch', 'note']);
   const file = paths.eventsFile(p.id);
-  const st = fs.statSync(file);
   const orig = fs.readFileSync(file);
   // same size, same mtime, different content: a cached answer is returned
   fs.writeFileSync(file, Buffer.from(orig.toString().replace('"b1"', '"b2"')));
-  fs.utimesSync(file, st.atimeMs / 1000, st.mtimeMs / 1000);
+  fs.utimesSync(file, fixed, fixed);
   assert.equal((await get(`/api/project/${p.id}`)).json.activity[0].data.branch, 'b1');
   // the file changes: rescanned
   ev(p.id, 'task.merged', '2026-04-02T00:00:00.000Z', { key: 'c2', data: { branch: 'b3' } });
