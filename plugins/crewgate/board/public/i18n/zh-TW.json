@@ -12,6 +12,8 @@
   "office.testBadge": "測試版：畫面尚未完成。",
   "office.viewPixel": "顯示像素畫面",
   "office.slow": "HD 畫面在這台機器上太慢，所以改用像素畫面。",
+  "office.noWebgl": "這個瀏覽器沒有 WebGL，所以顯示像素畫面。",
+  "office.loadFailed": "HD 畫面無法載入，所以改用像素畫面。",
   "office.loading": "正在載入 HD 畫面…",
   "office.rooms": "專案",
   "office.extra": "另外 {count} 個在下方清單",

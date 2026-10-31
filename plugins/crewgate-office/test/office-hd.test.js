@@ -102,3 +102,30 @@ test('the HD view is opt-in: only a stored "hd" shows it, and both languages lab
   assert.match(table('zh-TW')['office.viewHd'], /測試版/);
   assert.ok(table('en')['office.testBadge'] && table('zh-TW')['office.testBadge']);
 });
+
+test('the pixel note says why: no WebGL (no switch), too slow, or a load failure, each with its own stored value', () => {
+  const vm = require('node:vm');
+  const node = (tag) => ({ tag, children: [], className: '', textContent: '', appendChild(c) { this.children.push(c); }, addEventListener() {} });
+  const texts = (n) => [n.textContent, ...n.children.flatMap(texts)].filter(Boolean);
+  const buttons = (n) => (n.tag === 'button' ? 1 : 0) + n.children.reduce((a, c) => a + buttons(c), 0);
+  const load = (webgl) => {
+    const win = {};
+    const doc = { createElement: (t) => (t === 'canvas' ? { getContext: () => (webgl ? {} : null) } : node(t)) };
+    vm.runInNewContext(read('office-hd.js'), { window: win, document: doc, console }, { filename: 'office-hd.js' });
+    return win.OfficeHD;
+  };
+  const ctxOf = (data) => ({ t: (k) => k, store: (k, v) => { if (v === undefined) return data[k]; data[k] = v; }, refresh() {} });
+  const none = load(false).pixelNote(ctxOf({}));
+  assert.deepEqual(texts(none), ['office.noWebgl']);
+  assert.equal(buttons(none), 0, 'no HD switch without WebGL');
+  const hd = load(true);
+  const slow = {}; const failed = {};
+  hd.fallBack(ctxOf(slow), '1');
+  hd.fallBack(ctxOf(failed), 'error');
+  assert.notEqual(slow['crew.office.auto'], failed['crew.office.auto']);
+  assert.ok(texts(hd.pixelNote(ctxOf(slow))).includes('office.slow '));
+  assert.ok(texts(hd.pixelNote(ctxOf(failed))).includes('office.loadFailed '));
+  assert.equal(buttons(hd.pixelNote(ctxOf(failed))), 1);
+  assert.match(read('office-hd.js'), /catch\(function \(\) \{ fallBack\(ctx, 'error'\); \}\)/, 'a load failure is not reported as slow');
+  for (const k of ['office.noWebgl', 'office.loadFailed']) assert.ok(table('en')[k] && table('zh-TW')[k], k);
+});

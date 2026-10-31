@@ -303,7 +303,6 @@ A button switches between them, and the page remembers your choice in the browse
 
 What is next, what comes later and what is 1.0: [docs/ROADMAP.md](docs/ROADMAP.md).
 
-
 ## Privacy and safety
 
 - **Local only.** The board binds `127.0.0.1`, rejects foreign `Host` headers, sets no CORS headers, requires a

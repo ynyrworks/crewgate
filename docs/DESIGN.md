@@ -576,9 +576,10 @@ plugin caches when that tool's own list (`installed_plugins.json`, `config.toml`
 cache folder behind. A plugin installed by a tool counts the neighbouring folder only when that list names the add-on too, since a
 marketplace clone always holds it. There is no configured path and no download. `GET /api/addons` tells the page `missing`, `outdated` or `ok`,
 never the folder. `office.json` in the add-on declares `office_api` and its files; a value other than `OFFICE_API` is not loaded,
-and the page shows the update commands instead. The board serves only the listed `.js` and `.css` files from the add-on's `public`
-folder at `/addon/office/<file>`, and the page loads them in order under the same CSP. `office_api` is the contract: raise it when
-what `app.js` passes to `Office.page` changes. Its strings stay in the board's i18n tables. One-click update runs
+and the page shows the update commands instead. The board serves only the listed files from the add-on's `public`
+folder at `/addon/office/<file>`: the `scripts` and `styles`, and the listed `assets` (`.png`, `.json`, `.js`, such as the art and three.js,
+which the HD view loads only when shown). The page loads the scripts in order under the same CSP. `office_api` is the contract (now 2): raise it when
+what `app.js` passes to `Office.page` changes; since 2 that includes `store` and `refresh`, the page's remembered choice and its redraw. Its strings stay in the board's i18n tables. One-click update runs
 `claude plugin update crewgate-office@crewgate` when it is installed (a failure there does not fail the plugin update), and old
 versions are cleaned up like the plugin's.
 

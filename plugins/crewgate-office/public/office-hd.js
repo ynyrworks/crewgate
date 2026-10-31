@@ -74,9 +74,11 @@
 
   // The line above the pixel view: why it is shown and the way back.
   function pixelNote(ctx) {
-    if (!supported()) return null;
     var box = el('p', 'o-view muted');
-    if (ctx.store(KEY.auto) === '1') box.appendChild(el('span', '', ctx.t('office.slow') + ' '));
+    if (!supported()) { box.appendChild(el('span', '', ctx.t('office.noWebgl'))); return box; }   // no switch: HD cannot run here
+    var why = ctx.store(KEY.auto);
+    if (why === '1') box.appendChild(el('span', '', ctx.t('office.slow') + ' '));
+    else if (why === 'error') box.appendChild(el('span', '', ctx.t('office.loadFailed') + ' '));
     var b = el('button', 'o-view-btn', ctx.t('office.viewHd'));
     b.type = 'button';
     b.addEventListener('click', function () { setView(ctx, 'hd'); });
@@ -84,9 +86,10 @@
     return box;
   }
 
-  function fallBack(ctx, auto) {
+  // why: '1' too slow, 'error' the view could not load or start, anything else a plain switch back
+  function fallBack(ctx, why) {
     ctx.store(KEY.view, 'pixel');
-    ctx.store(KEY.auto, auto ? '1' : '');
+    ctx.store(KEY.auto, why || '');
     if (engine) engine.stop();
     ctx.refresh();
   }
@@ -840,12 +843,12 @@
       e.onLeave = function () { tip.hidden = true; };
       var measure = ctx.store(KEY.ok) !== '1';
       e.start(measure, function (fps) {
-        if (H.tooSlow(fps)) fallBack(ctx, true);
+        if (H.tooSlow(fps)) fallBack(ctx, '1');
         else ctx.store(KEY.ok, '1');
       });
-    }).catch(function () { fallBack(ctx, true); });
+    }).catch(function () { fallBack(ctx, 'error'); });
     return root;
   }
 
-  window.OfficeHD = { supported: supported, wanted: wanted, page: page, pixelNote: pixelNote };
+  window.OfficeHD = { supported: supported, wanted: wanted, page: page, pixelNote: pixelNote, fallBack: fallBack };
 }());

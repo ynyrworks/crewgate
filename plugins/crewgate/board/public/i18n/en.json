@@ -12,6 +12,8 @@
   "office.testBadge": "Test version: the look is unfinished.",
   "office.viewPixel": "Show the pixel view",
   "office.slow": "The HD view was too slow on this machine, so the pixel view is shown instead.",
+  "office.noWebgl": "No WebGL in this browser, so the pixel view is shown.",
+  "office.loadFailed": "The HD view could not be loaded, so the pixel view is shown instead.",
   "office.loading": "Loading the HD view…",
   "office.rooms": "Projects",
   "office.extra": "+{count} more in the list below",
