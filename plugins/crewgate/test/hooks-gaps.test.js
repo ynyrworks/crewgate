@@ -190,7 +190,7 @@ test('subagent.stop falls back to the transcript when the payload message is emp
 
 // ---------------------------------------------------------------- 5. via
 test('task.dispatched / task.returned say where they came from', () => {
-  const f = H.dispatchFixture();
+  const f = H.fixture();
   H.start(f);
   const t = H.newTask(f);
   H.runHook('pre-tool-use', H.agentPayload(f, t, { tool_input: { prompt: `crew-task: ${t.id}\nx`, subagent_type: 'crewgate:crew-worker' } }), { cwd: f.repo });
@@ -202,7 +202,7 @@ test('task.dispatched / task.returned say where they came from', () => {
 });
 
 test('foreground return through PostToolUse(Agent) is via post-tool-use', () => {
-  const f = H.dispatchFixture();
+  const f = H.fixture();
   H.start(f);
   const t = H.newTask(f);
   const payload = H.agentPayload(f, t, { tool_input: { prompt: `crew-task: ${t.id}\nx`, subagent_type: 'crew-worker' } });

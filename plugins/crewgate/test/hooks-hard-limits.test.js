@@ -34,7 +34,7 @@ test('config: parallel_enforce defaults to block and is documented in both langu
 });
 
 test('dispatch over max_parallel_workers is denied, names the running tasks, and records nothing', () => {
-  const f = H.dispatchFixture(cfg(2));
+  const f = H.fixture(cfg(2));
   H.start(f);
   const a = H.newTask(f, 'A');
   const b = H.newTask(f, 'B');
@@ -49,7 +49,7 @@ test('dispatch over max_parallel_workers is denied, names the running tasks, and
 });
 
 test('re-dispatching a task that is already counted does not count it twice', () => {
-  const f = H.dispatchFixture(cfg(2));
+  const f = H.fixture(cfg(2));
   H.start(f);
   const a = H.newTask(f, 'A');
   const b = H.newTask(f, 'B');
@@ -60,7 +60,7 @@ test('re-dispatching a task that is already counted does not count it twice', ()
 });
 
 test('a stopped worker no longer counts', () => {
-  const f = H.dispatchFixture(cfg(1));
+  const f = H.fixture(cfg(1));
   H.start(f);
   const a = H.newTask(f, 'A');
   const b = H.newTask(f, 'B');
@@ -71,7 +71,7 @@ test('a stopped worker no longer counts', () => {
 });
 
 test('parallel_enforce=warn lets the dispatch through with a reminder', () => {
-  const f = H.dispatchFixture(cfg(1, { parallel_enforce: 'warn' }));
+  const f = H.fixture(cfg(1, { parallel_enforce: 'warn' }));
   H.start(f);
   const a = H.newTask(f, 'A');
   const b = H.newTask(f, 'B');
@@ -82,7 +82,7 @@ test('parallel_enforce=warn lets the dispatch through with a reminder', () => {
 });
 
 test('four stale dispatched tasks and a resumed session still allow a dispatch', () => {
-  const f = H.dispatchFixture(cfg(3));
+  const f = H.fixture(cfg(3));
   H.start(f);
   const stale = ['1', '2', '3', '4'].map((n) => dispatched(f, `S${n}`));
   // Records of the old process: still open, as an app quit leaves them.
@@ -99,7 +99,7 @@ test('four stale dispatched tasks and a resumed session still allow a dispatch',
 });
 
 test('stale dispatched tasks with no record never count, and a compact keeps the live records', () => {
-  const f = H.dispatchFixture(cfg(1));
+  const f = H.fixture(cfg(1));
   H.start(f);
   ['x', 'y', 'z'].forEach((n) => dispatched(f, n));
   const fresh = H.newTask(f, 'Fresh');
@@ -111,7 +111,7 @@ test('stale dispatched tasks with no record never count, and a compact keeps the
 });
 
 test('records of an ended session do not count, nor do records older than six hours', () => {
-  const f = H.dispatchFixture(cfg(1));
+  const f = H.fixture(cfg(1));
   H.start(f);
   const old = dispatched(f, 'old');
   const gone = dispatched(f, 'gone');
@@ -121,7 +121,7 @@ test('records of an ended session do not count, nor do records older than six ho
 });
 
 test('SendMessage to a stopped worker counts like a dispatch; other messages pass', () => {
-  const f = H.dispatchFixture(cfg(1));
+  const f = H.fixture(cfg(1));
   H.start(f);
   const a = dispatched(f, 'A');
   const b = dispatched(f, 'B');
@@ -139,7 +139,7 @@ test('SendMessage to a stopped worker counts like a dispatch; other messages pas
 });
 
 test('a failing check lets the dispatch through', () => {
-  const f = H.dispatchFixture(cfg(1));
+  const f = H.fixture(cfg(1));
   H.start(f);
   assert.equal(pre(f, H.base(f, { tool_name: 'SendMessage', tool_input: { to: 5 } })).out, '{}');
 });
@@ -366,4 +366,53 @@ test('SendMessage over max_parallel_workers with parallel_enforce=warn is still 
   const warn = withSampler([10], () => inproc(send));
   assert.equal(warn.permissionDecision, undefined);
   assert.ok(warn.additionalContext);
+});
+
+// ---------------------------------------------------------------- every spawn-based dispatch path is safe from load
+const path = require('path');
+const fs = require('fs');
+const FORCE = path.join(__dirname, 'force-cpu-100.js');
+const forced = { NODE_OPTIONS: `--require ${JSON.stringify(FORCE)}` };
+
+test('H.runHook turns the CPU limit off for every dispatch tool, so a busy machine cannot fail an unrelated test', () => {
+  const none = H.fixture(); // no config at all: the default limit of 85 applies unless the helper turns it off
+  H.start(none);
+  for (const tool of H.DISPATCH_TOOLS) {
+    if (tool === 'SendMessage') continue;
+    const f = H.fixture();
+    H.start(f);
+    const t = H.newTask(f, tool);
+    const input = tool === 'collaborationspawn_agent'
+      ? { task_name: 'crew-worker', message: `crew-task: ${t.id}\n` }
+      : { prompt: `crew-task: ${t.id}\n`, subagent_type: 'crew-worker' };
+    const r = H.runHook('pre-tool-use', H.base(f, { tool_name: tool, tool_use_id: 'tu-1', tool_input: input }), { cwd: f.repo, env: forced });
+    assert.notEqual(decision(r), 'deny', `${tool}: ${reason(r)}`);
+    assert.equal(tasks.load(f.pid, t.id).state, 'dispatched', tool);
+  }
+  const f = H.fixture();
+  H.start(f);
+  const b = dispatched(f, 'B');
+  record(f, b, { agent: 'ag-b', stopped: true });
+  const r = H.runHook('pre-tool-use', H.base(f, { tool_name: 'SendMessage', tool_use_id: 'tu-s', tool_input: { to: 'ag-b', message: 'go' } }), { cwd: f.repo, env: forced });
+  assert.notEqual(decision(r), 'deny', reason(r));
+  assert.equal(sess.running(f.pid, null).length, 1);
+});
+
+test('the forced 100% sampler does deny when the limit is set: keepCpu leaves the limit alone', () => {
+  const f = H.fixture(cpuCfg(85));
+  H.start(f);
+  const t = H.newTask(f, 'A');
+  const r = H.runHook('pre-tool-use', H.agentPayload(f, t), { cwd: f.repo, env: forced, keepCpu: true });
+  assert.equal(decision(r), 'deny');
+  assert.ok(reason(r).includes('100%'), reason(r));
+});
+
+test('no test spawns the hook except through hooks-helpers.js (a direct spawn would skip the dispatch safety)', () => {
+  const dirs = [__dirname, path.join(__dirname, '..', '..', '..', 'test')];
+  for (const dir of dirs) {
+    for (const file of fs.readdirSync(dir).filter((x) => x.endsWith('.js') && x !== 'hooks-helpers.js' && x !== 'hooks-hard-limits.test.js')) {
+      const src = fs.readFileSync(path.join(dir, file), 'utf8');
+      assert.ok(!/\.HOOK/.test(src) && !(/crew-hook\.js['"`]?\s*,/.test(src) && /spawn|exec/.test(src)), `${file} spawns the hook directly: use H.runHook`);
+    }
+  }
 });

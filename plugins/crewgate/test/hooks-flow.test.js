@@ -46,7 +46,7 @@ test('SessionStart brief stays under the cap with hundreds of tasks; zh-TW langu
 });
 
 test('Agent dispatch: marker moves created -> dispatched once, records details', () => {
-  const f = H.dispatchFixture();
+  const f = H.fixture();
   H.start(f);
   const t = H.newTask(f);
   const p = H.agentPayload(f, t, { tool_input: { prompt: `crew-task: ${t.id}\nwork`, subagent_type: 'crewgate:crew-worker', model: 'sonnet', run_in_background: true } });
@@ -64,7 +64,7 @@ test('Agent dispatch: marker moves created -> dispatched once, records details',
 });
 
 test('Agent dispatch: "Task" tool name works; no marker / unknown task / subagent payload do nothing', () => {
-  const f = H.dispatchFixture();
+  const f = H.fixture();
   H.start(f);
   const t = H.newTask(f);
   assert.equal(H.runHook('pre-tool-use', H.agentPayload(f, t, { agent_id: 'a-sub' }), { cwd: f.repo }).out, '{}');
@@ -77,7 +77,7 @@ test('Agent dispatch: "Task" tool name works; no marker / unknown task / subagen
 });
 
 test('Agent dispatch: parallel_enforce=warn only warns when running workers would exceed max_parallel_workers', () => {
-  const f = H.dispatchFixture({ config: { limits: { max_parallel_workers: 1, parallel_enforce: 'warn' } } });
+  const f = H.fixture({ config: { limits: { max_parallel_workers: 1, parallel_enforce: 'warn' } } });
   H.start(f);
   const a = H.newTask(f, 'A');
   const b = H.newTask(f, 'B');
@@ -88,7 +88,7 @@ test('Agent dispatch: parallel_enforce=warn only warns when running workers woul
 });
 
 test('a task in review dispatched to a reviewer keeps its state', () => {
-  const f = H.dispatchFixture();
+  const f = H.fixture();
   H.start(f);
   const t = H.newTask(f);
   tasks.transition(f.pid, t.id, 'dispatched');
@@ -101,7 +101,7 @@ test('a task in review dispatched to a reviewer keeps its state', () => {
 });
 
 test('foreground worker: PostToolUse marks returned when no CLI report exists', () => {
-  const f = H.dispatchFixture();
+  const f = H.fixture();
   H.start(f);
   const t = H.newTask(f);
   H.runHook('pre-tool-use', H.agentPayload(f, t), { cwd: f.repo });
@@ -113,7 +113,7 @@ test('foreground worker: PostToolUse marks returned when no CLI report exists', 
 });
 
 test('foreground worker that already reported via the CLI: no second return', () => {
-  const f = H.dispatchFixture();
+  const f = H.fixture();
   H.start(f);
   const t = H.newTask(f);
   H.runHook('pre-tool-use', H.agentPayload(f, t), { cwd: f.repo });
@@ -125,7 +125,7 @@ test('foreground worker that already reported via the CLI: no second return', ()
 });
 
 test('background launch: PostToolUse does nothing; SubagentStart/Stop link and return the task', () => {
-  const f = H.dispatchFixture();
+  const f = H.fixture();
   H.start(f);
   const t = H.newTask(f);
   const bg = { tool_input: { prompt: `crew-task: ${t.id}\nwork`, subagent_type: 'crew-worker', run_in_background: true } };
@@ -178,7 +178,7 @@ test('Stop: reminds about returned tasks once, respects stop_hook_active, never 
 });
 
 test('Stop: reminds about running background tasks', () => {
-  const f = H.dispatchFixture();
+  const f = H.fixture();
   H.start(f);
   const t = H.newTask(f);
   H.runHook('pre-tool-use', H.agentPayload(f, t, { tool_input: { prompt: `crew-task: ${t.id}`, subagent_type: 'crew-worker', run_in_background: true } }), { cwd: f.repo });
@@ -224,7 +224,7 @@ test('SessionEnd digest: counters, no flags on a clean end, session file removed
 });
 
 test('SessionEnd abnormal flags each add a need', () => {
-  const f = H.dispatchFixture();
+  const f = H.fixture();
   H.start(f);
   const t = H.newTask(f);
   H.runHook('pre-tool-use', H.agentPayload(f, t, { tool_input: { prompt: `crew-task: ${t.id}`, subagent_type: 'crew-worker', run_in_background: true } }), { cwd: f.repo });
@@ -242,7 +242,7 @@ test('SessionEnd abnormal flags each add a need', () => {
   assert.ok(needs[0].includes(t.id));
 
   // question flag
-  const g = H.dispatchFixture({ sid: 'sess-q' });
+  const g = H.fixture({ sid: 'sess-q' });
   H.start(g);
   H.runHook('user-prompt-submit', H.base(g, { prompt: 'go' }), { cwd: g.repo });
   H.runHook('stop', H.base(g, { last_assistant_message: 'Should I proceed?' }), { cwd: g.repo });
