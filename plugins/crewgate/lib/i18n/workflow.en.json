@@ -207,5 +207,12 @@
   "wf.doctor.plansDup": "ids used more than once: {where}",
   "wf.doctor.name.autostart": "Board autostart",
   "wf.doctor.autostartOn": "on (board.autostart): a session start launches the board when it is not running",
-  "wf.doctor.autostartOff": "off; set board.autostart to true in the global config to start the board with each session"
+  "wf.doctor.autostartOff": "off; set board.autostart to true in the global config to start the board with each session",
+  "wf.doctor.name.account": "Claude account",
+  "wf.doctor.accountLine": "{who}; {expected}",
+  "wf.doctor.accountNone": "not determined (API key, Codex, or no sign-in found)",
+  "wf.doctor.accountExpected": "expected {expected}",
+  "wf.doctor.accountNoExpected": "no expected account (account.expected)",
+  "wf.doctor.accountMismatch": "This is not the expected account.",
+  "wf.doctor.accountUnknown": "The account could not be determined, so it cannot be checked."
 }

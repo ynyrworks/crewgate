@@ -117,6 +117,8 @@ const SCHEMA = [
   f('lessons.promote_after_days', 'integer', d('Distinct days a lesson key must be seen before it is suggested.', '同一經驗出現在幾個不同日子後才建議升格。'), { min: 1, max: 365 }),
   f('lessons.rules_cap', 'integer', d('Most promoted rules kept.', '升格規則數量上限。'), { min: 1, max: 200 }),
   f('lessons.rules_file', 'string', d('File that holds the promoted-rules block. Must be inside the project folder.', '存放升格規則區塊的檔案，必須位於專案資料夾內。')),
+  f('account', 'object', d('Claude account this project expects.', '此專案預期使用的 Claude 帳號。')),
+  f('account.expected', 'string', d('Claude account this project should run under: an email address, organization name or account UUID, matched case-insensitively. When a session starts under another account (or the account cannot be determined), the session brief carries one warning line, an account.mismatch event is recorded and one need is added. It never blocks. Empty (default) turns the check off.', '此專案應使用的 Claude 帳號：電子郵件、組織名稱或帳號 UUID，不分大小寫比對。工作階段以其他帳號開始（或無法判斷帳號）時，簡報會多一行警告、記錄 account.mismatch 事件並新增一筆待決事項，不會阻擋。留空（預設）表示不檢查。')),
 ];
 
 const GLOBAL_SCHEMA = [
@@ -231,6 +233,9 @@ function checkAgainst(obj, schema) {
 }
 
 for (const e of SCHEMA) e.default = getPath(DEFAULTS, e.path);
+// account.expected is documented as empty by default but kept out of DEFAULTS: an empty string is not a valid value to write
+// (the crew.json template equals DEFAULTS), and a missing key already means "no check".
+SCHEMA.find((e) => e.path === 'account.expected').default = '';
 for (const e of GLOBAL_SCHEMA) e.default = getPath(GLOBAL_DEFAULTS, e.path);
 
 // ---------------------------------------------------------------- project config

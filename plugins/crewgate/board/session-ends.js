@@ -4,6 +4,7 @@
 // events.jsonl and only when its size or mtime changed, so asking on every board refresh stays cheap.
 //   session.end      -> session id -> time of the latest end (SessionEnd hook)
 //   task.dispatched  -> sessions that dispatched tasks (the orchestrators)
+//   session.start    -> session id -> { id, plan } (the account the session ran under: short id and plan, no label)
 //   subagent.start/stop -> agent id -> { task, type, session } (links a subagent transcript to a task)
 const fs = require('fs');
 
@@ -12,6 +13,7 @@ function createSessionEnds(listFiles) {
   const files = new Map();   // file -> { size, mtimeMs, offset }
   const ends = new Map();    // session id -> ms of the latest session.end
   const agents = new Map();  // agent id -> { task, type, session }
+  const accounts = new Map();  // session id -> { id, plan }
   const dispatchers = new Set();   // session ids that dispatched a task
 
   function consume(file, state, size) {
@@ -26,7 +28,7 @@ function createSessionEnds(listFiles) {
       if (cut < 0) return;   // no complete line yet
       state.offset += Buffer.byteLength(text.slice(0, cut + 1));
       for (const line of text.slice(0, cut).split('\n')) {
-        if (!/"(?:session.end|task.dispatched|subagent.(?:start|stop))"/.test(line)) continue;
+        if (!/"(?:session.(?:end|start)|task.dispatched|subagent.(?:start|stop))"/.test(line)) continue;
         try {
           const e = JSON.parse(line);
           if (!e || typeof e.type !== 'string') continue;
@@ -34,6 +36,11 @@ function createSessionEnds(listFiles) {
           const sid = typeof e.session === 'string' && e.session ? e.session : null;
           if (e.type === 'session.end' && sid && Number.isFinite(ms)) {
             if (!(ends.get(sid) >= ms)) ends.set(sid, ms);
+          } else if (e.type === 'session.start' && sid) {
+            const d = e.data && typeof e.data === 'object' ? e.data : {};
+            if (typeof d.account_id === 'string' && /^[0-9A-Za-z-]{1,16}$/.test(d.account_id)) {
+              accounts.set(sid, { id: d.account_id, plan: typeof d.plan === 'string' ? d.plan.slice(0, 40) : '' });
+            }
           } else if (e.type === 'task.dispatched' && sid) {
             dispatchers.add(sid);
           } else if ((e.type === 'subagent.start' || e.type === 'subagent.stop') && typeof e.agent === 'string' && e.agent) {
@@ -70,6 +77,7 @@ function createSessionEnds(listFiles) {
   return {
     refresh,
     get: (sessionId) => (ends.has(sessionId) ? ends.get(sessionId) : null),
+    account: (sessionId) => accounts.get(sessionId) || null,
     agent: (agentId) => agents.get(agentId) || null,
     dispatched: (sessionId) => dispatchers.has(sessionId),
   };

@@ -67,7 +67,7 @@ function createBoard(opts = {}) {
     const paths = require('../lib/core/paths');
     watcherOpts.sessionEnds = require('./session-ends').createSessionEnds(() => projects.list().map((p) => paths.eventsFile(p.id)));
   }
-  const api = createApi({ version, watcher: createWatcher(watcherOpts), usage: createUsage(watcherOpts), stats: opts.stats });
+  const api = createApi({ version, watcher: createWatcher(watcherOpts), sessionEnds: watcherOpts.sessionEnds, usage: createUsage(watcherOpts), stats: opts.stats });
   const updates = createUpdateRoutes({ version, pluginRoot: path.join(__dirname, '..'), ...(opts.updates || {}) });
   let boundPort = opts.port || 0;
   let indexHtml = null;

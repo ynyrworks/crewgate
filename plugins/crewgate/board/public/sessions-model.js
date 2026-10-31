@@ -99,6 +99,19 @@
     };
   }
 
+  // The Claude account of a row as text ("" when there is no record). The label (email, organization) and the id are
+  // hidden in private mode; a row without a label shows its short id and plan.
+  function accountText(row, priv) {
+    var a = row && row.account;
+    if (priv || !a || typeof a !== 'object') return '';
+    var parts = [];
+    if (a.email) parts.push(String(a.email));
+    if (a.organization) parts.push(String(a.organization));
+    if (!parts.length && a.id) parts.push('#' + String(a.id));
+    if (a.plan) parts.push(String(a.plan));
+    return parts.join(' · ');
+  }
+
   function counts(rows) {
     var c = { all: rows.length, running: 0, waiting: 0 };
     rows.forEach(function (r) { if (isRunning(r)) c.running++; if (isWaiting(r)) c.waiting++; });
@@ -261,5 +274,5 @@
   // Only ids the server makes are used in links.
   function validId(id) { return typeof id === 'string' && /^[0-9a-f]{12}$/.test(id); }
 
-  return { cleanFilter: cleanFilter, matches: matches, buildTree: buildTree, isOpen: isOpen, visible: visible, counts: counts, isRunning: isRunning, isWaiting: isWaiting, displayStatus: displayStatus, fmtDuration: fmtDuration, compact: compact, tokenSum: tokenSum, cardStats: cardStats, KIND_ORDER: KIND_ORDER, emptyTimeline: emptyTimeline, mergeLatest: mergeLatest, mergeOlder: mergeOlder, withGaps: withGaps, kindCounts: kindCounts, stepText: stepText, stepMatches: stepMatches, validId: validId, mergeDays: mergeDays, historyGroups: historyGroups, pagePartial: pagePartial, textChanged: textChanged, STATES: STATES, ENGINES: ENGINES };
+  return { cleanFilter: cleanFilter, matches: matches, buildTree: buildTree, isOpen: isOpen, visible: visible, accountText: accountText, counts: counts, isRunning: isRunning, isWaiting: isWaiting, displayStatus: displayStatus, fmtDuration: fmtDuration, compact: compact, tokenSum: tokenSum, cardStats: cardStats, KIND_ORDER: KIND_ORDER, emptyTimeline: emptyTimeline, mergeLatest: mergeLatest, mergeOlder: mergeOlder, withGaps: withGaps, kindCounts: kindCounts, stepText: stepText, stepMatches: stepMatches, validId: validId, mergeDays: mergeDays, historyGroups: historyGroups, pagePartial: pagePartial, textChanged: textChanged, STATES: STATES, ENGINES: ENGINES };
 }));

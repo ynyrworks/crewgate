@@ -207,5 +207,12 @@
   "wf.doctor.plansDup": "id 重複使用：{where}",
   "wf.doctor.name.autostart": "看板自動啟動",
   "wf.doctor.autostartOn": "已開啟（board.autostart）：工作階段開始時若看板沒在執行就啟動",
-  "wf.doctor.autostartOff": "關閉；在全域設定把 board.autostart 設為 true 即可隨工作階段啟動看板"
+  "wf.doctor.autostartOff": "關閉；在全域設定把 board.autostart 設為 true 即可隨工作階段啟動看板",
+  "wf.doctor.name.account": "Claude 帳號",
+  "wf.doctor.accountLine": "{who}；{expected}",
+  "wf.doctor.accountNone": "無法判斷（API 金鑰、Codex，或找不到登入資訊）",
+  "wf.doctor.accountExpected": "預期 {expected}",
+  "wf.doctor.accountNoExpected": "未設定預期帳號（account.expected）",
+  "wf.doctor.accountMismatch": "這不是預期的帳號。",
+  "wf.doctor.accountUnknown": "無法判斷帳號，因此無法檢查。"
 }
