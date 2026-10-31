@@ -1235,8 +1235,8 @@
     schema.forEach(function (e) {
       if (FORM_TYPES.indexOf(e.type) < 0 || e.path === 'version') return;
       var found = expandPaths(cfg.config, e.path);
-      // a string whose default is empty (account.expected) is absent from a config until set; show it empty so it can be set
-      if (!found.length && e.type === 'string' && e.default === '' && e.path.indexOf('*') < 0) found = [{ path: e.path, value: '' }];
+      // account.expected is absent from a config until set (an empty default is kept out of DEFAULTS); show it empty so it can be set
+      if (!found.length && e.path === 'account.expected') found = [{ path: e.path, value: '' }];
       found.forEach(function (c) { fields.push({ entry: e, path: c.path, value: c.value }); });
     });
     var inputs = {};
