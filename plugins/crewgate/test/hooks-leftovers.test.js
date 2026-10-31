@@ -8,6 +8,9 @@ const H = require('./hooks-helpers');
 const sess = require('../lib/hooks/session');
 const tasks = require('../lib/core/tasks');
 
+// Real listings must not depend on machine load: a long listing limit for every real call in this file (and the hooks it runs).
+process.env.CREWGATE_LEFTOVERS_LIST_MS = '20000';
+
 const CLAUDE = 100;
 const row = (pid, ppid, name) => ({ pid, ppid, name });
 const base = [row(100, 1, 'claude.exe'), row(200, 100, 'bash.exe'), row(300, 100, 'node.exe')];
@@ -110,6 +113,12 @@ test('a list over the cap is skipped and recorded as skipped, never cut', () => 
 });
 
 test('the listing timeout follows the budget; a short budget lists nothing and gives no snapshot', () => {
+  const keep = process.env.CREWGATE_LEFTOVERS_LIST_MS;
+  delete process.env.CREWGATE_LEFTOVERS_LIST_MS;
+  try { budgetCase(); } finally { process.env.CREWGATE_LEFTOVERS_LIST_MS = keep; }
+});
+
+function budgetCase() {
   const seen = [];
   const deps = { list: () => { seen.push(1); return base; } };
   assert.strictEqual(L.snapshot(deps, 2000), null);
@@ -117,7 +126,7 @@ test('the listing timeout follows the budget; a short budget lists nothing and g
   assert.ok(L.snapshot(deps, 4000));
   assert.strictEqual(L.check('p', rec(), [], { list: () => { seen.push(2); return base; }, budgetMs: 1500, claudePid: CLAUDE, roots: [] }), null);
   assert.strictEqual(seen.length, 1);
-});
+}
 
 test('hook flow: dispatch records the snapshot, the stop records task.leftovers, task show warns', () => {
   const f = H.fixture();

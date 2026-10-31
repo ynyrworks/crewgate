@@ -55,7 +55,10 @@ function list(deps = {}, timeoutMs = 3000) {
 const LIST_DISPATCH_MS = 1500;
 const LIST_STOP_MS = 3000;
 const MIN_LEFT_MS = 2500;
+// CREWGATE_LEFTOVERS_LIST_MS replaces both limits (a test that needs a real listing must not depend on machine load).
 function timeoutFor(max, budgetMs) {
+  const env = Number(process.env.CREWGATE_LEFTOVERS_LIST_MS);
+  if (env > 0) return env;
   if (!Number.isFinite(budgetMs)) return max;
   return budgetMs < MIN_LEFT_MS ? 0 : Math.min(max, budgetMs - 1000);
 }

@@ -97,7 +97,7 @@ function onSend(payload) {
     if (lim.parallel_enforce !== 'warn') return C.deny(h.t('deny.parallel', vars));
     return C.withContext('PreToolUse', h.t('warn.parallel', vars));
   }
-  const snap = leftovers.snapshot({}, leftovers.budgetLeft('pre-tool-use'));
+  const snap = rec.worker ? leftovers.snapshot({}, leftovers.budgetLeft('pre-tool-use')) : null;
   sess.remember(h.pid, rec.id, { ...rec, id: undefined, stopped: false, stopped_at: undefined, resumed: true, ts: Date.now(), session: h.sid || null, snap: snap || undefined });
   return null;
 }
