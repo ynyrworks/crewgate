@@ -5,4 +5,5 @@
 - A load or stress test on the user's machine needs a process count (at most half the CPU cores) and a time limit after which each process ends by itself; check yourself that nothing is left. (source: no-machine-load, 2026-10-31–2026-10-31)
 - To check that something starts with no window, watch window creation while it starts; reading window handles afterwards misses a flash. (source: check-windows-not-handles, 2026-10-31–2026-10-31)
 - Before claiming a fix works, run the same check with the fix off; a check that also passes without it proves nothing. (source: verify-with-control, 2026-10-31–2026-10-31)
+- Run CI on a branch first; push main and the tag only after every job is green. (source: tag-after-green-ci, 2026-11-01–2026-11-01)
 <!-- crewgate:rules:end -->
