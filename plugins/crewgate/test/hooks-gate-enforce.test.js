@@ -421,3 +421,23 @@ test('crew doctor shows the enforce mode and the Codex fallback', () => {
   assert.match(r.out, /enforce confirm/);
   assert.match(r.out, /Codex sessions fall back to remind/);
 });
+
+test('user-turn rule: a task notification between ask and answer is not a user turn', () => {
+  const f = fixture('block');
+  const note = (text) => H.runHook('user-prompt-submit', H.base(f, { prompt: text }), { cwd: f.repo });
+  const answer = (id) => { gates.answer(f.pid, id, 'yes', '', { session: f.sid, prompts: sess.read(f.sid).prompt_ts || [] }); return events.read(f.pid, { types: 'gate.answered' }).pop().data.user_turn; };
+  const id = gates.ask(f.pid, {}, { gate: 'push' }, { session: f.sid }).id;
+  note('<task-notification>done</task-notification>');
+  note('  \n<task-notification>again</task-notification>');
+  const s = sess.read(f.sid);
+  assert.ok(!s.prompts);
+  assert.ok(!s.first_prompt && !s.last_prompt);
+  assert.ok(!(s.prompt_ts || []).length);
+  assert.equal(s.turn_open, true);
+  assert.equal(answer(id), false);
+  const id2 = gates.ask(f.pid, {}, { gate: 'push' }, { session: f.sid }).id;
+  note('<task-notification>x</task-notification>');
+  note('<pasted_content a="b">hi</pasted_content>');
+  assert.equal(answer(id2), true);
+  assert.equal(sess.read(f.sid).prompts, 1);
+});

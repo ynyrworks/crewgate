@@ -303,3 +303,12 @@ test('Codex spawn_agent: the duration also appears when the result is across the
   const p2 = timeline({ file: c, engine: 'codex', cwd: CWD, limit: 10, before: p1.cursor, beforeTs: p1.cursor_ts });
   assert.equal(p2.events.find((e) => e.kind === 'subagent').dur_ms, 7000);
 });
+
+test('origin.kind: only human lines are prompts', () => {
+  const { promptText } = require('../board/watcher');
+  const line = (origin, text) => ({ type: 'user', ...(origin ? { origin: { kind: origin } } : {}), message: { content: text } });
+  assert.equal(promptText(line('task-notification', 'hi')), null);
+  assert.equal(promptText(line('human', '<pasted_content>x')), '<pasted_content>x');
+  assert.equal(promptText(line(null, 'typed')), 'typed');
+  assert.equal(promptText(line(null, '<task-notification>x')), null);
+});
