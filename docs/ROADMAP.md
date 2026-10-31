@@ -8,6 +8,7 @@ the [CHANGELOG](../CHANGELOG.md).
 
 One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.md).
 
+- **0.18.1** — After a one-click update the page shows the result, even when the new board answers before the page notices the restart.
 - **0.18** — Under Codex, a `never` gate and an unapproved `ask` gate under `confirm` or `block` are denied before the command runs; sessions show their Claude account and a project can name the one it expects; a board killed outright can be dated.
 - **0.17** — A task notification no longer counts as a user message for the gate rule; workers and reviewers are told to keep changes to the brief; `crew doctor` reports stale agent copies, a broken CLI path and project gates; the board's session counts match the Sessions page.
 - **0.16** — Projects can add their own gates, and their scripts get a CLI path that stays the same across versions; `crew task accept` refuses review findings that skipped the refuter unless a reason is given; `crew plan clarify` keeps settled questions with the plan; `crew lesson score` shows whether a promoted rule helped.
@@ -34,7 +35,7 @@ Open problems in the latest release, and what has not been checked.
 - **Gates are best effort.** Scripts, configured aliases, variables and other tools are not seen. Use branch protection on the server for a hard stop.
 - **Codex.** Hooks installed through the plugin are not verified, only hooks in `.codex/hooks.json`, and a real run covered only `never`. The Office add-on install through Codex is not verified. Codex versions older than 0.164 were not measured.
 - **Account labels.** Only new sessions in crew projects have one. The History page does not show them. Editing `account.expected` on the board's Settings page is not checked; set it in `crew.json`.
-- **One-click update.** `crew update apply` worked on the GitHub marketplace from the CLI. The board's button has been tested through its API only, not clicked.
+- **One-click update.** Clicking the board's button updated 0.17.0 to 0.18.0 on the GitHub marketplace. The page kept the old "update available" banner for up to a minute because the new board answered first. The fix is in 0.18.1 and shows only from the update after that, since the old page runs the update.
 
 ## To do
 

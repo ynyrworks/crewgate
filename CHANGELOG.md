@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.18.1 — 2026-10-31
+
+### Fixed
+
+- After a one-click update the page shows the result and the offer to clean old versions. When the new board answered before the old one left, the status poll never failed, so the page missed the restart and showed the old "update available" banner for up to a minute. Seen clicking the button for 0.17.0 to 0.18.0. The page running an update is the old version's, so this shows from the update after 0.18.1.
+
 ## 0.18.0 — 2026-10-31
 
 ### Behaviour changes
