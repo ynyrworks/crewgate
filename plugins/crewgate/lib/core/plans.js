@@ -28,6 +28,7 @@ const STATE_BOX = { open: ' ', done: 'x', dropped: '~', proposed: '?' };
 // Proposals from a plan review carry round, kind, action, done_when and for (the step they are about) in the comment.
 // A comment token cannot hold whitespace, and "-->" would end the comment: encodeToken escapes %, < > and every
 // whitespace character as %HH (%uHHHH above 0xFF), decodeToken reverses it exactly.
+const CLARIFIED_RE = /^##[ \t]+clarified[ \t]*$/i;
 const KINDS = ['off-goal', 'missing-step', 'wrong-order', 'too-big', 'risk', 'vague-done', 'redundant'];
 const ACTIONS = ['add', 'split', 'change', 'drop'];
 const hex = (c) => { const n = c.codePointAt(0); return n > 0xff ? `%u${n.toString(16).toUpperCase().padStart(4, '0')}` : `%${n.toString(16).toUpperCase().padStart(2, '0')}`; };
@@ -45,7 +46,7 @@ function checkSlug(slug) {
 const widthOf = (indent) => indent.replace(/\t/g, '    ').length;
 
 // ---------------------------------------------------------------- parsing
-// parse(text, { maxNodes }) -> doc { eol, final, lines, nodes, title, goal, truncated }
+// parse(text, { maxNodes }) -> doc { eol, final, lines, nodes, title, goal, clarified, truncated }
 // lines: [{ raw } | { node }] in file order; nodes: item nodes in file order. A node holds
 // { box, boxChar, text, meta, junk, indent, bullet, depth, parent, children, lineNo, dirty, raw }.
 function parse(text, opts = {}) {
@@ -55,16 +56,21 @@ function parse(text, opts = {}) {
   const parts = src.split(/\r?\n/);
   const final = parts.length > 1 && parts[parts.length - 1] === '';
   if (final) parts.pop();
-  const doc = { eol, final, lines: [], nodes: [], title: '', goal: '', truncated: false };
+  const doc = { eol, final, lines: [], nodes: [], title: '', goal: '', clarified: [], truncated: false };
   const stack = [];
   const goal = [];
   let seenItem = false;
+  let inClarified = false;
   parts.forEach((raw, i) => {
     const m = ITEM_RE.exec(raw);
     if (!m) {
       if (/^#{1,6}[ \t]/.test(raw)) {
         stack.length = 0;
+        if (doc.title) seenItem = true;   // the goal is the text right under the title
+        inClarified = CLARIFIED_RE.test(raw);
         if (!doc.title && /^#[ \t]/.test(raw)) doc.title = raw.replace(/^#[ \t]+/, '').replace(/[ \t]+#*[ \t]*$/, '').trim();
+      } else if (inClarified) {
+        if (raw.trim()) doc.clarified.push(raw.trim().replace(/^[-*][ \t]+/, ''));
       } else if (!seenItem && doc.title && raw.trim()) goal.push(raw.trim());
       doc.lines.push({ raw });
       return;
@@ -179,6 +185,8 @@ function cleanText(text) {
 }
 
 // Adds a node (under `under`, else at the top level, after everything else). `meta` adds more comment keys. -> node
+function clarifiedLine(doc) { return doc.lines.findIndex((l) => !l.node && CLARIFIED_RE.test(l.raw)); }
+
 function addNode(doc, { text, under, task, origin = 'plan', proposed = false, date, meta: extra }) {
   if (!ORIGINS.includes(origin)) throw new CrewError('plan.badOrigin', { origin: String(origin), origins: ORIGINS.join(', ') });
   if (doc.nodes.length >= MAX_NODES) throw new CrewError('plan.tooMany', { max: MAX_NODES });
@@ -201,10 +209,12 @@ function addNode(doc, { text, under, task, origin = 'plan', proposed = false, da
   let at;
   if (after) at = doc.lines.findIndex((l) => l.node === after) + 1;
   else {
-    // no items yet: append, with a blank line between any text above and the list
-    const last = doc.lines[doc.lines.length - 1];
-    if (last && last.raw.trim()) doc.lines.push({ raw: '' });
-    at = doc.lines.length;
+    // no items yet: at the end, or above the answers, which stay last, with a blank line between any text above and the list
+    const section = clarifiedLine(doc);
+    at = section < 0 ? doc.lines.length : section;
+    const last = doc.lines[at - 1];
+    if (last && last.raw.trim()) doc.lines.splice(at++, 0, { raw: '' });
+    if (section >= 0) doc.lines.splice(at, 0, { raw: '' });
   }
   doc.lines.splice(at, 0, { node });
   doc.nodes.splice(after ? doc.nodes.indexOf(after) + 1 : doc.nodes.length, 0, node);
@@ -282,7 +292,7 @@ function derive(doc, taskState) {
   const total = counted.reduce((s, k) => s + k.total, 0);
   const count = (st) => flat.filter((x) => x.state === st).length;
   return {
-    title: doc.title, goal: doc.goal, truncated: doc.truncated, duplicates: duplicateIds(doc),
+    title: doc.title, goal: doc.goal, clarified: doc.clarified, truncated: doc.truncated, duplicates: duplicateIds(doc),
     summary: { done, total, pct: total ? Math.round((100 * done) / total) : 0, nodes: flat.length, proposed: count('proposed'), dropped: count('dropped'), blocked: count('blocked') },
     nodes,
   };
@@ -363,6 +373,32 @@ function create(root, projectId, slug, { title, goal }) {
   });
 }
 
+// clarify(root, projectId, slug, { question, answer, by }): one settled question, as a plain line under ## Clarified at
+// the end of the file. A later session reads it; it is not a step.
+function clarify(root, projectId, slug, { question, answer, by = 'user' }) {
+  const one = (s) => clean(String(s || '').replace(/\s+/g, ' ').trim(), 500);
+  const q = one(question);
+  const a = one(answer);
+  if (!q || !a) throw new CrewError('plan.clarifyEmpty');
+  const line = `- Q: ${q} A: ${a} (${by})`;
+  update(root, slug, (doc) => {
+    let at = clarifiedLine(doc);
+    if (at < 0) {
+      const last = doc.lines[doc.lines.length - 1];
+      if (last && (last.node || last.raw.trim())) doc.lines.push({ raw: '' });
+      doc.lines.push({ raw: '## Clarified' });
+      at = doc.lines.length - 1;
+    }
+    let end = at + 1;
+    while (end < doc.lines.length && !doc.lines[end].node && !/^#{1,6}[ \t]/.test(doc.lines[end].raw)) end++;
+    while (end > at + 1 && !doc.lines[end - 1].node && !doc.lines[end - 1].raw.trim()) end--;
+    doc.lines.splice(end, 0, { raw: line });
+    doc.final = true;
+  });
+  record(projectId, 'plan.clarified', { slug, by });
+  return { slug, line, by };
+}
+
 function addTo(root, projectId, slug, input) {
   const date = input.date || today();
   const out = update(root, slug, (doc) => {
@@ -437,5 +473,5 @@ function deepNodes(root) {
 module.exports = {
   SLUG_RE, ORIGINS, MAX_DEPTH, MAX_BYTES, MAX_NODES, planDir, planFile, checkSlug, parse, serialize, assignIds, find, addNode, removeNode,
   KINDS, ACTIONS, encodeToken, decodeToken, proposalMeta, record, setBox, touch, BOX_STATE, cleanText, MAX_TEXT,
-  derive, taskStates, slugs, readCapped, update, create, addTo, linkTo: linkTask, setState, removeFrom, deepNodes, duplicateNodes, duplicateIds, exists, today, refOf,
+  derive, taskStates, slugs, readCapped, update, create, clarify, addTo, linkTo: linkTask, setState, removeFrom, deepNodes, duplicateNodes, duplicateIds, exists, today, refOf,
 };

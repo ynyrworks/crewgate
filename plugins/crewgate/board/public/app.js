@@ -659,6 +659,7 @@
       h('p', null, h('a', { href: '#/p/' + encodeURIComponent(pid), text: '← ' + t('plan.back') })),
       h('h1', { text: title }));
     if (d.goal && !S.mask) root.appendChild(h('p', { class: 'muted', text: d.goal }));
+    if (d.clarified && !S.mask) d.clarified.forEach((line) => root.appendChild(h('p', { class: 'muted', text: line })));
     root.appendChild(h('div', { class: 'prow big' }, planBar(s.pct, title), h('span', { class: 'pct', text: s.pct + '%' }), h('span', { class: 'muted', text: t('plan.steps', { done: s.done, total: s.total }) }), planCounts(s)));
     if (d.truncated) root.appendChild(h('p', { class: 'err', text: t('plan.truncated') }));
     var props = proposalsCard(d);

@@ -46,18 +46,18 @@ test.before(async () => {
   repo = h.makeRepo();
   proj = projects.add(repo, { name: 'demo' }).project;
   const elsewhere = h.tmpDir('crew-hist-else-');
-  // inside the project: 2 days ago (with a subagent), 10 days ago; outside any project: 40 days ago and 3 days ago
+  // inside the project: 2 days ago (with a subagent), 10 days ago; outside any project: 40 days ago and 4 days ago
   const a = path.join(claudeRoot, 'pa', 'sessA.jsonl');
   claudeFile(a, { cwd: repo, sid: 'sessA', at: ago(2, 3) });
   claudeFile(path.join(claudeRoot, 'pa', 'sessA', 'subagents', 'agent-w1.jsonl'), { cwd: repo, sid: 'sessA', at: ago(2, 3) + 1000, agent: 'w1', tokens: [2000, 300], prompt: 'PRIVATE WORKER' });
   claudeFile(path.join(claudeRoot, 'pa', 'sessB.jsonl'), { cwd: repo, sid: 'sessB', at: ago(10, 2) });
   claudeFile(path.join(claudeRoot, 'pb', 'sessC.jsonl'), { cwd: elsewhere, sid: 'sessC', at: ago(40, 5) });
   fs.writeFileSync(path.join(codexRoot, 'rollout.jsonl'), jl([
-    { timestamp: iso(ago(3, 1)), type: 'session_meta', payload: { id: 'cx1', cwd: elsewhere } },
-    { timestamp: iso(ago(3, 1) + 1000), type: 'event_msg', payload: { type: 'user_message', message: 'codex prompt' } },
-    { timestamp: iso(ago(3, 1) + 2000), type: 'response_item', payload: { type: 'function_call', name: 'shell', call_id: 'c1', arguments: '{}' } },
+    { timestamp: iso(ago(4, 1)), type: 'session_meta', payload: { id: 'cx1', cwd: elsewhere } },
+    { timestamp: iso(ago(4, 1) + 1000), type: 'event_msg', payload: { type: 'user_message', message: 'codex prompt' } },
+    { timestamp: iso(ago(4, 1) + 2000), type: 'response_item', payload: { type: 'function_call', name: 'shell', call_id: 'c1', arguments: '{}' } },
   ]));
-  const cx = new Date(ago(3, 1) + 60000);
+  const cx = new Date(ago(4, 1) + 60000);
   fs.utimesSync(path.join(codexRoot, 'rollout.jsonl'), cx, cx);
   ids.A = hashId(a);
   ids.W = hashId(path.join(claudeRoot, 'pa', 'sessA', 'subagents', 'agent-w1.jsonl'));

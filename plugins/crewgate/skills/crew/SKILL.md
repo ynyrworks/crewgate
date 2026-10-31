@@ -1,6 +1,6 @@
 ---
 name: crew
-description: Orchestrator playbook for delegated development. Use when the user asks to delegate work, split a job into parts, run the crew, or says "分工". Plans and briefs tasks, dispatches worker subagents in git worktrees, runs the review pipeline, enforces gates, merges, and records lessons.
+description: Crewgate's orchestrator playbook for delegated development. Use when the user mentions Crewgate, asks to delegate work, split a job into parts, run the crew, or says "分工". Plans and briefs tasks, dispatches worker subagents in git worktrees, runs the review pipeline, enforces gates, merges, and records lessons.
 when_to_use: The user wants work split across subagents, wants a reviewed merge flow, or asks to init, check status, wrap up or hand off a crew session.
 argument-hint: "[init | status | wrap-up | handoff]"
 ---
@@ -58,12 +58,12 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
    its own plan, or change the goal.
    **Clarify before a non-trivial plan** (about 3 steps or more), and skip this for a smaller one or a plan
    the user dictated step by step. Ask only what would change the plan and what the code cannot answer: read
-   the code first. Ask one question at a time and give your recommended answer. Once the plan file exists, add
-   the questions and answers under a `## Clarified` heading at the end of the file, as plain lines such as
-   `- Q: ... A: ... (user)`, so a later session can read them. Plain lines and headings are not plan steps.
+   the code first. Ask one question at a time and give your recommended answer. Once the plan file exists, keep each
+   answer with `crew plan clarify <slug> --question "..." --answer "..."`. It goes under a `## Clarified` heading
+   at the end of the file, where `crew plan show`, the plan reviewer and a later session can read it.
    Clarify again only when the goal, scope, a constraint or an earlier answer changes (the `plan.large_growth`
    notice is one such signal), and only about what that change affects. If nobody can answer, such as in an
-   unattended run, do not wait: write your assumption there with `(assumed)` and carry on; the next time the
+   unattended run, do not wait: record your assumption with `--by assumed` and carry on; the next time the
    user is present, confirm those lines.
    For a non-trivial plan (about 3 steps or more) run a **plan review** before you dispatch anything:
    `crew plan review run <slug>`, then the reviewer, filter, refuter and finalize steps in
@@ -106,7 +106,8 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
      task over: do the remaining fix yourself in the task's worktree, say so to the user, and keep
      the change as small as possible. This is the one case where you edit code.
    - Clean: `crew task accept <id>`. Finalize the round first, even when you expect to dismiss its
-     findings: accept notes a task with no review round or an unfinalized one.
+     findings: accept refuses an unfinalized round with findings unless you pass `--skip-refuter "<reason>"`,
+     and tell the user when you do. It only notes a task with no review round.
 10. **Gates, then merge.** Check the gates (below). When allowed, merge with git yourself, then record
     it: `crew task merge <id> --note "<merge commit>"`. Remove the worktree when done
     (`git worktree remove <path>`).
@@ -117,7 +118,8 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
 ## Gates
 
 `gates` in the config decide what needs the user. For each of `push`, `open_pr`, `merge`,
-`remote_hosts`, `large_task`, `install_or_download`:
+`remote_hosts`, `large_task`, `install_or_download`, and any gate this project adds under `gates` in its `crew.json`
+(the hooks do not detect those: asking is your job):
 
 - `auto`: do it.
 - `ask`: run `crew gate ask <gate> --task <id> --detail "<exact action>"` (it prints a gate id), then stop and ask

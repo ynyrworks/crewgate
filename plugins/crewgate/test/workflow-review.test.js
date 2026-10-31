@@ -225,15 +225,25 @@ test('finalize moves a returned task to reviewing and accepts a stored refutatio
   assert.equal(run(repo, 'task', 'accept', t.id).code, 0, 'reviewing -> accepted');
 });
 
-test('accept notes a task with no review round or an unfinalized one, but not a finalized one', () => {
-  const unfinalized = setup();
-  run(unfinalized.repo, 'task', 'report', unfinalized.t.id, '--report-file', u.reportFiles().report);
-  unfinalized.submit([u.finding('a')]);
-  run(unfinalized.repo, 'review', 'filter', unfinalized.t.id);
-  const acc = u.crewJson(['task', 'accept', unfinalized.t.id], unfinalized.repo);
+test('accept refuses findings that skipped the refuter, unless a reason is given, and the reason is kept', () => {
+  const { repo, t, submit } = setup();
+  run(repo, 'task', 'report', t.id, '--report-file', u.reportFiles().report);
+  submit([u.finding('a')]);
+  const raw = run(repo, 'task', 'accept', t.id);
+  assert.notEqual(raw.code, 0, 'not even filtered');
+  run(repo, 'review', 'filter', t.id);
+  const refused = run(repo, 'task', 'accept', t.id);
+  assert.notEqual(refused.code, 0);
+  assert.match(refused.err, /round 1.*crew review finalize/s);
+  assert.equal(u.crewJson(['task', 'show', t.id], repo).data.task.state, 'returned', 'still waiting');
+
+  const acc = u.crewJson(['task', 'accept', t.id, '--skip-refuter', 'typo fix, checked by hand'], repo);
   assert.equal(acc.code, 0, acc.err);
   assert.deepEqual(acc.data.review_gap, { kind: 'unfinalized', round: 1, n: 1 });
+  assert.equal(acc.data.skip_refuter, 'typo fix, checked by hand');
+});
 
+test('accept notes a task with no review round, but not a finalized one', () => {
   const none = setup();
   run(none.repo, 'task', 'report', none.t.id, '--report-file', u.reportFiles().report);
   assert.match(run(none.repo, 'task', 'accept', none.t.id).out, /no review round was recorded/);

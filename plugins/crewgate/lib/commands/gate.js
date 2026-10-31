@@ -45,8 +45,8 @@ module.exports = {
   name: 'gate',
   summary: { en: 'Record approval gates (ask the user before push, PR, merge ...)', 'zh-TW': '記錄核准關卡（推送、PR、合併前先問使用者）' },
   usage: {
-    en: '  crew gate ask <gate> [--task ID] [--detail "..."]   (prints a gate id; gate: push|open_pr|merge|remote_hosts|large_task|install_or_download)\n  crew gate answer <gate-id> yes|no [--note "..."]',
-    'zh-TW': '  crew gate ask <gate> [--task ID] [--detail "..."]   （印出 gate id；gate：push|open_pr|merge|remote_hosts|large_task|install_or_download）\n  crew gate answer <gate-id> yes|no [--note "..."]',
+    en: '  crew gate ask <gate> [--task ID] [--detail "..."]   (prints a gate id; gate: push|open_pr|merge|remote_hosts|large_task|install_or_download, or one the project adds under gates in crew.json)\n  crew gate answer <gate-id> yes|no [--note "..."]',
+    'zh-TW': '  crew gate ask <gate> [--task ID] [--detail "..."]   （印出 gate id；gate：push|open_pr|merge|remote_hosts|large_task|install_or_download，或專案在 crew.json 的 gates 底下自訂的）\n  crew gate answer <gate-id> yes|no [--note "..."]',
   },
   run,
 };

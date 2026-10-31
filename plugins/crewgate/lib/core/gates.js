@@ -28,8 +28,19 @@ function enforceOf(cfg) {
 // gates.require_user_turn: true unless it is explicitly false.
 const requiresUserTurn = (cfg) => !(cfg && cfg.gates && cfg.gates.require_user_turn === false);
 
-function checkGate(gate) {
-  if (!GATES.includes(gate)) throw new UsageError('gate.unknown', { gate: String(gate), choices: GATES.join(', ') });
+// The built-in gates plus the project's own: any other key under `gates` set to auto, ask or never. Only `crew gate ask`
+// uses those; the hooks detect push, PR and merge, not what a project's gate is about.
+const GATE_NAME_RE = /^[a-z][a-z0-9_]{0,39}$/;
+function gateNames(cfg) {
+  const own = Object.entries((cfg && cfg.gates) || {})
+    .filter(([k, v]) => ['auto', 'ask', 'never'].includes(v) && GATE_NAME_RE.test(k) && !GATES.includes(k))
+    .map(([k]) => k);
+  return [...GATES, ...own];
+}
+
+function checkGate(gate, cfg) {
+  const names = gateNames(cfg);
+  if (!names.includes(gate)) throw new UsageError('gate.unknown', { gate: String(gate), choices: names.join(', ') });
   return gate;
 }
 
@@ -38,7 +49,7 @@ function checkGate(gate) {
 //   never -> recorded as asked and answered no, then CrewError gate.never
 //   ask   -> recorded as asked; the orchestrator asks the user and calls answer()
 function ask(projectId, cfg, input, opts = {}) {
-  const gate = checkGate(input.gate);
+  const gate = checkGate(input.gate, cfg);
   const mode = modeOf(cfg, gate);
   const id = newGateId();
   const base = { src: opts.src || 'cli', session: opts.session, task: input.task || undefined };
@@ -128,4 +139,4 @@ function history(projectId, limit = 30) {
   return [...rows.values(), ...missing].sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0)).slice(0, limit);
 }
 
-module.exports = { GATES, ANSWER_WINDOW_MS, modeOf, currentSession, enforceOf, requiresUserTurn, userTurnVerdict, ask, answer, hasApproval, gateOf, history };
+module.exports = { GATES, gateNames, ANSWER_WINDOW_MS, modeOf, currentSession, enforceOf, requiresUserTurn, userTurnVerdict, ask, answer, hasApproval, gateOf, history };

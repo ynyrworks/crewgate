@@ -162,6 +162,27 @@ function suggest(root, cfg) {
     .filter((s) => s.count > 0 && s.days >= cfg.lessons.promote_after_days && !promoted.has(s.key) && !s.retired);
 }
 
+// Does a promoted rule hold? Lessons under its key before and after the last date it was promoted from, as a rate per
+// day so a long and a short period compare. Counts recorded lessons only: a correction nobody recorded is not seen.
+const SCORE_EARLY_DAYS = 7;
+function spanDays(from, to) { return Math.round((Date.parse(to) - Date.parse(from)) / 86400000); }
+function score(root, cfg, today) {
+  const entries = readEntries(root).filter((e) => e.kind !== 'retired');
+  return readRules(root, cfg).filter((r) => r.key).map((r) => {
+    const own = entries.filter((e) => e.key === r.key);
+    const before = own.filter((e) => e.date <= r.last).length;
+    const after = own.filter((e) => e.date > r.last);
+    const beforeDays = spanDays(r.first, r.last) + 1;
+    const afterDays = Math.max(0, spanDays(r.last, today));
+    const rate = (n, d) => (d > 0 ? n / d : 0);
+    let verdict;
+    if (after.length && rate(after.length, afterDays) >= rate(before, beforeDays)) verdict = 'not-helping';
+    else if (after.length) verdict = 'fewer';
+    else verdict = afterDays < SCORE_EARLY_DAYS ? 'too-early' : 'no-repeats';
+    return { key: r.key, rule: r.rule, promoted_from: r.last, before, before_days: beforeDays, after: after.length, after_days: afterDays, last_repeat: after.length ? after.map((e) => e.date).sort().pop() : null, verdict };
+  });
+}
+
 // Oldest rule by last citation; ties go to the least cited.
 function oldestRule(rules, stats) {
   const byKey = new Map(stats.map((s) => [s.key, s]));
@@ -220,6 +241,6 @@ function retire(root, projectId, cfg, key, opts = {}) {
 }
 
 module.exports = {
-  START, END, OLD_START, OLD_END, KINDS, KEY_RE, add, readEntries, summarize, suggest, promote, retire, readRules, splitBlock,
+  START, END, OLD_START, OLD_END, KINDS, KEY_RE, add, readEntries, summarize, suggest, score, promote, retire, readRules, splitBlock,
   parseRules, lessonsFile,
 };

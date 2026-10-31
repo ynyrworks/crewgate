@@ -134,6 +134,7 @@ function packetText({ slug, round, doc, scope, st, caps, taskState }) {
     '',
     `Limits: at most ${caps.max_proposals_per_round} proposals are kept per round; plans nest at most ${plans.MAX_DEPTH} levels; a proposal that would nest deeper is attached at the deepest allowed level.`,
     ...(scope ? [`Scope: step ${scope} and everything below it. Findings about other steps are dropped.`] : []),
+    ...(d.clarified.length ? ['Lines under "## Clarified" in the plan are questions already settled. Do not raise them again; one marked (assumed) was nobody\'s decision, so you may question it.'] : []),
     '',
     '## Goal', f, d.goal || '(none written)', f,
     '', '## Plan as written (Markdown)', f, body.trimEnd(), f,

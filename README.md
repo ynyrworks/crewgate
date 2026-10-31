@@ -138,7 +138,7 @@ git clone https://github.com/ynyrworks/crewgate
 claude --plugin-dir crewgate/plugins/crewgate
 ```
 
-The skill is invoked namespaced: `/crewgate:crew`. The CLI lives at `plugins/crewgate/bin/crew.js`; inside
+The skill is invoked namespaced: `/crewgate:crew`. A session in a crewgate project also writes `~/.crewgate/bin/crew.js`, a path that stays the same across versions, for your own scripts. The CLI lives at `plugins/crewgate/bin/crew.js`; inside
 Claude Code the skill calls it for you. From a terminal use `node plugins/crewgate/bin/crew.js <command>`.
 
 This installs everything crewgate needs. The Office page is separate and you can skip it: see [Optional: Office view](#optional-office-view).
@@ -171,7 +171,7 @@ default language) in `~/.crewgate/config.json`. The full, generated key referenc
 | `roles.<role>.model` / `.engine` | Which model or external engine plays each role. |
 | `checks` | Commands a worker must run before reporting. |
 | `forbidden.paths`, `forbidden.actions` | Boundaries rendered into the worker agent file. |
-| `gates.*` | `auto`, `ask` or `never` for push, PR, merge, remote hosts, large tasks, installs. |
+| `gates.*` | `auto`, `ask` or `never` for push, PR, merge, remote hosts, large tasks, installs. Any other lowercase key is a gate of your project, such as `"release": "ask"`, used through `crew gate ask`; the hooks do not detect what it is about. |
 | `gates.enforce`, `gates.require_user_turn` | When a push, PR or merge without approval is checked (`remind`, `confirm`, `block`) and whether an approval needs a user message after the ask. See Gates below. |
 | `limits.orchestrator_edit` | `off`, `warn` or `block` when the orchestrator edits code. |
 | `limits.max_parallel_workers`, `limits.max_returns_before_takeover` | Concurrency and send-back limits. |
@@ -398,7 +398,7 @@ codex plugin add crewgate@crewgate
   `board.show_text` in the global config. Session statistics (duration, prompts, tool calls, tokens, cost) are numbers only;
   they are cached per transcript under `~/.crewgate/cache/sessions`.
 - Git and gate detection reads only the command text of the Bash and PowerShell tools. A script that pushes, a configured alias, a variable (`$GIT push`), `-EncodedCommand` or a push by another tool (IDE, Git GUI, MCP server) is not seen; the gates guard against the model's ordinary habits, not against a determined bypass.
-- `gates.enforce: confirm` relies on Claude Code honouring a PreToolUse `ask`; its behaviour in bypass-permissions mode (and `dontAsk`) is not verified. `gate.confirmed` means the command ran after an ask was returned, not that a human clicked.
+- `gates.enforce: confirm` relies on Claude Code honouring a PreToolUse `ask`; in `claude -p` (2.1.308) the command did not run in `default`, `dontAsk` or `bypassPermissions` mode, while an interactive session in bypass-permissions mode is not verified. `gate.confirmed` means the command ran after an ask was returned, not that a human clicked.
 - Codex sessions stay on `remind`: whether Codex honours `ask` / `deny` from a hook is not established. Where the session id is unknown (Codex CLI), `gates.require_user_turn` falls back to the weaker `"project"` check: a message in any session of the project counts.
 - The optional Office add-on is experimental and shows activity, not results: whether a command passed is not in the data it receives. A Codex orchestrator is experimental; there is no Gemini support.
 

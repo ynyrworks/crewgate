@@ -16,6 +16,7 @@ const SPECS = {
   },
   list: { positionals: [], options: {} },
   suggest: { positionals: [], options: {} },
+  score: { positionals: [], options: { '--date': { dest: 'date' } } },
   promote: { positionals: [{ name: 'key' }], options: { '--rule': { dest: 'rule' } } },
   retire: { positionals: [{ name: 'key' }], options: {} },
 };
@@ -48,6 +49,11 @@ function run(argv, ctx) {
         ...rows.map((s) => `  ${s.key}  ${ctx.t('wf.lesson.days', { days: s.days, count: s.count })}  ${s.last_text}`),
         ctx.t('wf.lesson.suggestAsk')]
       : [ctx.t('wf.lesson.noCandidates')]);
+  } else if (sub === 'score') {
+    const rows = lessons.score(root, cfg, a.date ? common.checkDate(a.date) : new Date().toISOString().slice(0, 10));
+    ctx.emit(rows, rows.length
+      ? rows.map((s) => `${s.key}  ${ctx.t(`wf.lesson.score.${s.verdict}`)}  ${ctx.t('wf.lesson.scoreCounts', s)}  ${s.rule}`)
+      : [ctx.t('wf.lesson.noRules')]);
   } else if (sub === 'promote') {
     need(a.rule, '--rule');
     const r = lessons.promote(root, proj.id, cfg, a.key, a.rule);
@@ -67,6 +73,7 @@ module.exports = {
       '  crew lesson add --key slug --text "..." [--kind correction|send-back|dismissal|takeover]',
       '  crew lesson list',
       '  crew lesson suggest',
+      '  crew lesson score [--date YYYY-MM-DD]   (did the lessons of each promoted rule stop coming back?)',
       '  crew lesson promote <key> --rule "..."   (only after the user said yes)',
       '  crew lesson retire <key>',
     ].join('\n'),
@@ -74,6 +81,7 @@ module.exports = {
       '  crew lesson add --key slug --text "..." [--kind correction|send-back|dismissal|takeover]',
       '  crew lesson list',
       '  crew lesson suggest',
+      '  crew lesson score [--date YYYY-MM-DD]   （每條升級的規則，相關經驗是否不再出現？）',
       '  crew lesson promote <key> --rule "..."   （必須先得到使用者同意）',
       '  crew lesson retire <key>',
     ].join('\n'),

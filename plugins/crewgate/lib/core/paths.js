@@ -88,8 +88,11 @@ function canonical(p) {
   }
 }
 
+// A path that does not change with the plugin version, for scripts outside Claude Code (written by the SessionStart hook).
+function cliShimFile() { return path.join(home(), 'bin', 'crew.js'); }
+
 module.exports = {
-  isOutside, canonical,
+  cliShimFile, isOutside, canonical,
   ID_RE, TASK_ID_RE, SAFE_ID_RE, STORE_NAMES, HANDOFF_STATES,
   home, legacyHome, configFile, projectsFile, projectDir, dataFile, eventsFile, tasksDir, taskDir,
   handoffDir, handoffFile, projectConfigFile, runtimeDir, sessionsDir,

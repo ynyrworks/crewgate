@@ -34,7 +34,7 @@ const SPECS = {
     options: { '--report-file': { dest: 'reportFile' }, '--packet-file': { dest: 'packetFile' } },
   },
   'send-back': { positionals: [{ name: 'id' }], options: NOTE },
-  accept: { positionals: [{ name: 'id' }], options: NOTE },
+  accept: { positionals: [{ name: 'id' }], options: { ...NOTE, '--skip-refuter': { dest: 'skipRefuter' } } },
   merge: { positionals: [{ name: 'id' }], options: NOTE },
   cancel: { positionals: [{ name: 'id' }], options: NOTE },
   run: {
@@ -271,14 +271,17 @@ function run(argv, ctx) {
     }
     ctx.emit({ task, returns: task.returns, max }, ctx.t('wf.task.sentBack', { id: task.id, n: task.returns, max }));
   } else if (sub === 'accept') {
-    const task = tasks.transition(proj.id, a.id, 'accepted', { ...opts, note: a.note || '' });
-    const taskDir = paths.taskDir(proj.id, task.id);
-    const open = (findingsSummary(taskDir) || { items: [] }).items.filter((f) => f.severity === 'blocker' || f.severity === 'major');
+    const taskDir = paths.taskDir(proj.id, a.id);
     const gap = reviewGap(taskDir);
+    // Findings nobody tried to refute are what the review exists to catch: going past them takes a stated reason.
+    if (gap && gap.kind === 'unfinalized' && !a.skipRefuter) throw new CrewError('wf.task.acceptUnfinalized', { id: a.id, round: gap.round, n: gap.n });
+    const skipped = gap && gap.kind === 'unfinalized' ? { review_gap: gap, skip_refuter: a.skipRefuter } : null;
+    const task = tasks.transition(proj.id, a.id, 'accepted', { ...opts, note: a.note || '', data: skipped || undefined });
+    const open = (findingsSummary(taskDir) || { items: [] }).items.filter((f) => f.severity === 'blocker' || f.severity === 'major');
     const L = [ctx.t('wf.task.accepted', { id: task.id })];
     if (open.length) L.push(ctx.t('wf.task.acceptedWithFindings', { n: open.length, ids: open.map((f) => f.id).join(', ') }));
     if (gap) L.push(gap.kind === 'none' ? ctx.t('wf.task.acceptedNoReview') : ctx.t('wf.task.acceptedUnfinalized', { round: gap.round, n: gap.n }));
-    ctx.emit({ task, open_findings: open, review_gap: gap }, L);
+    ctx.emit({ task, open_findings: open, review_gap: gap, ...(skipped ? { skip_refuter: a.skipRefuter } : {}) }, L);
   } else if (sub === 'merge') {
     if (cfg.gates.merge === 'never') throw new CrewError('wf.task.mergeNever');
     const before = tasks.load(proj.id, a.id);
@@ -304,7 +307,7 @@ module.exports = {
       '  crew task show <id>',
       '  crew task report <id> --report-file F [--packet-file F]   (used by the worker)',
       '  crew task send-back <id> --note "..."',
-      '  crew task accept <id> [--note "..."]',
+      '  crew task accept <id> [--note "..."] [--skip-refuter "reason"]   (the reason is needed when a review round was not finalized)',
       '  crew task merge <id> [--note "..."]    (records the merge; it does not run git)',
       '  crew task cancel <id> [--note "..."]',
       '  crew task run <id> [--engine codex] [--timeout 1800] [--model M]   (run a Codex CLI worker in the task worktree)',
@@ -315,7 +318,7 @@ module.exports = {
       '  crew task show <id>',
       '  crew task report <id> --report-file F [--packet-file F]   （worker 使用）',
       '  crew task send-back <id> --note "..."',
-      '  crew task accept <id> [--note "..."]',
+      '  crew task accept <id> [--note "..."] [--skip-refuter "原因"]   （審查輪次沒有定案時必須說明原因）',
       '  crew task merge <id> [--note "..."]    （只記錄合併，不執行 git）',
       '  crew task cancel <id> [--note "..."]',
       '  crew task run <id> [--engine codex] [--timeout 1800] [--model M]   (run a Codex CLI worker in the task worktree)',

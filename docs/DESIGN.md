@@ -138,6 +138,7 @@ All fields are optional; defaults below. The board's Settings page edits this fi
   "gates": {
     "push": "ask", "open_pr": "ask", "merge": "ask",
     "remote_hosts": "ask", "large_task": "ask", "install_or_download": "ask"
+    // plus a project's own, such as "release": "ask": any lowercase key set to auto, ask or never works with crew gate ask
   },
   "limits": {
     "max_parallel_workers": 3,
@@ -325,9 +326,10 @@ enforced (and never registered). A dynamic directory (`cd "$DIR"`) falls back to
 | Depends on | PostToolUse only | client support for PreToolUse `ask`, and the permission mode | PreToolUse `deny` |
 | A security boundary | no | partly: the click is yours, but see the limits below | no: the model can still call `crew gate answer` itself |
 
-**Permission modes (`confirm`).** Claude Code documents PreToolUse `ask` as "prompt the user for this tool call". What
-it does in `bypassPermissions` ("skip all permission prompts") or `dontAsk` mode was **not verified** in this change:
-do not rely on `confirm` there. The hook records the `permission_mode` it saw in `gate.prompted` / `gate.confirmed`, so a
+**Permission modes (`confirm`).** Claude Code documents PreToolUse `ask` as "prompt the user for this tool call". In
+real `claude -p` runs (2.1.308, 2026-10-31) a gated `git push` did not run in `default`, `dontAsk` or `bypassPermissions`
+mode: `gate.prompted` was recorded, no `gate.confirmed`, and the remote stayed unchanged. So an unattended run is stopped,
+not waved through. An interactive session in `bypassPermissions` is **not verified**: do not rely on `confirm` there. The hook records the `permission_mode` it saw in `gate.prompted` / `gate.confirmed`, so a
 run can be audited afterwards. crewgate cannot tell from a hook whether a prompt was really shown, so `gate.confirmed`
 means "the command ran after an ask was returned", not "a human clicked".
 
@@ -655,6 +657,7 @@ Optional free text (goal).
   accepted). The comment holds `id`, `task` (one task id), `added` (YYYY-MM-DD) and `origin` (`plan | user | review |
   refute | implementation | send-back`, default `plan`); unknown keys are kept. Depth is at most 3 (the CLI refuses a
   deeper add; a hand-edited deeper line is shown and `crew doctor` warns). The board reads at most 256 KiB and 500 nodes.
+- Lines under a `## Clarified` heading are settled questions (`crew plan clarify`), not steps: `plan show`, the plan page and the plan review packet carry them. New steps go above that heading. The goal is the text between the title and the first list item or heading.
 - Parsing is tolerant and never throws: non-list lines are kept as they are, lines without a comment are valid, tabs and
   2-4 space indents are accepted, a heading restarts the nesting. A rewrite re-renders only the lines it changed (new
   ids, state, link) and leaves every other byte alone; writes are atomic and held under a lock.
