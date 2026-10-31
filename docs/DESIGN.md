@@ -433,7 +433,7 @@ is denied with the measured percent, the limit, what to do (wait for a worker or
 to turn it off; `dispatch.load` `{ percent, limit, task }` is recorded, no prompt text. One sample can be a spike, so when the
 first is over a second is taken and the dispatch is denied only if both are over (the second is reported). Cost: about 200 ms
 per worker dispatch, about 400 ms when the first is over, against a 5 s hook timeout (the in-process guard answers at 4 s);
-reviewers, refuters, subagent calls and other tools never reach it. Any failure of the sampler lets the dispatch through. The environment variable `CREWGATE_CPU_CHECK=off` skips the check; only the hook test helper sets it, so a busy test machine does not deny the dispatches of unrelated tests (the load tests stub the sampler in process).
+reviewers, refuters, subagent calls and other tools never reach it. Any failure of the sampler lets the dispatch through. The spawn-based hook tests that dispatch a worker set `limits.dispatch_max_cpu` to 100 in their own fixtures; the load tests stub the sampler in process.
 
 **Parallel workers.** A dispatch through Agent / Task, or a SendMessage to a stopped worker (`tool_input.to`, read from
 the tool's documented input, not measured), that would pass `limits.max_parallel_workers` is denied when

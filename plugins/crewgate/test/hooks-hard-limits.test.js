@@ -34,7 +34,7 @@ test('config: parallel_enforce defaults to block and is documented in both langu
 });
 
 test('dispatch over max_parallel_workers is denied, names the running tasks, and records nothing', () => {
-  const f = H.fixture(cfg(2));
+  const f = H.dispatchFixture(cfg(2));
   H.start(f);
   const a = H.newTask(f, 'A');
   const b = H.newTask(f, 'B');
@@ -49,7 +49,7 @@ test('dispatch over max_parallel_workers is denied, names the running tasks, and
 });
 
 test('re-dispatching a task that is already counted does not count it twice', () => {
-  const f = H.fixture(cfg(2));
+  const f = H.dispatchFixture(cfg(2));
   H.start(f);
   const a = H.newTask(f, 'A');
   const b = H.newTask(f, 'B');
@@ -60,7 +60,7 @@ test('re-dispatching a task that is already counted does not count it twice', ()
 });
 
 test('a stopped worker no longer counts', () => {
-  const f = H.fixture(cfg(1));
+  const f = H.dispatchFixture(cfg(1));
   H.start(f);
   const a = H.newTask(f, 'A');
   const b = H.newTask(f, 'B');
@@ -71,7 +71,7 @@ test('a stopped worker no longer counts', () => {
 });
 
 test('parallel_enforce=warn lets the dispatch through with a reminder', () => {
-  const f = H.fixture(cfg(1, { parallel_enforce: 'warn' }));
+  const f = H.dispatchFixture(cfg(1, { parallel_enforce: 'warn' }));
   H.start(f);
   const a = H.newTask(f, 'A');
   const b = H.newTask(f, 'B');
@@ -82,7 +82,7 @@ test('parallel_enforce=warn lets the dispatch through with a reminder', () => {
 });
 
 test('four stale dispatched tasks and a resumed session still allow a dispatch', () => {
-  const f = H.fixture(cfg(3));
+  const f = H.dispatchFixture(cfg(3));
   H.start(f);
   const stale = ['1', '2', '3', '4'].map((n) => dispatched(f, `S${n}`));
   // Records of the old process: still open, as an app quit leaves them.
@@ -99,7 +99,7 @@ test('four stale dispatched tasks and a resumed session still allow a dispatch',
 });
 
 test('stale dispatched tasks with no record never count, and a compact keeps the live records', () => {
-  const f = H.fixture(cfg(1));
+  const f = H.dispatchFixture(cfg(1));
   H.start(f);
   ['x', 'y', 'z'].forEach((n) => dispatched(f, n));
   const fresh = H.newTask(f, 'Fresh');
@@ -111,7 +111,7 @@ test('stale dispatched tasks with no record never count, and a compact keeps the
 });
 
 test('records of an ended session do not count, nor do records older than six hours', () => {
-  const f = H.fixture(cfg(1));
+  const f = H.dispatchFixture(cfg(1));
   H.start(f);
   const old = dispatched(f, 'old');
   const gone = dispatched(f, 'gone');
@@ -121,7 +121,7 @@ test('records of an ended session do not count, nor do records older than six ho
 });
 
 test('SendMessage to a stopped worker counts like a dispatch; other messages pass', () => {
-  const f = H.fixture(cfg(1));
+  const f = H.dispatchFixture(cfg(1));
   H.start(f);
   const a = dispatched(f, 'A');
   const b = dispatched(f, 'B');
@@ -139,7 +139,7 @@ test('SendMessage to a stopped worker counts like a dispatch; other messages pas
 });
 
 test('a failing check lets the dispatch through', () => {
-  const f = H.fixture(cfg(1));
+  const f = H.dispatchFixture(cfg(1));
   H.start(f);
   assert.equal(pre(f, H.base(f, { tool_name: 'SendMessage', tool_input: { to: 5 } })).out, '{}');
 });
@@ -350,4 +350,20 @@ test('SendMessage that wakes a stopped worker is checked; another message is not
 test('sample(): whole-machine percent from two readings, in 0-100', () => {
   const p = load.sample(20);
   assert.ok(Number.isInteger(p) && p >= 0 && p <= 100, String(p));
+});
+
+test('SendMessage over max_parallel_workers with parallel_enforce=warn is still denied for CPU load', () => {
+  const f = H.fixture({ config: { limits: { max_parallel_workers: 1, parallel_enforce: 'warn', dispatch_max_cpu: 85 } } });
+  H.start(f);
+  const a = dispatched(f, 'A');
+  const b = dispatched(f, 'B');
+  record(f, a);
+  record(f, b, { agent: 'ag-b', stopped: true });
+  const send = H.base(f, { tool_name: 'SendMessage', tool_use_id: 'tu-s', tool_input: { to: 'ag-b', message: 'go' } });
+  const out = withSampler([96], () => inproc(send));
+  assert.equal(out.permissionDecision, 'deny');
+  assert.ok(out.permissionDecisionReason.includes('96%'));
+  const warn = withSampler([10], () => inproc(send));
+  assert.equal(warn.permissionDecision, undefined);
+  assert.ok(warn.additionalContext);
 });

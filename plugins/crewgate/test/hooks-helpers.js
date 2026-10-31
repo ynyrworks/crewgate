@@ -19,7 +19,7 @@ function runHook(event, payload, opts = {}) {
   const t0 = process.hrtime.bigint();
   const r = spawnSync(process.execPath, [HOOK, event], {
     input, cwd: opts.cwd || process.cwd(), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
-    env: { ...process.env, CREWGATE_HOOK_GUARD_MS: '30000', CREWGATE_CPU_CHECK: 'off', ...(opts.env || {}) },
+    env: { ...process.env, CREWGATE_HOOK_GUARD_MS: '30000', ...(opts.env || {}) },
   });
   const ms = Number(process.hrtime.bigint() - t0) / 1e6;
   const out = (r.stdout || '').trim();
@@ -35,6 +35,13 @@ function fixture(opts = {}) {
   if (opts.config) writeConfig(repo, opts.config);
   const pid = project.add(repo, { name: 'demo' }).project.id;
   return { home, repo, pid, sid: opts.sid || 'sess-1' };
+}
+
+// A fixture for a test that dispatches a worker (or wakes one): the CPU check is off in it, so a busy test machine
+// cannot deny the dispatch. Written into those fixtures only: a crew.json changes what other tests see (board port).
+function dispatchFixture(opts = {}) {
+  const cfg = opts.config || {};
+  return fixture({ ...opts, config: { ...cfg, limits: { dispatch_max_cpu: 100, ...(cfg.limits || {}) } } });
 }
 
 function writeConfig(repo, cfg) {
@@ -69,4 +76,4 @@ const agentPayload = (f, task, extra) => base(f, {
   tool_input: { prompt: `crew-task: ${task.id}\n\ndo it`, subagent_type: 'crew-worker', description: 'x' }, ...extra,
 });
 
-module.exports = { HOOK, runHook, fixture, writeConfig, prompt, approve, base, start, evs, newTask, agentPayload };
+module.exports = { HOOK, runHook, fixture, dispatchFixture, writeConfig, prompt, approve, base, start, evs, newTask, agentPayload };

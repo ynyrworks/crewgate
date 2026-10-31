@@ -35,7 +35,6 @@ function setSampler(fn) { sampler = fn || sample; } // tests only
 // enough, and any failure of the sampler lets the dispatch through. limit 100 (or not a number) is off: no sample.
 function overLimit(limit) {
   if (!(limit < 100) || !(limit >= 0)) return null;
-  if (process.env.CREWGATE_CPU_CHECK === 'off') return null; // set by the hook test helper: a busy test machine must not deny
   try {
     const first = sampler();
     if (!(first > limit)) return null;

@@ -108,7 +108,7 @@ function onSend(payload) {
   const vars = { id: rec.task, count: others.length + 1, max: lim.max_parallel_workers, ids: others.join(', ') };
   if (lim.max_parallel_workers > 0 && vars.count > vars.max) {
     if (lim.parallel_enforce !== 'warn') return C.deny(h.t('deny.parallel', vars));
-    return C.withContext('PreToolUse', h.t('warn.parallel', vars));
+    return denyLoad(h, rec.task, lim) || C.withContext('PreToolUse', h.t('warn.parallel', vars));
   }
   const busy = denyLoad(h, rec.task, lim);
   if (busy) return busy;
