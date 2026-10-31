@@ -213,6 +213,36 @@ test('full pipeline: filter -> finalize -> show; task show lists the survivors',
   assert.match(run(repo, 'task', 'show', t.id).out, /Findings, round 1: 1 \(major 1\)/);
 });
 
+test('filter prints dropped findings with reason and a cut claim; nothing dropped prints nothing new; show counts them', () => {
+  const { repo, t, submit } = setup();
+  const long = 'x'.repeat(400);
+  submit([
+    u.finding('guess', { verified_by: 'inference', snippet: 'guess()', claim: 'Run expands %VAR% in the command' }),
+    u.finding('wordy', { confidence: 0.2, snippet: 'wordy()', claim: long }),
+    u.finding('keep', { snippet: 'keep()' }),
+  ]);
+  const out = run(repo, 'review', 'filter', t.id).out;
+  assert.match(out, /dropped \(inference\) guess \[\w+\] src\/x\.js:\d+ {2}Run expands %VAR% in the command/);
+  const wordy = out.split('\n').find((l) => l.includes('dropped (low-confidence) wordy'));
+  assert.ok(wordy && wordy.length < 220 && !wordy.includes('x'.repeat(200)), 'the claim is cut');
+  assert.match(out, /send-back/);
+  assert.equal(u.crewJson(['review', 'filter', t.id], repo).data.dropped.length, 2, 'json fields are unchanged');
+  assert.match(run(repo, 'review', 'show', t.id).out, /Dropped by reason: inference 1, low-confidence 1/);
+
+  submit([u.finding('only', { snippet: 'only()' })], ['--round', '2']);
+  const quiet = run(repo, 'review', 'filter', t.id, '--round', '2').out;
+  assert.ok(!/dropped \(|Read the dropped|Dropped by/.test(quiet));
+});
+
+test('filter lists a dismissed finding as dismissed', () => {
+  const { repo, t, submit } = setup();
+  submit([u.finding('a', { snippet: 'a()' })]);
+  assert.equal(run(repo, 'review', 'dismiss', t.id, 'a', '--scope', 'always', '--reason', 'accepted').code, 0);
+  submit([u.finding('b', { snippet: 'a()' })], ['--round', '2']);
+  const out = run(repo, 'review', 'filter', t.id, '--round', '2').out;
+  assert.match(out, /dropped \(dismissed\) b /);
+});
+
 test('finalize moves a returned task to reviewing and accepts a stored refutations file', () => {
   const { repo, t, submit } = setup();
   run(repo, 'task', 'report', t.id, '--report-file', u.reportFiles().report);

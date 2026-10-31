@@ -184,6 +184,16 @@ function doFilter(ctx, a) {
   const L = [ctx.t('wf.review.filtered', { round, total: list.length, kept: kept.length, dropped: dropped.length })];
   if (dropped.length) L.push(ctx.t('wf.review.droppedBy', { reasons: Object.entries(reasons).map(([k, v]) => `${k} ${v}`).join(', ') }));
   for (const d of dropped.filter((x) => x.reason === 'invalid')) L.push(ctx.t('wf.review.invalidEntry', { id: (d.finding && d.finding.id) || '?', detail: d.detail }));
+  // the filter works on labels, not on truth: show what it dropped so a true finding is not lost
+  const seen = dropped.filter((x) => x.reason !== 'invalid' && x.finding && typeof x.finding === 'object');
+  for (const d of seen) {
+    const f = d.finding;
+    L.push(ctx.t('wf.review.droppedEntry', {
+      id: clean(String(f.id), 40), reason: d.reason, severity: clean(String(f.severity), 20),
+      file: clean(String(f.file), 120), line: clean(String(f.line), 12), claim: clean(String(f.claim || ''), 120),
+    }));
+  }
+  if (seen.length) L.push(ctx.t('wf.review.droppedRead', { id: c.task.id }));
   for (const f of kept) L.push(`  ${brief(f)}`);
   if (kept.length) {
     const role = c.cfg.roles.refuter || {};
@@ -239,6 +249,11 @@ function doShow(ctx, a) {
   let filtered = [];
   try { filtered = rv.readArray(rv.roundFile(c.dir, round, 'filtered.json'), 'filtered'); } catch { /* none */ }
   const L = [ctx.t(suffix === 'json' ? 'wf.review.showFinal' : 'wf.review.showKept', { round, n: list.length, filtered: filtered.length })];
+  if (filtered.length) {
+    const why = {};
+    for (const d of filtered) why[d.reason] = (why[d.reason] || 0) + 1;
+    L.push(ctx.t('wf.review.droppedBy', { reasons: Object.entries(why).map(([k, v]) => `${k} ${v}`).join(', ') }));
+  }
   for (const f of list) {
     L.push(`${brief(f)}${f.verdict ? ` (${f.verdict})` : ''}`);
     L.push(`    ${ctx.t('wf.review.evidence')}: ${(f.evidence || []).join(', ')}  [${f.verified_by}, ${f.confidence}]`);

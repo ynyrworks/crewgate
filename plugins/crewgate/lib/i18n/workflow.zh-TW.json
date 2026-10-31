@@ -85,6 +85,8 @@
   "wf.review.submitted": "已儲存第 {round} 輪的 {n} 筆 {kind}。",
   "wf.review.filtered": "第 {round} 輪：原始 {total} 筆，保留 {kept} 筆，濾掉 {dropped} 筆。",
   "wf.review.droppedBy": "濾掉的原因：{reasons}",
+  "wf.review.droppedEntry": "  濾掉（{reason}）{id} [{severity}] {file}:{line}  {claim}",
+  "wf.review.droppedRead": "請讀上面被濾掉的發現：過濾器看的是標籤，不是真假。要提出其中一筆，就退回任務並在備註引用它的 id、file:line 與說法（crew task send-back {id} --note \"...\"）。",
   "wf.review.invalidEntry": "  無效項目 {id}：{detail}",
   "wf.review.refuteNext": "下一步：用 Agent 工具派出反駁員：subagent_type \"{agent}\"，model \"{model}\"。",
   "wf.review.nothingToRefute": "沒有留下任何發現。下一步：crew review finalize {id}",
