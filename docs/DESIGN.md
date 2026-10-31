@@ -432,7 +432,8 @@ than 6 hours, whose task is still `dispatched` and whose session file still exis
 being dispatched is left out, so a re-dispatch is not counted twice. SessionStart with source `startup`, `resume` or
 `fork` marks every open record stopped (a new process has none of the old workers; `compact` and `clear` keep them), so
 tasks an app quit left `dispatched` never block and can be dispatched again at once. Two sessions open on one project at the
-same time share the map, so the second one starting clears the first one's records. `crew task send-back` and
+same time share the map, so the second one starting clears the first one's records: the count then errs low (it undercounts,
+it never blocks by mistake). A worker woken by SendMessage counts whatever its task state until it stops again. `crew task send-back` and
 reviewers are not counted.
 
 ## 9. Review pipeline

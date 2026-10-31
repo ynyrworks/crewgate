@@ -160,7 +160,8 @@ function running(pid, exceptTask) {
     if (!r || !r.worker || r.stopped || !r.task || r.task === exceptTask || out.includes(r.task)) continue;
     if (Date.now() - (r.ts || 0) > RUNNING_MAX_AGE_MS) continue;
     if (r.session && !read(r.session)) continue;
-    try { if (tasks.load(pid, r.task).state !== 'dispatched') continue; } catch { continue; }
+    // A worker woken by SendMessage (resumed) counts whatever its task state, until it stops again (markStopped).
+    if (!r.resumed) { try { if (tasks.load(pid, r.task).state !== 'dispatched') continue; } catch { continue; } }
     out.push(r.task);
   }
   return out;

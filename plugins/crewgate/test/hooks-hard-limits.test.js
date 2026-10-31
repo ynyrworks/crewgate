@@ -203,3 +203,35 @@ test('prefilter: an ordinary command stays on the fast path; a subagent loop doe
   assert.equal(b('while true; do :; done', { agent_id: 'a' }), false);
   assert.equal(b('stress --cpu 2', { agent_id: 'a' }), false);
 });
+
+test('commands that only mention a loop are never denied', () => {
+  const mention = ['grep -n "while ($true)" file', 'grep -n while ($true) file', 'git commit -m "while(true) fix"', 'rg "for(;;)"', 'rg for(;;) src',
+    'echo while ($true)', 'echo "while true; do :; done"', 'Select-String -Pattern "while ($true)" f.ps1', 'git commit -m "node -e for(;;){}"',
+    'grep "yes > /dev/null" f', 'echo yes > /dev/null', 'grep stress f', 'cat notes.txt | grep "while true"', 'git log --grep="for(;;)"',
+    'rg "for i in $(seq 1 99); do node a.js & done"', 'echo "for i in $(seq 1 99); do x & done"', 'git commit -m "for i in {1..99}; do a & done"',
+    'powershell -Command "Select-String -Pattern \'while ($true)\' f.ps1"', 'cmd /c grep "node -e for(;;){}" f', 'grep -n "python -c while True" f',
+    'yes | installer > /dev/null', 'yes | head -3 > /dev/null', 'echo ok'];
+  // (a reviewer's own git commit is denied by the git rule, which is not what is tested here)
+  for (const type of ROLES) for (const c of mention.filter((x) => type === 'crew-worker' || !x.startsWith('git commit'))) assert.equal(limits.scan(c, type), null, `${type}: ${c}`);
+  // the real statements are still caught
+  for (const c of ['while ($true) {}', 'while($true){ }', 'for (;;) { }', 'echo a; while ($true) {}', 'timeout 5 yes > /dev/null']) assert.ok(limits.scan(c, 'crew-worker'), c);
+});
+
+test('a worker woken by SendMessage counts whatever its task state, until it stops', () => {
+  const f = H.fixture(cfg(1));
+  H.start(f);
+  const a = dispatched(f, 'A');
+  const b = dispatched(f, 'B');
+  tasks.recordReport(f.pid, b.id, { report: require('./helpers').GOOD_REPORT });
+  assert.equal(tasks.load(f.pid, b.id).state, 'returned');
+  record(f, b, { agent: 'ag-b', stopped: true });
+  const send = H.base(f, { tool_name: 'SendMessage', tool_use_id: 'tu-s', tool_input: { to: 'ag-b' } });
+  assert.equal(pre(f, send).out, '{}');
+  assert.deepEqual(sess.running(f.pid, null), [b.id]); // returned, but woken: counted
+  const c = H.newTask(f, 'C');
+  assert.equal(decision(pre(f, H.agentPayload(f, c))), 'deny');
+  sess.markStopped(f.pid, `tu-${b.id}`);
+  assert.deepEqual(sess.running(f.pid, null), []);
+  assert.equal(pre(f, H.agentPayload(f, c)).out, '{}');
+  void a;
+});

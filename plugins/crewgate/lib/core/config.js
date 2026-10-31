@@ -26,7 +26,6 @@ const DEFAULTS = Object.freeze({
   limits: {
     max_parallel_workers: 3,
     parallel_enforce: 'block',
-    parallel_enforce: "block",
     max_returns_before_takeover: 2,
     report_max_tokens: 1500,
     orchestrator_read_warn_lines: 300,

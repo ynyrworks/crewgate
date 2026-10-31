@@ -94,7 +94,7 @@ function onSend(payload) {
     if (lim.parallel_enforce !== 'warn') return C.deny(h.t('deny.parallel', vars));
     return C.withContext('PreToolUse', h.t('warn.parallel', vars));
   }
-  sess.remember(h.pid, rec.id, { ...rec, id: undefined, stopped: false, ts: Date.now(), session: h.sid || null });
+  sess.remember(h.pid, rec.id, { ...rec, id: undefined, stopped: false, resumed: true, ts: Date.now(), session: h.sid || null });
   return null;
 }
 
