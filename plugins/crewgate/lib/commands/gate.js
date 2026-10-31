@@ -32,7 +32,7 @@ function run(argv, ctx) {
     const cfg = ctx.config().config;
     const promptsOf = (id) => { const s = sess.read(id); return s && Array.isArray(s.prompt_ts) ? s.prompt_ts : []; };
     const r = gates.answer(proj.id, a.id, a.answer, a.note, {
-      ...opts, prompts: opts.session ? promptsOf(opts.session) : [], promptsOf, projectPrompts: () => sess.promptsOfProject(proj.id),
+      ...opts, requireUserTurn: gates.requiresUserTurn(cfg), prompts: opts.session ? promptsOf(opts.session) : [], promptsOf, projectPrompts: () => sess.promptsOfProject(proj.id),
     });
     const lines = [ctx.t('gate.answered', { id: r.id, gate: r.gate, answer: r.answer })];
     if (r.answer === 'yes' && r.user_turn === false && gates.requiresUserTurn(cfg)) lines.push(ctx.t('gate.noUserTurn', { id: r.id }));

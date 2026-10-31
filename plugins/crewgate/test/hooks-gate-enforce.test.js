@@ -438,13 +438,14 @@ test('prompt times are kept without text', () => {
 });
 
 // ---------------------------------------------------------------- CLI
-test('crew gate answer warns when no user message happened since the ask', () => {
+test('crew gate answer refuses when no user message happened since the ask', () => {
   const f = fixture('confirm');
   const env = { CLAUDE_CODE_SESSION_ID: f.sid };
   const ask = gates.ask(f.pid, {}, { gate: 'push' }, { session: f.sid });
   const r1 = crew(['gate', 'answer', ask.id, 'yes'], f.repo, env);
-  assert.equal(r1.code, 0, r1.err);
-  assert.match(r1.out, /will not count/);
+  assert.notEqual(r1.code, 0);
+  assert.match(r1.err, /user must reply in chat first/);
+  assert.equal(events.read(f.pid, { types: 'gate.answered' }).length, 0);
   const ask2 = gates.ask(f.pid, {}, { gate: 'push' }, { session: f.sid });
   prompt(f);
   const r2 = crew(['gate', 'answer', ask2.id, 'yes'], f.repo, env);

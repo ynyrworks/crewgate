@@ -8,7 +8,7 @@ Call as `node "${CLAUDE_PLUGIN_ROOT}/bin/crew.js" ...`. Global options: `--json`
   project. Never overwrites without `--force` (then `*.bak-<timestamp>` copies; your config values are kept; `.crew/REVIEW.md` and `.crew/LESSONS.md` are never touched by `--force`, only `--reset-review-files` replaces them, with a backup).
 - `crew update check [--force]` / `crew update apply`: the update notice (cached once a day, `updates.check` in the global config turns it off) and the one-click update with fixed commands; `apply` prints the commands instead when nothing can run.
 - `crew doctor`: Node version, config validity (with field paths), empty `checks`, registration, hooks file, when each hook last fired in this project, duplicate-looking work items, board.
-- `crew gate ask <gate> [--task ID] [--detail T]`: records `gate.asked`, prints a gate id (gate: push, open_pr, merge, remote_hosts, large_task, install_or_download, or any other key the project sets to `auto`, `ask` or `never` under `gates`). `auto` answers yes at once; `never` exits 1. `crew gate answer <gate-id> yes|no [--note T]` records the user reply (it warns when no user message happened since the ask: with `gates.require_user_turn` such an answer does not count).
+- `crew gate ask <gate> [--task ID] [--detail T]`: records `gate.asked`, prints a gate id (gate: push, open_pr, merge, remote_hosts, large_task, install_or_download, or any other key the project sets to `auto`, `ask` or `never` under `gates`). `auto` answers yes at once; `never` exits 1. `crew gate answer <gate-id> yes|no [--note T]` records the user reply (with `gates.require_user_turn`, a `yes` is refused, exit 1, when a session is known and no user message came after the ask; a `no` is always accepted; with no session known it only warns).
 - `crew project add|list|rm`
 
 ## Tasks
@@ -48,6 +48,7 @@ A plan is a tree of steps in `.crew/plans/<slug>.md` (slug `[a-z0-9-]{1,40}`, at
 
 ## Release record
 - `crew release record <version> [--from REF] [--to REF] [--plan SLUG]... [--conclusion-file F] [--dir D] [--force]`: writes `<release.record_dir>/<version>.md` (default `.crew/releases`): the merged tasks of the range with review rounds, surviving findings, NOT RE-REVIEWED / NO REVIEW flags, linked plans, gates and the conclusion between `<!-- crew:conclusion -->` markers. `--to` defaults to tag `v<version>` else HEAD, `--from` to the nearest earlier tag; an unknown ref writes nothing. Running again keeps the conclusion unless `--conclusion-file` is given; a file without the markers needs `--force`. Reads only, never commits or tags.
+- `crew release check [--commit SHA]`: asks `gh` for the workflow runs of the commit (default HEAD) and prints each job. Exit 0 only if a run exists and every job completed with success; pending, failed or no run exits 1 and says which; a missing `gh` is an error message. Reads only: no push, no token read or shown.
 
 ## Handoff and lessons
 - `crew handoff create --title T --body-file F [--task <id>]`, `list [--all]`, `show <id>`, `accept <id>`, `cancel <id>`
