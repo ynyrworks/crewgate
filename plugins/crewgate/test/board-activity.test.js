@@ -108,30 +108,83 @@ test('activity does not disturb the stored cards: work, log, mrs, validation com
   assert.deepEqual(d.validation, {});
 });
 
-test('project page source: stored cards win over activity, empty cards fold, validation is never filled from events', () => {
+test('project page source: the model decides, empty cards fold, validation is never filled from events', () => {
   const src = read('app.js');
   const en = JSON.parse(read('i18n/en.json'));
   const zh = JSON.parse(read('i18n/zh-TW.json'));
   assert.equal(en['project.recentMerges'], 'Recent merges');
   assert.equal(zh['project.recentMerges'], '最近合併');
-  // stored data: the existing cards, with their add forms and remove links
-  assert.match(src, /d\.log\.length \? \[\] : stepActs\(d\.activity\)/);
-  assert.match(src, /d\.mrs\.length \? \[\] : mergeActs\(d\.activity\)/);
+  assert.match(read('index.html'), /<script src="\/activity-model\.js"><\/script>/);
+  assert.match(src, /AM\.forms\(d\)/);
   assert.match(src, /t\('remove'\)/);
-  // empty ones fold into a details element; the add forms are inside it
   assert.match(src, /function foldCard[\s\S]*?h\('details'/);
   assert.match(src, /foldCard\(t\('project\.work'\)[\s\S]*?workBody/);
   assert.match(src, /foldCard\(t\('project\.log'\)[\s\S]*?logBody/);
   assert.match(src, /foldCard\(t\('project\.validation'\)/);
   const val = src.slice(src.indexOf('var vrows = []'), src.indexOf('// handoffs'));
   assert.ok(!/activity/.test(val), 'validation does not read events');
-  // private mode: ids only
-  assert.match(src, /function actWho\(a\) \{ return a\.task \? \(S\.mask \? a\.task/);
-  assert.match(src, /if \(!S\.mask\) \{\s*if \(a\.type === 'task\.merged'\)/);
-  // every activity word exists in both tables
+  assert.match(read('app.css'), /\.card\.fold \{[^}]*align-self: start/);
   for (const k of ['act.task.created', 'act.task.returned', 'act.task.sent_back', 'act.task.accepted', 'act.merged', 'act.push', 'act.gate', 'act.plan']) {
     assert.ok(en[k] && zh[k], k);
   }
+});
+
+const AM = require('../board/public/activity-model.js');
+const en = JSON.parse(read('i18n/en.json'));
+const tr = (k, v) => String(en[k] || k).replace(/\{(\w+)\}/g, (m, n) => (v && v[n] !== undefined ? v[n] : m));
+const merged = { ts: '2026-03-01T00:00:00Z', type: 'task.merged', task: 't-1', title: 'Secret title', data: { branch: 'crew/x', note: 'abc123' } };
+const pushed = { ts: '2026-03-02T00:00:00Z', type: 'git.push', task: null, title: null, data: { remote: 'origin', refs: ['main'] } };
+const step = { ts: '2026-03-03T00:00:00Z', type: 'task.accepted', task: 't-1', title: 'Secret title', data: {} };
+
+test('activity model: filled data keeps the stored cards', () => {
+  const f = AM.forms({
+    work: [{ name: 's', items: [{}, {}] }], log: [{ text: 'x' }], mrs: [{ iid: 1 }],
+    validation: { a: [{ date: 'd', host: 'h', result: 'ok' }] }, activity: [merged, step],
+  });
+  assert.deepEqual(f, { work: 'card', log: 'log', mrs: 'mrs', validation: 'card', workItems: 2 });
+});
+
+test('activity model: empty data folds, or falls back to events; validation never reads events', () => {
+  assert.deepEqual(AM.forms({ work: [], log: [], mrs: [], validation: {}, activity: [] }), { work: 'fold', log: 'fold', mrs: 'none', validation: 'fold', workItems: 0 });
+  const f = AM.forms({ work: [], log: [], mrs: [], validation: {}, activity: [merged, pushed, step] });
+  assert.equal(f.log, 'acts');
+  assert.equal(f.mrs, 'merges');
+  assert.equal(f.validation, 'fold');
+  assert.equal(AM.forms({ work: [], log: [], mrs: [], validation: {}, activity: [merged] }).log, 'fold');
+  assert.equal(AM.forms({ work: [], log: [], mrs: [], validation: {}, activity: [step] }).mrs, 'none');
+});
+
+test('activity model: row text, and private mode shows ids and types only', () => {
+  assert.equal(AM.rowText(step, false, tr), 'Secret title \u00b7 ' + tr('act.task.accepted'));
+  assert.equal(AM.rowText(step, true, tr), 't-1 \u00b7 ' + tr('act.task.accepted'));
+  assert.equal(AM.detailText(merged, false, tr), ' \u00b7 ' + [tr('act.merged'), 'crew/x', 'abc123'].join(' \u00b7 '));
+  assert.equal(AM.detailText(merged, true, tr), ' \u00b7 ' + tr('act.merged'));
+  assert.equal(AM.detailText(pushed, false, tr), [tr('act.push'), 'origin', 'main'].join(' \u00b7 '));
+  assert.equal(AM.detailText(pushed, true, tr), tr('act.push'));
+  const plan = { type: 'plan.created', task: null, data: { slug: 'big' } };
+  assert.match(AM.rowText(plan, false, tr), /big/);
+  assert.ok(!/big/.test(AM.rowText(plan, true, tr)));
+  assert.ok(!/Secret|crew\/x|abc123|origin/.test([merged, pushed, step].map((a) => AM.rowText(a, true, tr) + AM.detailText(a, true, tr)).join('')));
+});
+
+test('activity is cached while events.jsonl is unchanged, and rescanned when it grows; only UI fields come back', async () => {
+  const p = newProject('cache');
+  ev(p.id, 'task.merged', '2026-04-01T00:00:00.000Z', { key: 'c1', data: { branch: 'b1', note: 'n1', base: 'main', command: 'git merge', title: 'x' } });
+  const first = (await get(`/api/project/${p.id}`)).json.activity;
+  assert.equal(first.length, 1);
+  assert.deepEqual(Object.keys(first[0].data).sort(), ['branch', 'note']);
+  const file = paths.eventsFile(p.id);
+  const st = fs.statSync(file);
+  const orig = fs.readFileSync(file);
+  // same size, same mtime, different content: a cached answer is returned
+  fs.writeFileSync(file, Buffer.from(orig.toString().replace('"b1"', '"b2"')));
+  fs.utimesSync(file, st.atimeMs / 1000, st.mtimeMs / 1000);
+  assert.equal((await get(`/api/project/${p.id}`)).json.activity[0].data.branch, 'b1');
+  // the file changes: rescanned
+  ev(p.id, 'task.merged', '2026-04-02T00:00:00.000Z', { key: 'c2', data: { branch: 'b3' } });
+  const again = (await get(`/api/project/${p.id}`)).json.activity;
+  assert.equal(again.length, 2);
+  assert.equal(again[0].data.branch, 'b3');
 });
 
 test('SKILL.md tells the orchestrator what only it can record, before Background work', () => {

@@ -412,6 +412,18 @@ function createApi(opts = {}) {
 
   // What the project page can say by itself when the hand-kept cards are empty: the latest merges and pushes (10) and
   // the latest steps of the task flow (15), newest first. Only a few named fields of each event, through publicData.
+  // The scan is kept per project while the events file keeps its size and mtime, so the 4 s poll does not redo it.
+  const activityCache = new Map();
+  function scanCached(projectId, q) {
+    let key = '';
+    try { const st = fs.statSync(paths.eventsFile(projectId)); key = st.size + ':' + st.mtimeMs; } catch { /* no events yet */ }
+    const hit = activityCache.get(projectId);
+    if (hit && hit.key === key) return hit.all;
+    const all = scanBack(projectId, q, ACTIVITY_SCAN_BYTES);
+    activityCache.set(projectId, { key, all });
+    return all;
+  }
+
   function activityOf(projectId, taskList) {
     const titles = new Map(taskList.map((tk) => [tk.id, tk.title]));
     const merges = ['task.merged', 'git.push'];
@@ -419,11 +431,11 @@ function createApi(opts = {}) {
     const q = {};
     for (const ty of merges) q[ty] = 10;
     for (const ty of steps) q[ty] = 15;
-    const all = scanBack(projectId, q, ACTIVITY_SCAN_BYTES);
+    const all = scanCached(projectId, q);
     const shape = (e) => {
       const d = publicData(e) || {};
       const data = {};
-      for (const k of ['branch', 'note', 'remote', 'refs', 'gate', 'answer', 'slug', 'title', 'head', 'base', 'command']) {
+      for (const k of ['branch', 'note', 'remote', 'refs', 'gate', 'answer', 'slug', 'head']) {
         if (d[k] !== undefined && d[k] !== null && d[k] !== '' && (k !== 'note' || e.type === 'task.merged')) data[k] = d[k];
       }
       return { ts: e.ts, type: e.type, task: e.task || null, title: (e.task && titles.get(e.task)) || null, data };
