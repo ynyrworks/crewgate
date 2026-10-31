@@ -1,0 +1,9 @@
+{
+  "slot.usage": "slot 可用：run",
+  "slot.noCommand": "請在 -- 後面給指令：crew slot run [--slots N] [--max-wait 秒數] -- <指令...>",
+  "slot.badNumber": "{name} 必須是不小於 {min} 的整數",
+  "slot.waiting": "等待測試名額：pid {pid} 已佔用 {seconds} 秒",
+  "slot.timeout": "{seconds} 秒內沒有名額空出；仍然執行指令",
+  "slot.failed": "名額程式失敗（{reason}）；仍然執行指令",
+  "slot.spawnFailed": "無法啟動 {command}：{reason}"
+}

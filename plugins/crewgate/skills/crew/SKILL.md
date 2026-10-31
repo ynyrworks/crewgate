@@ -163,6 +163,10 @@ them by itself. Never write them by hand. Some things no event can carry, and th
   `crew work set STREAM "title" STATE "note"`.
 - Validation only for a real run on a real machine (`crew validate set`). Never for a guess or a test that only ran here.
 
+## Heavy commands
+
+Run a project's full test suite or any other heavy check through `crew slot run [--slots N] [--max-wait SECONDS] -- <command...>`, yours and your workers' (the worker agents have the rule). It takes one slot of a machine-wide pool, so only one such run happens at a time across worktrees and projects; the others queue and print who holds the slot. A dead holder frees its slot; after the maximum wait (600 s) the command runs anyway. A wait counts against the Bash tool's timeout: set a long one and keep `--max-wait` below it. This repository's `npm test` does it itself. It does not cover a worker that skips it or a test run started by hand.
+
 ## Background work
 
 Dispatch long tasks with `run_in_background: true` and keep working on briefs, reviews of other

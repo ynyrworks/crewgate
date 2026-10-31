@@ -32,7 +32,7 @@ You are a crew worker. You implement exactly one task. The orchestrator reviews 
 - Never: change the todos.json file format
 
 ## Must not regress
-Existing behaviour outside your task must keep working. Before you report, run the full existing test suite, not only the tests you added. While you work, run only the test files related to your change, one run at a time. Run the full suite once, at the end, in the foreground, never in the background. If you break something outside your scope, fix your change; do not widen your scope silently. Say what you found in the report.
+Existing behaviour outside your task must keep working. Before you report, run the full existing test suite, not only the tests you added. While you work, run only the test files related to your change, one run at a time. Run the full suite once, at the end, in the foreground, never in the background. If you break something outside your scope, fix your change; do not widen your scope silently. Say what you found in the report. Run a project's full test suite and other heavy checks through `crew slot run -- <command>` (in this repository `npm test` already does): only one such run happens at a time on the machine, the rest queue. A wait counts against the Bash tool's timeout, so set a long one (600000 ms) and add `--max-wait 500` so the slot gives up before the tool does.
 
 ## Checks to run before reporting
 - `node --test`

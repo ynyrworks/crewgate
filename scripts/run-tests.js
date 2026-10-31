@@ -28,8 +28,22 @@ function main() {
     const below = os.constants.priority.PRIORITY_BELOW_NORMAL;
     if (os.getPriority(process.pid) < below) os.setPriority(process.pid, below);   // never raise
   } catch { /* keep the current priority */ }
-  const r = spawnSync(process.execPath, ['--test', ...testFlags(cores, process.versions.node, process.env), ...files], { stdio: 'inherit' });
-  process.exit(r.status === null ? 1 : r.status);
+  const argv = [process.execPath, '--test', ...testFlags(cores, process.versions.node, process.env), ...files];
+  // One full run at a time on the machine: take a slot first (see lib/core/slots.js). A nested run inside
+  // `crew slot run` shares its holder's slot. If the slot code cannot be loaded or fails, the tests run anyway.
+  let slots = null;
+  try { slots = require(path.join(root, 'plugins', 'crewgate', 'lib', 'core', 'slots')); } catch { /* run without a slot */ }
+  if (!slots) {
+    const r = spawnSync(argv[0], argv.slice(1), { stdio: 'inherit' });
+    process.exit(r.status === null ? 1 : r.status);
+  }
+  slots.run(argv, {
+    say: (key, vars) => { try { console.error(require(path.join(root, 'plugins', 'crewgate', 'lib', 'core', 'i18n')).t('en', key, vars)); } catch { /* plain output only */ } },
+    onTimeout: ({ waitedSeconds }) => {
+      const p = require(path.join(root, 'plugins', 'crewgate', 'lib', 'core', 'project')).findByCwd(process.cwd());
+      if (p) require(path.join(root, 'plugins', 'crewgate', 'lib', 'core', 'events')).append(p.id, { type: 'slot.timeout', data: { waited_seconds: waitedSeconds } });
+    },
+  }).then((code) => process.exit(code), () => process.exit(1));
 }
 
 if (require.main === module) main();
