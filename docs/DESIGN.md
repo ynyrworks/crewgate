@@ -576,11 +576,21 @@ plugin caches when that tool's own list (`installed_plugins.json`, `config.toml`
 cache folder behind. A plugin installed by a tool counts the neighbouring folder only when that list names the add-on too, since a
 marketplace clone always holds it. There is no configured path and no download. `GET /api/addons` tells the page `missing`, `outdated` or `ok`,
 never the folder. `office.json` in the add-on declares `office_api` and its files; a value other than `OFFICE_API` is not loaded,
-and the page shows the update commands instead. The board serves only the listed `.js` and `.css` files from the add-on's `public`
-folder at `/addon/office/<file>`, and the page loads them in order under the same CSP. `office_api` is the contract: raise it when
-what `app.js` passes to `Office.page` changes. Its strings stay in the board's i18n tables. One-click update runs
+and the page shows the update commands instead. The board serves only the listed files from the add-on's `public`
+folder at `/addon/office/<file>`: the `scripts` and `styles`, and the listed `assets` (`.png`, `.json`, `.js`, such as the art and three.js,
+which the HD view loads only when shown). The page loads the scripts in order under the same CSP. `office_api` is the contract (now 2): raise it when
+what `app.js` passes to `Office.page` changes; since 2 that includes `store` and `refresh`, the page's remembered choice and its redraw. Its strings stay in the board's i18n tables. One-click update runs
 `claude plugin update crewgate-office@crewgate` when it is installed (a failure there does not fail the plugin update), and old
 versions are cleaned up like the plugin's.
+
+HD view (`office-hd.js`, pure logic in `office-hd-model.js`). Pixel-art cards in a lit 3D room, three.js r170. Cards face the fixed camera
+because the art is drawn from that angle; their normals lean upward so they take light like the floor. Floor and walls write no depth,
+so cards that lean back toward them are not cut. A seated character moves back along the view line: same place on screen, but behind
+the desk's card. The set of lights is fixed, so nothing recompiles when sessions come and go. Bloom, tilt shift and tone mapping are
+written in this file: three's add-ons need an import map, which the CSP does not allow, and the view must load one file only. The board
+builds the page on every refresh and attaches it only when the data changed, so a page takes the single canvas only if it is
+on screen. The first time, the frame rate is measured for 3 s after 1 s of settling (not while hidden); under 20 fps the view stays off
+until the user asks. It is opt-in: the pixel view is the default, and only a stored `crew.office.view` of `hd` shows the HD view; the button is labelled as a test version. The art is produced by `scripts/office-art.py`; see the add-on's `ART.md`.
 
 Office. `#/office` (`plugins/crewgate-office/public/office.js`, `office-model.js`, `office-sprites.js`; experimental) draws the Sessions rows as
 a pixel-art office on a canvas, from scratch with no assets: one room per project, an orchestrator at the middle desk of a pod

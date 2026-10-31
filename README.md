@@ -276,7 +276,7 @@ crewgate depends on it, so it is a separate plugin that you install only if you 
 /plugin install crewgate-office@crewgate
 ```
 
-Then reload the board page; the board does not need a restart. From a terminal, use `claude plugin install crewgate-office@crewgate`. Once it
+It adds about 2 MB. Then reload the board page; the board does not need a restart. From a terminal, use `claude plugin install crewgate-office@crewgate`. Once it
 is installed, one-click update keeps it current. If the two ever do not match, the tab says so and shows the commands to
 update it, and the rest of the board keeps working. To remove it, use `/plugin uninstall crewgate-office@crewgate`.
 
@@ -284,7 +284,15 @@ update it, and the rest of the board keeps working. To remove it, use `/plugin u
 
 Installing it through Codex is experimental and has not been verified. A local checkout finds `plugins/crewgate-office` by itself.
 
-**What it shows: one room per project.** Role marks (headset, hard hat, glasses, horns) show the role, shirt colour the engine. Characters act out the work: reading holds a document, searching a magnifier, editing types fast, a command shows a terminal with a progress bar, waiting shows a `!`. Finished subagents walk to their parent with a paper, idle sessions rest on the sofa, finished ones walk out of the door. Drawn from scratch on a canvas, no external assets, still works with a keyboard through the list under it.
+**Two views, one room per project.** The pixel view is the default. The **HD view** is a **test version** you switch on yourself; it shows one room at a time as a lit diorama, in the style of HD-2D games: pixel-art characters and furniture in a 3D room, with sunlight through the windows, flickering lanterns and a miniature-like blur. A mark above each head shows the role; a raised hand and a red `!` mean a session is waiting for you. A room shows up to 8 characters, those waiting first, and the rest stay in the list below. The view draws at most 30 frames a second and stops when the tab is hidden.
+
+The **pixel view** shows every room at once and is drawn entirely by code. Role marks (headset, hard hat, glasses, horns) show the role, shirt colour the engine. Characters act out the work: reading holds a document, searching a magnifier, editing types fast, a command shows a terminal with a progress bar, waiting shows a `!`. Finished subagents walk to their parent with a paper, idle sessions rest on the sofa, finished ones walk out of the door.
+
+A button switches between them, and the page remembers your choice in the browser. Without WebGL, or when the HD view turns out too slow on your machine, the page uses the pixel view and says so. Both work with a keyboard through the list under them.
+
+**The HD view's art is AI-generated** (OpenAI image generation, processed into pixel art), and it uses [three.js](https://threejs.org), loaded only when that view is shown. Details and limits: [plugins/crewgate-office/ART.md](plugins/crewgate-office/ART.md). The main plugin still has no dependencies.
+
+**Known gaps of the HD test version:** the tone and the foreground are unfinished, performance on integrated graphics has not been measured, and it adds about 2 MB.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/office-dark.png">
@@ -294,9 +302,6 @@ Installing it through Codex is experimental and has not been verified. A local c
 ## Roadmap
 
 What is next, what comes later and what is 1.0: [docs/ROADMAP.md](docs/ROADMAP.md).
-
-An enhanced WebGL Office is planned for the next release, in the same optional add-on. It is not available yet, and the
-pixel-art view stays as the fallback for browsers without WebGL.
 
 ## Privacy and safety
 

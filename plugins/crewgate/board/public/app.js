@@ -1347,7 +1347,7 @@
     // a session page is used when this build has one (#/s/<id>); otherwise the sessions list, filtered to that project
     var hasSession = parseHash('#/s/x').page !== 'overview';
     return window.Office.page(d, {
-      t: t, ago: ago, pname: pname, mask: S.mask,
+      t: t, ago: ago, pname: pname, mask: S.mask, store: store, refresh: function () { S.last = ''; refresh(true); },
       stats: function (r) {   // compact numbers only: duration · tokens · cost
         var c = SM.cardStats(r);
         if (!c) return null;
