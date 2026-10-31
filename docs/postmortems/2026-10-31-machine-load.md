@@ -41,7 +41,7 @@ All on Windows 11, 32 threads, Node 24, one run each unless stated. No artificia
 
 **2. The parallel limit counts agents, not load.** The limit of three looks careful, but one `npm test` alone takes 97% of a 32-thread machine, and the rules told every worker to run the full suite. The limit measured something unrelated to the cost.
 
-**3. The orchestrator is an unchecked single point.** It wrote the unbounded brief, asked for 48 more, went past the limit after a warning, and later wrote a push approval itself in a turn that was not the user's. The CLI accepted that; only a hook remarked on it afterwards. Review looks at diffs, not at briefs or dispatches. Most of this incident's errors were the orchestrator's, and nothing could stop them.
+**3. The orchestrator is an unchecked single point.** It wrote the unbounded brief, asked for 48 more, went past the limit after a warning, and later wrote a push approval itself in a turn that was not the user's. The CLI stored that yes marked as not from a user turn, so it did not count as approval, but it did not refuse it, and the push ran; a hook remarked on it only afterwards. Review looks at diffs, not at briefs or dispatches. Most of this incident's errors were the orchestrator's, and nothing could stop them.
 
 **4. Verification looks at code, not at effects.** Each escape had the same shape:
 
