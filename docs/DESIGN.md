@@ -720,3 +720,25 @@ about; only accepted nodes count. Code: `lib/core/plan-review.js`, CLI in `lib/c
 - Events: `plan.review_started`, `plan.review_finalized` (counts), `plan.proposal_accepted`, `plan.proposal_rejected`; ids only.
 - Board: `GET /api/project/<id>/plan/<slug>` adds `proposals`, `rounds`, `show_text`; claim, evidence and refuter text follow
   `board.show_text`. The page lists pending proposals first with copyable commands (read-only), shows the round history under Show growth.
+
+## 18. Release record
+
+`crew release record <version>` writes one Markdown file per version (`<release.record_dir>/<version>.md`, default `.crew/releases`, or `--dir`)
+that is meant to be committed with the release. Code: `lib/commands/release.js`, `lib/features/release.js`.
+- Reads only: project data under `~/.crewgate/projects/<id>` (tasks, findings, events), `.crew/plans` and read-only git. It writes the one
+  record file and never commits, tags or pushes.
+- Range: `--to` defaults to tag `v<version>`, else `HEAD`; `--from` to the nearest earlier tag (`git describe`, the version's own tag excluded).
+  An unknown ref is an error and nothing is written. A `merged` task is included when its `task.merged` note names a commit in
+  `from..to` or its branch tip is in it. A merged task that fits no range but whose merge event falls between the two commit dates is
+  listed as "not placed", never guessed in.
+- Per task: returns, every review round with its counts (raw, kept, upheld, refuted, uncertain, dismissed), each surviving finding on one
+  line, dismissals, follow-ups (plan nodes with `from_task`) and `--skip-refuter` reasons. A task with a `task.returned` event later than its
+  last finalized round (the `task.reviewed` event of that round, else the file time) is marked NOT RE-REVIEWED; one without a finalized
+  round is marked NO REVIEW.
+- Plans linked to included tasks (or named by `--plan`): title, goal, completion, clarified answers (`(assumed)` flagged). Gates: those of
+  included tasks (any time), plus gates with no task inside the window between the two commit dates; answers without a user turn,
+  unanswered gates and `gate.missing` are marked.
+- The conclusion sits between `<!-- crew:conclusion -->` and `<!-- /crew:conclusion -->`: from `--conclusion-file`, else kept from the
+  existing file, else a TODO plus a stderr warning. A file without the markers is refused without `--force`.
+- The whole text is redacted (`core/redact.js`), the home directory is written `~` and paths inside the repo are relative. Session ids,
+  worker reports, packets and briefs are never read. No timestamp is written: the same inputs give the same bytes.

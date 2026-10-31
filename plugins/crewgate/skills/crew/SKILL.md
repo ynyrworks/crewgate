@@ -115,6 +115,11 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
     dismiss a finding for good, run `crew lesson add --key <slug> --text "..." --kind <kind>`. Do not
     promote anything yourself (see Wrap-up).
 
+### Release record
+Before tagging a release, run `crew release record <version>` (see `references/commands.md`). Read its flag lines (NOT RE-REVIEWED,
+NO REVIEW, no user turn, gate.missing, not placed), then write the conclusion in a file and pass it with `--conclusion-file`: what was
+verified, what was not, which assumptions still stand. Commit the record with the release. Do not leave the TODO in it.
+
 ## Gates
 
 `gates` in the config decide what needs the user. For each of `push`, `open_pr`, `merge`,

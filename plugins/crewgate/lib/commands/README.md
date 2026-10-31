@@ -52,6 +52,7 @@ Rules
 | `log` | `add WHO "text"`, `list [--n 20]` |
 | `mr` | `set N "title" [--ci passed\|failed\|running] [--merged yes\|no]`, `list` |
 | `validate` | `set ID YYYY-MM-DD "host" "result"`, `list` |
+| `release` | `record <version> [--from REF] [--to REF] [--plan SLUG]... [--conclusion-file F] [--dir D] [--force]` — writes the committed record `<release.record_dir>/<version>.md`; logic in `lib/features/release.js` |
 | `import` | `agent-board <data dir> --from-project <id> [--force]` |
 
 ## update
