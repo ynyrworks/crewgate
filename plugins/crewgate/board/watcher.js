@@ -131,6 +131,9 @@ function targetOf(arg, cwd) {
 function promptText(o) {
   const m = o.message || {};
   if (o.isMeta === true) return null;
+  // Claude Code tags who produced the line: only `human` is a typed prompt (a task notification is not).
+  const kind = o.origin && typeof o.origin === 'object' ? o.origin.kind : null;
+  if (isStr(kind) && kind !== 'human') return null;
   let t = null;
   if (typeof m.content === 'string') t = m.content;
   else {
@@ -139,7 +142,8 @@ function promptText(o) {
     const tb = bs.find((b) => b.type === 'text' && isStr(b.text));
     t = tb ? tb.text : null;
   }
-  if (!isStr(t) || t.trimStart().startsWith('<')) return null;
+  if (!isStr(t)) return null;
+  if (kind !== 'human' && t.trimStart().startsWith('<')) return null;   // untagged wrapper / notification
   return t;
 }
 
