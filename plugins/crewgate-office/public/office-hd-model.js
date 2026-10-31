@@ -75,6 +75,116 @@
     return { seats: seats, lounge: lounge, extra: Math.max(0, rows.length - shown.length) };
   }
 
+  // ---- where idle characters stand
+  // The camera of the HD view (office-hd.js keeps the same numbers): a card faces it, so on the screen a floor point
+  // (x, z) lands at u = sideways along RIGHT and v = FWD_SIN * depth (farther is higher), and a card of height h
+  // covers [v, v + h]. Perspective (22 degrees) is ignored: over the room it changes sizes by a few percent, and
+  // CARD_W / CARD_H carry a margin for it.
+  var CAM = { x: 17.5, y: 20, z: 28.5, tx: -0.2, ty: 1.1, tz: -0.2 };
+  var HORIZ = Math.sqrt(Math.pow(CAM.tx - CAM.x, 2) + Math.pow(CAM.tz - CAM.z, 2));
+  var FWD = [(CAM.tx - CAM.x) / HORIZ, (CAM.tz - CAM.z) / HORIZ];   // along the floor, away from the camera
+  var RIGHT = [-FWD[1], FWD[0]];                                      // to the right on the screen
+  var ELEV = Math.atan2(CAM.y - CAM.ty, HORIZ);
+  var CARD_W = 2.0;   // widest standing card: 37.5 art px * 0.82 (ACTOR) / 16 px per unit = 1.92, rounded up
+  var CARD_H = 3.2;   // tallest: 62 px * 0.82 / 16 = 3.18
+  var FOOT_MARGIN = 0.4;   // half a body between a character and the foot of furniture
+  var BOUNDS = { x0: -7.0, x1: 7.0, z0: -5.0, z1: 5.2 };   // where one can stand: inside the walls and the cut edge
+  var SEAT_BESIDE = 1.0;   // a seated character sits this far right of the slot (SEAT.beside in office-hd.js)
+  var SEAT_LIFT = 2.05;    // and is raised this much (SEAT.lift)
+  var STAND_PREFERRED = [[-1.8, 3.3], [2.4, 3.3], [-6.3, 3.2], [6.0, 3.3], [-6.3, -0.6], [6.4, -0.6], [-2.4, -0.4], [2.4, -0.4],
+    [-6.2, -3.6], [6.3, -3.0], [-2.4, -3.6], [2.4, -3.6]];
+
+  function screenU(x, z) { return x * RIGHT[0] + z * RIGHT[1]; }
+  function depthOf(x, z) { return x * FWD[0] + z * FWD[1]; }
+  function screenV(x, z) { return depthOf(x, z) * Math.sin(ELEV); }
+  // The card of something standing on the floor at (x, z): [u0, u1, v0, v1]; lift raises it (world units)
+  function cardBox(x, z, w, h, lift) {
+    var u = screenU(x, z);
+    var v = screenV(x, z) + (lift || 0) * Math.cos(ELEV);
+    return [u - w / 2, u + w / 2, v, v + h];
+  }
+  function boxesOverlap(a, b) { return a[0] < b[1] && b[0] < a[1] && a[2] < b[3] && b[2] < a[3]; }
+  // Two standing characters hide each other when their cards overlap on the screen
+  function cardsOverlap(a, b) { return boxesOverlap(cardBox(a[0], a[1], CARD_W, CARD_H), cardBox(b[0], b[1], CARD_W, CARD_H)); }
+
+  // What a standing character must keep clear of, from the room's dressing and the desks in use.
+  // props: [[art, x, z, scale]] (visible ones), sizes: { art: [w, h] } in art pixels,
+  // desks: [{ slot: [x, z], deskArt }] for each occupied seat. -> { feet: [[u, d, hw, hd]], seated: [box] }
+  function obstacles(props, sizes, desks) {
+    var out = { feet: [], seated: [] };
+    props.forEach(function (p) {
+      var sz = sizes[p[0]];
+      var w = sz[0] * p[3] / 16;
+      out.feet.push([screenU(p[1], p[2]), depthOf(p[1], p[2]), w / 2 + FOOT_MARGIN, w / 2 + FOOT_MARGIN]);   // as deep as wide
+    });
+    (desks || []).forEach(function (d) {
+      var sz = sizes[d.deskArt];
+      var dx = d.slot[0] + 0.25;
+      var dz = d.slot[1] + 0.7;
+      out.feet.push([screenU(dx, dz), depthOf(dx, dz), sz[0] * 0.8 / 32 + FOOT_MARGIN, sz[0] * 0.8 / 32 + FOOT_MARGIN]);
+      out.seated.push(cardBox(d.slot[0] + SEAT_BESIDE, d.slot[1], CARD_W, 2.7, SEAT_LIFT));   // the person at the desk
+    });
+    return out;
+  }
+
+  function standOk(x, z, taken, ob) {
+    if (x < BOUNDS.x0 || x > BOUNDS.x1 || z < BOUNDS.z0 || z > BOUNDS.z1) return false;
+    var u = screenU(x, z);
+    var d = depthOf(x, z);
+    var i;
+    for (i = 0; i < ob.feet.length; i++) {
+      var f = ob.feet[i];
+      if (Math.abs(u - f[0]) < f[2] && Math.abs(d - f[1]) < f[3]) return false;
+    }
+    var box = cardBox(x, z, CARD_W, CARD_H);
+    for (i = 0; i < ob.seated.length; i++) if (boxesOverlap(box, ob.seated[i])) return false;
+    for (i = 0; i < taken.length; i++) if (cardsOverlap([x, z], taken[i])) return false;
+    return true;
+  }
+
+  // standSpots(count, obstacles) -> [[x, z]] for up to `count` idle characters; none hides another, none stands in
+  // furniture. The preferred spots come first, so the same people stand in the same places. When the desks in use
+  // leave too little room for those, the floor is searched: always take the spot that blocks the fewest others.
+  function standSpots(count, ob) {
+    var cands = [];
+    var i;
+    var p;
+    for (i = 0; i < STAND_PREFERRED.length; i++) if (standOk(STAND_PREFERRED[i][0], STAND_PREFERRED[i][1], [], ob)) cands.push(STAND_PREFERRED[i]);
+    var out = [];
+    for (i = 0; i < cands.length && out.length < count; i++) {
+      if (standOk(cands[i][0], cands[i][1], out, ob)) out.push(cands[i]);
+    }
+    if (out.length >= count) return out.map(function (c) { return c.slice(); });
+    cands = [];
+    for (var z = BOUNDS.z0; z <= BOUNDS.z1 + 1e-9; z += 0.25) {
+      for (var x = BOUNDS.x0; x <= BOUNDS.x1 + 1e-9; x += 0.25) {
+        p = [Math.round(x * 100) / 100, Math.round(z * 100) / 100];
+        if (standOk(p[0], p[1], [], ob)) cands.push(p);
+      }
+    }
+    var near = cands.map(function (c, k) {
+      var list = [];
+      for (var m = 0; m < cands.length; m++) if (m !== k && cardsOverlap(c, cands[m])) list.push(m);
+      return list;
+    });
+    var alive = cands.map(function () { return true; });
+    var left = cands.map(function (c, k) { return near[k].length; });
+    out = [];
+    while (out.length < count) {
+      var best = -1;
+      for (i = 0; i < cands.length; i++) if (alive[i] && (best < 0 || left[i] < left[best])) best = i;
+      if (best < 0) break;
+      out.push(cands[best]);
+      alive[best] = false;
+      near[best].forEach(function (m) {
+        if (!alive[m]) return;
+        alive[m] = false;
+        near[m].forEach(function (q) { left[q]--; });
+      });
+    }
+    return out.map(function (c) { return c.slice(); });
+  }
+
   // Distinct designs inside one room while there are enough; a session keeps its design across refreshes.
   // -> { id: 0..CAST-1 }
   function castFor(prev, ids) {
@@ -130,6 +240,8 @@
   return {
     MAX_SEATS: MAX_SEATS, CAST: CAST, CAP_FPS: CAP_FPS, SLOW_FPS: SLOW_FPS, MEASURE_MS: MEASURE_MS, SETTLE_MS: SETTLE_MS, FRAME: FRAME,
     hash: hash, roomsOf: roomsOf, pickRoom: pickRoom, assignSeats: assignSeats, castFor: castFor, poseFor: poseFor,
-    Gauge: Gauge, tooSlow: tooSlow, due: due
+    Gauge: Gauge, tooSlow: tooSlow, due: due,
+    CARD_W: CARD_W, CARD_H: CARD_H, FOOT_MARGIN: FOOT_MARGIN, obstacles: obstacles, standSpots: standSpots, cardsOverlap: cardsOverlap,
+    screenU: screenU, depthOf: depthOf, screenV: screenV
   };
 }));
