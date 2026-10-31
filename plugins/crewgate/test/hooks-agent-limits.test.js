@@ -39,10 +39,10 @@ test('the worker keeps committing on its branch', () => {
 test('killing by image name is denied for all three roles, killing by pid passes', () => {
   for (const type of ['crew-worker', 'crew-reviewer', 'crew-refuter']) {
     for (const c of ['taskkill /IM chrome.exe /F', 'taskkill /f /im node.exe', 'Stop-Process -Name chrome', 'stop-process -n chrome -Force', 'pkill node', 'killall chrome',
-      'Get-Process chrome | Stop-Process', 'Get-Process -Name chrome | Stop-Process -Force', 'powershell -Command "Get-Process x | Stop-Process"', 'cmd /c taskkill /IM a.exe']) {
+      'Get-Process chrome | Stop-Process', '$p | Stop-Process', 'Get-Process -Name x | Stop-Process', 'Get-Process -Name chrome | Stop-Process -Force', 'powershell -Command "Get-Process x | Stop-Process"', 'cmd /c taskkill /IM a.exe']) {
       assert.ok(limits.scan(c, type), `${type}: ${c}`);
     }
-    for (const c of ['taskkill /PID 123 /F', 'Stop-Process -Id 123', 'Stop-Process -Id 123 -Force', 'kill 123', 'kill -9 123', 'echo pkill']) {
+    for (const c of ['taskkill /PID 123 /F', 'Stop-Process -Id 123', 'Stop-Process -Id 123 -Force', 'Get-Process -Id 123 | Stop-Process', 'Get-Process -id 123 | Stop-Process -Force', 'kill 123', 'kill -9 123', 'echo pkill']) {
       assert.equal(limits.scan(c, type), null, `${type}: ${c}`);
     }
   }

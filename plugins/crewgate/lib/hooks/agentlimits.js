@@ -19,6 +19,7 @@ function scan(command, type, depth = 0) {
   const toks = G.tokenize(command);
   let cur = [];
   let prevOp = null;
+  let prevSeg = [];
   const one = (seg, op) => {
     const i = G.commandStart(seg);
     const cmd = G.base(seg[i] || '').toLowerCase();
@@ -29,7 +30,8 @@ function scan(command, type, depth = 0) {
     if (cmd === 'taskkill') return rest.some((w) => /^[-/]im$/i.test(w)) ? hit() : null;
     if (cmd === 'pkill' || cmd === 'killall') return hit();
     if (cmd === 'stop-process' || cmd === 'spps') {
-      const byId = rest.some((w) => /^-(id|inputobject)$/i.test(w));
+      const isId = (w) => /^-id$/i.test(w);
+      const byId = rest.some(isId) || (prevOp === '|' && prevSeg.some(isId));
       const byName = rest.some((w) => /^-n(a(me?)?)?(:.*)?$/i.test(w));
       return byName || (prevOp === '|' && !byId) ? hit() : null;
     }
@@ -50,7 +52,7 @@ function scan(command, type, depth = 0) {
   };
   for (const t of toks) {
     if (typeof t === 'object' && G.OPS.has(t.op)) {
-      if (cur.length) { const r = one(cur, t.op); if (r) return r; }
+      if (cur.length) { const r = one(cur, t.op); if (r) return r; prevSeg = cur; }
       cur = [];
       prevOp = t.op;
     } else cur.push(t);
