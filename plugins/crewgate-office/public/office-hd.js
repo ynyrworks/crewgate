@@ -15,7 +15,6 @@
   var WALK = 2.6;    // world units per second
   var DOOR = { x: -5.6, z: -5 };
   var SLOTS = [[0.2, -2.0], [-4.6, -2.1], [4.9, -2.0], [-4.85, 1.4], [-0.1, 1.4], [4.6, 1.4], [-0.4, 4.8], [4.3, 4.8]];   // staggered as the camera sees them: no head or bubble lands on someone behind
-  var REST = [[7.0, -3.1], [3.6, -3.3], [7.2, -1.9], [2.2, -3.5], [7.2, -0.6], [0.8, -3.7], [-0.6, -3.7], [-2.0, -3.7]];
 
   // Static dressing of the room: [art, x, z, scale]; cards face the camera, the art is drawn from that high angle.
   var PROPS = [
@@ -448,6 +447,20 @@
       delete actors[a.id];
     }
 
+    // Where idle characters stand: clear of each other, the furniture and the desks in use (see standSpots in the model)
+    var spotsFor = { key: '', list: [] };
+    function standingSpots(seats, count) {
+      var used = Object.keys(seats).map(function (id) { return seats[id]; }).sort();
+      var key = used.join(',') + '/' + count;
+      if (spotsFor.key !== key) {
+        var props = PROPS.slice();
+        SLOTS.forEach(function (_, n) { if (used.indexOf(n) < 0) props = props.concat(FILLERS[n] || []); });
+        var desks = used.map(function (n) { return { slot: SLOTS[n], deskArt: n % 2 ? 'desk2' : 'desk' }; });
+        spotsFor = { key: key, list: H.standSpots(count, H.obstacles(props, sizes, desks)) };
+      }
+      return spotsFor.list;
+    }
+
     // ---- what the page shows: called with the room and each session's place
     var calm = false;
     function show(room, seats, lounge, cast, poses, roles, instant) {
@@ -458,10 +471,11 @@
           else { a.mode = 'leave'; a.tx = DOOR.x; a.tz = DOOR.z + 0.6; a.seat = null; a.rest = null; }
         }
       });
+      var spots = standingSpots(seats, lounge.length);
       Object.keys(seats).concat(lounge).forEach(function (id) {
         var a = actors[id] || addActor(id, cast[id]);
         var seat = seats[id];
-        var slot = seat !== undefined ? SLOTS[seat] : REST[lounge.indexOf(id) % REST.length];
+        var slot = seat !== undefined ? SLOTS[seat] : spots[lounge.indexOf(id)];
         var tx = slot[0] + (seat !== undefined ? SEAT.beside : 0);
         var moved = a.tx !== tx || a.tz !== slot[1] || a.mode === 'leave';
         a.tx = tx;
