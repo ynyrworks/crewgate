@@ -67,19 +67,6 @@ function brief(h) {
   return cutBytes(build(h, 0), MAX_BYTES);
 }
 
-// ~/.crewgate/bin/crew.js runs the plugin version that last started a session, so a project's own scripts can call the
-// CLI without naming a version folder. Written only when it would change.
-function writeCliShim() {
-  const target = require('path').resolve(__dirname, '..', '..', 'bin', 'crew.js');
-  const text = `#!/usr/bin/env node\n// Written by crewgate at session start: the CLI of the plugin version that started the last session.\nrequire(${JSON.stringify(target)});\n`;
-  const file = paths.cliShimFile();
-  let cur = null;
-  try { cur = fs.readFileSync(file, 'utf8'); } catch { /* not written yet */ }
-  if (cur === text) return;
-  fs.mkdirSync(require('path').dirname(file), { recursive: true });
-  require('../core/json').saveRaw(file, text);
-}
-
 function run(payload) {
   const h = C.open(payload, { full: true });
   if (!h) return null;
@@ -95,7 +82,7 @@ function run(payload) {
       key: h.sid ? `${h.sid}:${C.snippet(p.source, 20)}:${st.started || ''}` : `start:${Date.now()}`,
     });
   } catch { /* logging must not block the brief */ }
-  try { writeCliShim(); } catch { /* scripts lose a convenience; the session goes on */ }
+  try { require('../core/clishim').write(); } catch { /* scripts lose a convenience; the session goes on */ }
   // Optional (global board.autostart): start the board if it is down. Spawns detached, never waits, never throws.
   try {
     const b = h.cfg().board;
