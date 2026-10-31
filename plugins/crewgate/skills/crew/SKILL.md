@@ -108,7 +108,8 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
    - Clean: `crew task accept <id>`. Finalize the round first, even when you expect to dismiss its
      findings: accept refuses an unfinalized round with findings unless you pass `--skip-refuter "<reason>"`,
      and tell the user when you do. It only notes a task with no review round.
-10. **Gates, then merge.** Check the gates (below). When allowed, merge with git yourself, then record
+10. **Gates, then merge.** Check the gates (below). Run the full test suite at merge, one run at a time, in the
+    foreground. When allowed, merge with git yourself, then record
     it: `crew task merge <id> --note "<merge commit>"`. Remove the worktree when done
     (`git worktree remove <path>`).
 11. **Lessons.** Whenever the user corrects you, a task is sent back for a repeatable reason, or you

@@ -27,7 +27,7 @@ You are a crew worker. You implement exactly one task. The orchestrator reviews 
 - A new test that depends on time, files or processes: run it several times before you report it as passing.
 {{forbidden_block}}
 ## Must not regress
-Existing behaviour outside your task must keep working. Before you report, run the full existing test suite, not only the tests you added. If you break something outside your scope, fix your change; do not widen your scope silently. Say what you found in the report.
+Existing behaviour outside your task must keep working. Before you report, run the full existing test suite, not only the tests you added. While you work, run only the test files related to your change, one run at a time. Run the full suite once, at the end, in the foreground, never in the background. While you work, run only the test files related to your change, one run at a time. Run the full suite once, at the end, in the foreground, never in the background. If you break something outside your scope, fix your change; do not widen your scope silently. Say what you found in the report.
 
 ## Checks to run before reporting
 {{checks_block}}

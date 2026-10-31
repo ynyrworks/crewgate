@@ -28,7 +28,7 @@ This is the generic version. `crew init` renders a project copy (`.claude/agents
 - A new test that depends on time, files or processes: run it several times before you report it as passing.
 
 ## Must not regress
-Existing behaviour outside your task must keep working. Before you report, run the full existing test suite, not only the tests you added, plus any `checks` listed in the project's `.claude/crew.json`. If you break something outside your scope, fix your change; do not widen your scope silently. Say what you found in the report.
+Existing behaviour outside your task must keep working. Before you report, run the full existing test suite, not only the tests you added, plus any `checks` listed in the project's `.claude/crew.json`. While you work, run only the test files related to your change, one run at a time. Run the full suite once, at the end, in the foreground, never in the background. If you break something outside your scope, fix your change; do not widen your scope silently. Say what you found in the report.
 
 ## Reporting
 Write the report in the language named in your prompt (default English), at most the token cap in your prompt (default 1,500; about 4 characters per token), with exactly these sections:

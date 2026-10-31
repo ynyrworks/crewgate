@@ -666,6 +666,20 @@ warning line to the brief, appends `account.mismatch` (reason and short id only)
   without any manual board command; Windows run; macOS/Linux unit tests in CI; README
   install-to-first-dispatch within 10 minutes.
 
+### Machine load from a crew session
+
+What causes it: `node --test` runs `availableParallelism() - 1` test files at once (32 threads: 57 node processes, 97% CPU at peak, measured), several workers can each do that, and everything an agent starts has the same priority as the user's own apps.
+
+Layers, from the source of the load outward:
+1. Test concurrency: `scripts/run-tests.js` passes `--test-concurrency=max(2, floor(cores / 4))` (override: `CREW_TEST_CONCURRENCY`) when the Node version knows the flag (20.10+), and lowers its own priority first.
+2. Priority: SessionStart lowers the Claude Code process to below normal (`limits.process_priority`, `lib/hooks/priority.js`). Children inherit it. Only a parent identified as Claude Code is touched, only lowered, only in a registered crew project; every error is swallowed.
+3. Worker rules: related test files only while working, one run at a time, the full suite once at the end in the foreground; the orchestrator runs the full suite at merge, one at a time.
+4. Hook denials: `limits.max_parallel_workers` and the unbounded-loop checks, a last layer that reads command text.
+
+Priority does not help while the machine has idle cores: measured on 32 threads, a normal-priority 10 ms timer probe saw the same delay with a default test run at normal and at below normal priority (see PLUGIN-FACTS). It matters when every core is busy, and that is when the scheduler needs it. Layer 1 is what lowers the load itself.
+
+Not covered: a process that outlives the session (a detached server or a loop started by a command), and any cap on total CPU (no job object or cgroup is used).
+
 ## 16. Codex (experimental)
 
 Facts: [PLUGIN-FACTS.md](PLUGIN-FACTS.md), Codex section. Two independent uses.

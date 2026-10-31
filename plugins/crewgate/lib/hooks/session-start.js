@@ -117,6 +117,8 @@ function run(payload) {
     });
   } catch { /* logging must not block the brief */ }
   if (h.accountWarn) warnAccount(h, firstWarn, acct);
+  // Below-normal priority for the Claude Code process (children inherit it). Swallows every error.
+  try { require('./priority').lower(h.cfg().limits && h.cfg().limits.process_priority); } catch { /* the session goes on */ }
   try { require('../core/clishim').write(); } catch { /* scripts lose a convenience; the session goes on */ }
   // Optional (global board.autostart): start the board if it is down. Spawns detached, never waits, never throws.
   try {

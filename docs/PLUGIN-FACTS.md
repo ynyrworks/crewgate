@@ -88,6 +88,13 @@ Plugin skills are invoked namespaced: `/crewgate:crew`. Frontmatter: `name`,
 `${CLAUDE_SKILL_DIR}` are substituted, so the skill calls the CLI as
 `node "${CLAUDE_PLUGIN_ROOT}/bin/crew.js" ...`.
 
+## Process priority and test load (measured on Windows 11, 32 threads, Node 24, 2026-10)
+- Hooks run in exec form, so a hook's parent should be Claude Code itself. The chain seen from this session's Bash tool: `powershell.exe` or `node` -> `bash.exe` (three levels) -> `claude.exe` (the Claude Code process, command line `...\claude-code\<version>\<hash>\claude.exe --output-format stream-json ...`) -> the desktop app's `Claude.exe` -> `explorer.exe`. A hook's own `process.ppid` was not recorded (no `claude -p` was run: it needs the network); the code therefore checks the parent's name (`claude` / `claude.exe`, or `node`/`bun` with `@anthropic-ai/claude-code` in the command line on POSIX) and does nothing otherwise. Subagent commands are started by the same `claude.exe`, so they inherit its class; a resumed session is a new process and SessionStart (source `resume`) lowers it again; Codex's parent is not named claude, so nothing is changed there.
+- `os.setPriority(pid, PRIORITY_BELOW_NORMAL)` is 10 here. A below-normal process passes it on: `node` -> `bash -c node` and `node` -> `powershell -Command node` both printed 10.
+- Looking up the parent's name with `tasklist /FI "PID eq <pid>" /FO CSV /NH` took about 170 ms.
+- `node --test` defaults to `availableParallelism() - 1` files at once: 57 node processes and 97% CPU at peak in 58 s. `--test-concurrency=8`: 38% in 84 s. `scripts/run-tests.js` (concurrency 8, below normal): 22 node processes (3 before the run), peak 43% (average 29%), 96 s, 820 tests passing.
+- Does priority help? A normal-priority `setTimeout(10)` probe, sampled for the whole of one default `node --test` of this repo's suite (about 7,000 samples per run), late by this much: at normal priority p50 0.4 ms, p95 1.2 ms, max 5.9 ms (peak CPU 79%); at below normal p50 0.4 ms, p95 1.1 ms, max 3.2 ms (peak CPU 78%). No measurable benefit here: with free cores the probe never waited. The scheduler rule (a ready higher-priority thread preempts a lower one) only has an effect when all cores are busy, which was not reached; so this layer is not shown to work on this machine, and `--test-concurrency` is what removes the load.
+
 # Codex CLI facts (measured with Codex CLI 0.160 on Windows, 2026-10)
 
 Sources: https://developers.openai.com/codex/plugins/build · https://learn.chatgpt.com/docs/hooks ·

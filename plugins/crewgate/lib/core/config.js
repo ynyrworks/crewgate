@@ -26,6 +26,7 @@ const DEFAULTS = Object.freeze({
   limits: {
     max_parallel_workers: 3,
     parallel_enforce: 'block',
+    process_priority: 'below_normal',
     max_returns_before_takeover: 2,
     report_max_tokens: 1500,
     orchestrator_read_warn_lines: 300,
@@ -96,6 +97,9 @@ const SCHEMA = [
   f('limits.parallel_enforce', 'string', d(
     'What happens when a dispatch (or a SendMessage that wakes a stopped worker) would pass max_parallel_workers: block (denied; the reason names the running tasks) or warn (a reminder only). Workers are counted from the dispatch map, so records left by an ended or quit session do not count.',
     '派出（或用 SendMessage 喚醒已停止的 worker）會超過 max_parallel_workers 時的處理：block（拒絕，理由會列出進行中的任務）或 warn（只提醒）。worker 數依派工紀錄計算，已結束或被關閉的工作階段留下的紀錄不算。'), { enum: ['block', 'warn'] }),
+  f('limits.process_priority', 'string', d(
+    'Priority of the Claude Code process, set at session start in a registered crew project: below_normal (it and everything it starts, such as shells and test runs, yield CPU to your other apps) or normal (leave it alone). It is only ever lowered, and only when the parent process is identified as Claude Code.',
+    '工作階段開始時（限已註冊的 crew 專案）Claude Code 行程的優先權：below_normal（它與它啟動的 shell、測試等都會把 CPU 讓給你的其他應用程式）或 normal（不動）。只會降低，且只在確認上層行程是 Claude Code 時才動。'), { enum: ['below_normal', 'normal'] }),
   f('limits.max_returns_before_takeover', 'integer', d('Send-backs allowed before the orchestrator takes the task over.', '退回幾次後改由統籌接手。'), { min: 1, max: 20 }),
   f('limits.report_max_tokens', 'integer', d('Maximum worker report size (estimated as characters / 4).', 'worker 報告長度上限（以字元數 / 4 估算）。'), { min: 100, max: 20000 }),
   f('limits.orchestrator_read_warn_lines', 'integer', d('Warn when the orchestrator reads a file longer than this without a range.', '統籌不帶範圍讀超過此行數的檔案時提醒。'), { min: 1, max: 100000 }),
