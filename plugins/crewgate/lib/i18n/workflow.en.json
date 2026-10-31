@@ -85,6 +85,8 @@
   "wf.review.submitted": "Stored {n} {kind} entries for round {round}.",
   "wf.review.filtered": "Round {round}: {total} raw, {kept} kept, {dropped} dropped.",
   "wf.review.droppedBy": "Dropped by reason: {reasons}",
+  "wf.review.droppedEntry": "  dropped ({reason}) {id} [{severity}] {file}:{line}  {claim}",
+  "wf.review.droppedRead": "Read the dropped findings above: the filter works on labels, not on truth. To raise one, send the task back with a note quoting its id, file:line and claim (crew task send-back {id} --note \"...\").",
   "wf.review.invalidEntry": "  invalid entry {id}: {detail}",
   "wf.review.refuteNext": "Next: dispatch the refuter with the Agent tool: subagent_type \"{agent}\", model \"{model}\".",
   "wf.review.nothingToRefute": "Nothing survived. Next: crew review finalize {id}",

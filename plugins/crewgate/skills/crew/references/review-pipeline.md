@@ -43,6 +43,11 @@ the filter downgrade it.
 
 Survivors are saved as `<round>.kept.json` and printed with the refuter prompt.
 
+The filter also prints each dropped finding (reason, severity, file:line, claim cut to about 120
+characters). Read them: the filter works on labels, not on truth, and an `inference` finding can be
+right. To raise one, send the task back with a note quoting its id, file:line and claim. The refuter
+still sees only the survivors. `crew review show` prints the dropped count and reasons for a round.
+
 ## Stage 3: refute
 
 Dispatch the refuter subagent (`crew-refuter`) with the printed prompt. It tries to disprove each
