@@ -546,6 +546,7 @@ to override detection. Exit codes: 0 ok, 1 runtime error, 2 usage error.
   normalised title in that stream — trimmed, spaces collapsed, case-insensitive; `--id ID` targets an item by the id
   `work list` shows, `--new` forces a new item), `crew log add|list`,
   `crew mr set|list`, `crew validate set|list`
+- `crew slot run [--slots N] [--max-wait SECONDS] -- <command...>` — one machine-wide slot for a heavy command, see "Test slots" in section 15.
 - `crew board start|stop|status|serve [--port] [--no-open]`
 - `crew import agent-board <data dir> --from-project <id> [--force]`
 - `crew update check [--force]|apply` — the update notice and one-click update of section 10, for the terminal.
@@ -681,6 +682,23 @@ Layers, from the source of the load outward:
 5. Hook denials: `limits.max_parallel_workers` and the unbounded-loop checks, a last layer that reads command text.
 
 Priority helps once a core is saturated and does nothing while cores are idle. Measured (see PLUGIN-FACTS): a full default test run on 32 threads never saturated the machine (peak CPU about 79%), so a normal-priority timer probe saw no difference there; with four loops pinned to one core, the probe's worst delay was 378.9 ms against 2.5 ms when the loops ran at below normal. A real `claude -p` session confirmed the hook finds the Claude process and a Bash child inherits priority 10. The whole machine at saturation was not measured. Layer 1 is what lowers the load itself.
+
+#### Test slots
+
+A build-jobserver model: `crew slot run [--slots N] [--max-wait SECONDS] -- <command...>` takes one slot of a pool under `<CREWGATE_HOME>/slots/`, runs the command and frees the slot. Default: one slot, maximum wait 600 s, so only one full test run (or other heavy command) is active at a time across worktrees and projects. `scripts/run-tests.js` takes a slot itself, so `npm test` is covered; a single-file `node --test` run goes around it and takes none. Slot `i` is the file `slot-<i>.json`, created exclusively (`wx`), holding `{ pid, started }` and no command line. While it waits, the caller prints `held by pid P for S s` on stderr every 30 s. The command's stdio is inherited, so stdout, stdin and the exit code pass through (1 for a death by signal, 127 for a command that does not start).
+
+It can never hang work for good:
+- A holder whose pid is dead frees its slot: the next caller takes the file over (it deletes it only if it is still the file it read; a file that cannot be parsed yet is a holder still writing and counts as stale after 5 s).
+- After the maximum wait the command runs anyway, with one stderr line and a `slot.timeout` event in the project of the cwd (when there is one).
+- Any failure in the slot code (unwritable or missing home folder, no pid check) prints one line and runs the command anyway; `run-tests.js` runs the tests anyway when it cannot load the slot code. With no home folder or on CI the run is the same as before, plus that line.
+- Nesting: the holder puts `CREWGATE_SLOT_HELD=<pid>:<index>` into the environment of its command. A `crew slot run` or `npm test` below it finds this, checks that slot file still holds that live pid, and runs at once, so children share the holder's slot and never wait on it. A stale or foreign value (dead pid, other home) is ignored. When the command runs anyway (timeout or failure in the slot code) the marker is `CREWGATE_SLOT_HELD=free:<pid>` of the wrapper, set only on that path and valid while that pid lives, so a nested `npm test` under `crew slot run --max-wait 500 -- npm test` does not wait again.
+
+What it does not cover:
+- A worker that does not use it (the rule is in the worker agent files and `SKILL.md`; nothing enforces it).
+- A project's test run started by hand, or any heavy command started without `crew slot run`.
+- The load inside one run: one slot still runs a full `node --test` at its own concurrency (layer 1) and priority (layer 2).
+- A pid reused by an unrelated process keeps a dead holder's slot until the maximum wait ends. A caller killed hard leaves its command running without a slot. The check-then-delete takeover has a very small race window in which two callers may both run.
+- A wait counts against the caller's own timeout (the Bash tool's), which must be longer than `--max-wait`.
 
 Another session's holder in the job is kept like the board: it exits by itself with its session. The cap is proven to be enforced; cleanup is proven with stand-in sessions only, since under `claude -p` leftovers were already gone by other means and the desktop-app quit of the incident was not reproduced (see PLUGIN-FACTS).
 

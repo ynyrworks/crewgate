@@ -1,0 +1,9 @@
+{
+  "slot.usage": "slot takes: run",
+  "slot.noCommand": "Give the command after --: crew slot run [--slots N] [--max-wait SECONDS] -- <command...>",
+  "slot.badNumber": "{name} must be a whole number of at least {min}",
+  "slot.waiting": "Waiting for a test slot: held by pid {pid} for {seconds} s",
+  "slot.timeout": "No slot became free in {seconds} s; running the command anyway",
+  "slot.failed": "The slot code failed ({reason}); running the command anyway",
+  "slot.spawnFailed": "Could not start {command}: {reason}"
+}
