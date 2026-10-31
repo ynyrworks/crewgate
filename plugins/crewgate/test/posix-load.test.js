@@ -3,7 +3,7 @@
 // A probe of what macOS and Linux can do about load. It measures and reports with t.diagnostic under the
 // prefix POSIX-FACT (read the lines in the CI log). It asserts only that a child inherits the parent's
 // priority, which Crewgate already relies on. A missing tool or a failed call is reported, never a failure.
-// Skips on Windows. Touches only processes it starts. Saturation: at most half the cores, about 2.6 s, once.
+// Skips on Windows. Touches only processes it starts. Saturation: at most half the cores, about 4.5 s, once.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -70,42 +70,53 @@ test('POSIX load probe', { skip: !POSIX && 'POSIX only' }, async (t) => {
     }
 
     // 2. Saturation: spinners at the runner's priority and at +10 (nice cannot go below the runner's own value).
+    // Pinned to cpu 0 with taskset where it exists, else unpinned at half the cores. The spinners (2 s each, ending
+    // by themselves) outlast the probe's 1 s window; each phase reports whether the window ended before they did.
     {
       const n = Math.floor(cores / 2);
       const pin = have('taskset');
-      fact(`saturation spinners=${n} (half of ${cores} cores) taskset=${pin ? 'present' : 'absent'}`);
+      const mode = pin ? 'pinned' : 'unpinned';
+      fact(`saturation mode=${mode} spinners=${n} (half of ${cores} cores) taskset=${pin ? 'present' : 'absent'}`);
       if (n < 1) {
         fact('saturation not run: fewer than 2 cores');
-      } else if (!pin) {
-        fact('saturation not run: no taskset here, so nothing can be pinned. Half the cores cannot saturate the machine, an unpinned run shows nothing, and no difference is reported');
       } else {
-        const spin = 'const e=Date.now()+1300;while(Date.now()<e){}';
-        const probe = 'const t0=Date.now();let last=t0,max=0;const iv=setInterval(()=>{const n=Date.now();if(n-last>max)max=n-last;last=n;if(n-t0>=1000){clearInterval(iv);console.log(max-5)}},5)';
+        const spin = 'const e=Date.now()+2000;while(Date.now()<e){}console.log(Date.now())';
+        const probe = 'const t0=Date.now();let last=t0,max=0;const iv=setInterval(()=>{const n=Date.now();if(n-last>max)max=n-last;last=n;if(n-t0>=1000){clearInterval(iv);console.log(max-5+" "+n)}},5)';
         const phase = async (extraNice) => {
+          const wrap = (args, nice) => {
+            const cmd = [...(nice ? ['nice', '-n', String(nice)] : []), process.execPath, ...args];
+            return pin ? ['taskset', ['-c', '0', ...cmd]] : [cmd[0], cmd.slice(1)];
+          };
+          const outs = [];
+          const go = (args, nice, slot) => {
+            const [c, a] = wrap(args, nice);
+            const p = spawn(c, a, { stdio: ['ignore', 'pipe', 'ignore'] });
+            outs[slot] = '';
+            p.stdout.on('data', (d) => { outs[slot] += d; });
+            p.on('error', () => {});
+            return p;
+          };
           const kids = [];
-          const wrap = (args, nice) => ['-c', '0', ...(nice ? ['nice', '-n', String(nice)] : []), process.execPath, ...args];
-          for (let i = 0; i < n; i++) {
-            const c = spawn('taskset', wrap(['-e', spin], extraNice), { stdio: 'ignore' });
-            c.on('error', () => {});
-            kids.push(c);
-          }
+          for (let i = 0; i < n; i++) kids.push(go(['-e', spin], extraNice, i + 1));
           await sleep(150);
-          const p = spawn('taskset', wrap(['-e', probe], 0), { stdio: ['ignore', 'pipe', 'ignore'] });
-          p.on('error', () => {});
-          let out = '';
-          p.stdout.on('data', (d) => { out += d; });
+          const p = go(['-e', probe], 0, 0);
           const all = [...kids, p].map((c) => new Promise((res) => { c.on('error', () => res()); c.on('close', () => res()); }));
-          const guard = setTimeout(() => [...kids, p].forEach((c) => c.pid && kill(c.pid)), 3000);
+          const guard = setTimeout(() => [...kids, p].forEach((c) => c.pid && kill(c.pid)), 4000);
           await Promise.all(all);
           clearTimeout(guard);
-          return out.trim();
+          const [delay, probeEnd] = String(outs[0]).trim().split(' ').map(Number);
+          const spinEnds = outs.slice(1).map((s) => Number(String(s).trim())).filter((x) => x > 0);
+          const outlasted = probeEnd > 0 && spinEnds.length > 0 ? probeEnd < Math.min(...spinEnds) : null;
+          return { delay: Number.isFinite(delay) ? delay : null, outlasted, spinners: spinEnds.length };
         };
         try {
           const same = await phase(0);
           const low = await phase(10);
-          fact(`saturation pinned to cpu 0, ${n} spinners + 1 probe on it: probe worst delay ms with spinners at nice ${base}: ${same || 'no output'}; at nice ${base + 10}: ${low || 'no output'}`);
-          if (!same || !low) fact('saturation result missing: taskset refused cpu 0 or a process failed');
-          else fact('saturation reading: only cpu 0 is saturated, the other cores stay free, so a difference holds for that core alone');
+          const show = (r) => `${r.delay === null ? 'no output' : r.delay} (probe window ended before the spinners: ${r.outlasted === null ? 'unknown' : r.outlasted}; spinners reporting ${r.spinners}/${n})`;
+          fact(`saturation ${mode}, ${n} spinners + 1 probe: probe worst delay ms with spinners at nice ${base}: ${show(same)}; at nice ${base + 10}: ${show(low)}`);
+          if (same.delay === null || low.delay === null) fact('saturation result missing: a process failed or taskset refused cpu 0');
+          else if (pin) fact('saturation reading: only cpu 0 is saturated, the other cores stay free, so a difference holds for that core alone');
+          else fact('saturation reading: unpinned, half the cores may not saturate the machine, so a small difference shows nothing');
         } catch (e) { fact(`saturation failed: ${e.message}`); }
       }
     }

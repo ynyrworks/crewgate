@@ -687,7 +687,7 @@ What escapes the job: any process that started before the assign (the hook's own
 
 `plugins/crewgate/test/posix-load.test.js` measures what macOS and Linux can do about load, since only priority and test concurrency exist there and neither was measured. It skips on Windows, changes only processes it starts, never fails for a missing tool, and prints each fact through `t.diagnostic` with the prefix `POSIX-FACT` (read them in the CI log). It asks:
 - Does a child of a process at below-normal priority report it, through `bash -c` and with `&`? (asserted)
-- With at most half the cores spinning for under 3 s, pinned with `taskset` where it exists, how far apart is a timer probe's worst delay with spinners at the runner's priority and at +10? If half the cores cannot saturate the machine, the result shows nothing and no difference is reported.
+- With at most half the cores spinning for 2 s per phase (outlasting the probe's 1 s window, which is reported), pinned with `taskset` where it exists and otherwise unpinned, how far apart is a timer probe's worst delay with spinners at the runner's priority and at +10? Unpinned, half the cores may not saturate the machine, so a small difference shows nothing.
 - Linux: is `systemd-run` present, does `systemd-run --user --scope` work, does `busctl --user` reach a manager, what does `/proc/self/cgroup` show, is the cgroup writable, and can a transient scope take a sleeping child's pid with `CPUQuota`?
 - macOS: is `taskpolicy` present, does `taskpolicy -b -p <sleeping process>` succeed without root, and does a child started after it report the same with `ps -o pri`?
 
