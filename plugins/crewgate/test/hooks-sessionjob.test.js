@@ -14,6 +14,7 @@ const config = require('../lib/core/config');
 const events = require('../lib/core/events');
 const sessionStart = require('../lib/hooks/session-start');
 
+const file0 = () => sessionjob.pidFile('pabcdef0123', 4242);
 const WIN = process.platform === 'win32';
 const claude = { name: 'claude.exe', args: '' };
 
@@ -58,8 +59,13 @@ test('start(): one detached hidden holder per Claude pid, with the settings; a l
   fs.writeFileSync(sessionjob.pidFile('pabcdef0123', 4242), String(process.pid));  // what the holder does
   assert.strictEqual(sessionjob.start('pabcdef0123', {}, 4242, deps), 'already');
   assert.strictEqual(calls.length, 1);
+  // a live holder is found before any process lookup
+  fs.writeFileSync(file0(), String(process.pid));
+  let looked = 0;
+  assert.strictEqual(sessionjob.start('pabcdef0123', {}, 4242, { ...deps, describe: () => { looked++; return claude; } }), 'already');
+  assert.strictEqual(looked, 0);
   // a dead pid in a claim older than the limit is stale; a fresh one is not
-  const file = sessionjob.pidFile('pabcdef0123', 4242);
+  const file = file0();
   fs.writeFileSync(file, '2147483646');
   assert.strictEqual(sessionjob.start('pabcdef0123', {}, 4242, deps), 'already');
   const old = new Date(Date.now() - 60000);
@@ -70,6 +76,8 @@ test('start(): one detached hidden holder per Claude pid, with the settings; a l
   fs.rmSync(file);
   const bad = { ...deps, spawn: () => { throw new Error('boom'); } };
   assert.strictEqual(sessionjob.start('pabcdef0123', {}, 4242, bad), 'error');
+  assert.ok(!fs.existsSync(file), 'the claim is given back');
+  assert.ok(events.read('pabcdef0123', { types: 'session.job.error' }).some((e) => e.data.reason === 'spawn-failed'));
 });
 
 test('start(): no PowerShell records an event and does not throw', () => {
@@ -269,6 +277,7 @@ test('keep decision: the board, visible windows, board-like processes and all th
     { pid: 20, ppid: 1, window: true }, { pid: 21, ppid: 20 },                   // a visible program and its child
     { pid: 30, ppid: 1 }, { pid: 31, ppid: 30 },                                 // background leftovers
     { pid: 40, ppid: 1, boardlike: true }, { pid: 41, ppid: 40 },                // a board by command line
+    { pid: 50, ppid: 999 },                                                      // a child whose parent has exited: not kept
   ];
   const run = (board, list) => {
     fs.writeFileSync(file, JSON.stringify({ board, procs: list }));
@@ -276,6 +285,16 @@ test('keep decision: the board, visible windows, board-like processes and all th
     return JSON.parse(r.stdout.trim());
   };
   assert.deepStrictEqual(run(10, procs.map((p) => ({ ...p, boardlike: false }))), [10, 11, 12, 20, 21]);
+  assert.deepStrictEqual(run(10, procs), [10, 11, 12, 20, 21, 40, 41]);   // a board-like command line counts even with a board pid
   assert.deepStrictEqual(run(0, procs), [20, 21, 40, 41]);
   assert.deepStrictEqual(run(0, procs.map((p) => ({ ...p, window: false, boardlike: false }))), []);
+});
+
+test('SessionStart looks the parent process up once for the priority step and the session job', { skip: !hasGit() }, () => {
+  const f = H.fixture();
+  const origDescribe = priority.describe;
+  let calls = 0;
+  priority.describe = () => { calls++; return { name: 'bash.exe', args: '' }; };
+  try { sessionStart.run({ session_id: 's-once', cwd: f.repo, source: 'compact' }); } finally { priority.describe = origDescribe; }
+  assert.strictEqual(calls, 1);
 });

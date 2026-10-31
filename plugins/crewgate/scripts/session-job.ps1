@@ -138,10 +138,9 @@ try {
     } catch { $err = 'tree-unreadable'; break }
     $b = Get-Board $all
     if ($b.mode -eq 'bad') { $err = 'board-json-unreadable'; break }
-    $useCmd = ($b.mode -ne 'pid')
-    $procs = @{}
+        $procs = @{}
     foreach ($k in $all.Keys) {
-      $procs[$k] = @{ ppid = $all[$k].ppid; window = $false; boardlike = ($useCmd -and $all[$k].cmd -match '[\\/]crew\.js"?\s+board\s+serve') }
+      $procs[$k] = @{ ppid = $all[$k].ppid; window = $false; boardlike = ($all[$k].cmd -match '[\\/]crew\.js"?\s+board\s+serve') }
     }
     $mine = @()
     foreach ($id in $ids) {
@@ -157,7 +156,10 @@ try {
     $todo = @()
     foreach ($id in $mine) {
       $foundSet[$id] = $true
-      if ($keep.ContainsKey($id)) { $keptSet[$id] = $true } elseif (-not $stoppedSet.ContainsKey($id)) { $todo += $id }
+      if ($keep.ContainsKey($id)) { $keptSet[$id] = $true }
+      # kept in any earlier round stays kept (a window can close, or not be up yet)
+      if ($keptSet.ContainsKey($id)) { continue }
+      if (-not $stoppedSet.ContainsKey($id)) { $todo += $id }
     }
     if ($todo.Count -eq 0 -or $Cleanup -ne 'on') { break }
     foreach ($id in $todo) {

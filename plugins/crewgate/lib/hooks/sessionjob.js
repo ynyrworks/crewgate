@@ -40,6 +40,14 @@ function claim(projectId, claudePid) {
   return false;
 }
 
+// A live pid in the runtime file means a holder already runs for this Claude Code process.
+function held(projectId, claudePid) {
+  try {
+    const n = Number(fs.readFileSync(pidFile(projectId, claudePid), 'utf8').trim());
+    return Number.isInteger(n) && n > 0 && pidAlive(n);
+  } catch { return false; }
+}
+
 function note(projectId, type, data) {
   try { require('../core/events').append(projectId, { type, src: 'hook', data, key: `${Date.now()}:${process.pid}` }); } catch { /* logging only */ }
 }
@@ -51,6 +59,7 @@ function start(projectId, limits, claudePid = process.ppid, deps = {}) {
     const cap = Number(limits && limits.session_cpu_percent === undefined ? 60 : limits && limits.session_cpu_percent);
     if (!Number.isInteger(cap) || cap < 10 || cap > 100) return 'bad-cap';
     if (!Number.isInteger(claudePid) || claudePid <= 1) return 'no-parent';
+    if (held(projectId, claudePid)) return 'already';   // before describe (a tasklist): compact and clear are free
     const pri = require('./priority');
     if (!pri.isClaude((deps.describe || pri.describe)(claudePid))) return 'not-claude';
     const shell = deps.shell || findShell();
@@ -68,8 +77,15 @@ function start(projectId, limits, claudePid = process.ppid, deps = {}) {
     if (args.some((x) => /["%]/.test(x))) { try { fs.unlinkSync(file); } catch { /* none */ } note(projectId, 'session.job.error', { reason: 'bad-path' }); return 'bad-path'; }
     const q = (x) => `"${x}"`;
     const line = `"start "" /b ${q(shell)} ${args.map(q).join(' ')}"`;
-    const child = (deps.spawn || spawn)(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', line],
-      { detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true });
+    let child;
+    try {
+      child = (deps.spawn || spawn)(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', line],
+        { detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true });
+    } catch {
+      try { fs.unlinkSync(file); } catch { /* none */ }
+      note(projectId, 'session.job.error', { reason: 'spawn-failed' });
+      return 'error';
+    }
     child.on && child.on('error', () => { try { fs.unlinkSync(file); } catch { /* none */ } note(projectId, 'session.job.error', { reason: 'spawn-failed' }); });
     child.unref && child.unref();
     return 'started';
@@ -99,4 +115,4 @@ function cli(argv) {
 
 if (require.main === module) { try { cli(process.argv.slice(2)); } catch { /* nothing to do */ } }
 
-module.exports = { start, claim, pidFile, findShell };
+module.exports = { start, claim, held, pidFile, findShell };

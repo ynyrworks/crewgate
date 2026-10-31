@@ -118,9 +118,16 @@ function run(payload) {
   } catch { /* logging must not block the brief */ }
   if (h.accountWarn) warnAccount(h, firstWarn, acct);
   // Below-normal priority for the Claude Code process (children inherit it). Swallows every error.
-  try { require('./priority').lower(h.cfg().limits && h.cfg().limits.process_priority); } catch { /* the session goes on */ }
+  // One process lookup (a tasklist call) is shared by the priority step and the session job.
+  const ppid = process.ppid;
+  let looked = null;
+  const describe = (pid) => {
+    if (!looked || looked.pid !== pid) looked = { pid, info: require('./priority').describe(pid) };
+    return looked.info;
+  };
+  try { require('./priority').lower(h.cfg().limits && h.cfg().limits.process_priority, ppid, { describe }); } catch { /* the session goes on */ }
   // Windows: one Job Object for the session (CPU cap, cleanup at exit), made by a detached holder. Never waits.
-  try { require('./sessionjob').start(h.pid, h.cfg().limits || {}); } catch { /* the session goes on */ }
+  try { require('./sessionjob').start(h.pid, h.cfg().limits || {}, ppid, { describe }); } catch { /* the session goes on */ }
   try { require('../core/clishim').write(); } catch { /* scripts lose a convenience; the session goes on */ }
   // Optional (global board.autostart): start the board if it is down. Spawns detached, never waits, never throws.
   try {
