@@ -26,6 +26,7 @@ const DEFAULTS = Object.freeze({
   limits: {
     max_parallel_workers: 3,
     parallel_enforce: 'block',
+    dispatch_max_cpu: 85,
     process_priority: 'below_normal',
     session_cpu_percent: 60,
     session_cleanup: 'on',
@@ -99,6 +100,9 @@ const SCHEMA = [
   f('limits.parallel_enforce', 'string', d(
     'What happens when a dispatch (or a SendMessage that wakes a stopped worker) would pass max_parallel_workers: block (denied; the reason names the running tasks) or warn (a reminder only). Workers are counted from the dispatch map, so records left by an ended or quit session do not count.',
     '派出（或用 SendMessage 喚醒已停止的 worker）會超過 max_parallel_workers 時的處理：block（拒絕，理由會列出進行中的任務）或 warn（只提醒）。worker 數依派工紀錄計算，已結束或被關閉的工作階段留下的紀錄不算。'), { enum: ['block', 'warn'] }),
+  f('limits.dispatch_max_cpu', 'integer', d(
+    'A worker dispatch (or a SendMessage that wakes a stopped worker) is denied when the whole machine is busier than this CPU percent. The hook takes a 200 ms sample; when the first is over, it takes a second one, and denies only if both are over, so a short spike does not block a dispatch. Reviewers, refuters and the main session are not checked. 100 turns the check off. If the sample cannot be taken, the dispatch goes on.',
+    '派出 worker（或用 SendMessage 喚醒已停止的 worker）時，若整台機器的 CPU 使用率高於此百分比就拒絕。hook 取 200 毫秒的樣本；第一次超過時再取一次，兩次都超過才拒絕，短暫的尖峰不會擋住派工。審查者、反駁者與主工作階段不檢查。100 代表關閉此檢查。取不到樣本時照常派出。'), { min: 10, max: 100 }),
   f('limits.process_priority', 'string', d(
     'Priority of the Claude Code process, set at session start in a registered crew project: below_normal (it and everything it starts, such as shells and test runs, yield CPU to your other apps) or normal (leave it alone). It is only ever lowered, and only when the parent process is identified as Claude Code.',
     '工作階段開始時（限已註冊的 crew 專案）Claude Code 行程的優先權：below_normal（它與它啟動的 shell、測試等都會把 CPU 讓給你的其他應用程式）或 normal（不動）。只會降低，且只在確認上層行程是 Claude Code 時才動。'), { enum: ['below_normal', 'normal'] }),

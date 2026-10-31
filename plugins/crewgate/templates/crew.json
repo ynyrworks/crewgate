@@ -35,6 +35,7 @@
   "limits": {
     "max_parallel_workers": 3,
     "parallel_enforce": "block",
+    "dispatch_max_cpu": 85,
     "process_priority": "below_normal",
     "session_cpu_percent": 60,
     "session_cleanup": "on",

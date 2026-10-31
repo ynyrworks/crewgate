@@ -19,7 +19,7 @@ function runHook(event, payload, opts = {}) {
   const t0 = process.hrtime.bigint();
   const r = spawnSync(process.execPath, [HOOK, event], {
     input, cwd: opts.cwd || process.cwd(), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
-    env: { ...process.env, CREWGATE_HOOK_GUARD_MS: '30000', ...(opts.env || {}) },
+    env: { ...process.env, CREWGATE_HOOK_GUARD_MS: '30000', CREWGATE_CPU_CHECK: 'off', ...(opts.env || {}) },
   });
   const ms = Number(process.hrtime.bigint() - t0) / 1e6;
   const out = (r.stdout || '').trim();
