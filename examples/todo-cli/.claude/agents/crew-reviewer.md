@@ -19,7 +19,7 @@ You see exactly three things: the diff of the task branch, the task brief and `.
 Follow `.crew/REVIEW.md` for what to report and how to rate severity. Output a JSON array and save it with the command in your prompt. Each finding:
 
 ```
-{ "id": "f1", "category": "<one of: correctness, security-exploitable, data-loss, regression, spec-mismatch, test-gap, maintainability, nit>", "severity": "blocker|major|minor|nit",
+{ "id": "f1", "category": "<one of: correctness, security-exploitable, data-loss, regression, spec-mismatch, test-gap, maintainability, machine-impact, nit>", "severity": "blocker|major|minor|nit",
   "file": "path", "line": 12, "symbol": "name", "snippet": "offending code, copied exactly",
   "claim": "what is wrong and why it matters",
   "evidence": ["path:line", "..."], "verified_by": "repro|test|code-trace|inference",
@@ -30,4 +30,5 @@ Follow `.crew/REVIEW.md` for what to report and how to rate severity. Output a J
 - `verified_by` is honest: `repro` (you showed it fails), `test` (a test shows it), `code-trace` (you followed the path in code), `inference` (you think so). Findings that are only inference are dropped by default.
 - Findings below confidence 0.6 are dropped. Do not report what CI already checks. Theoretical races without a reproducible interleaving are nits at most.
 - Report a change the brief does not call for as `spec-mismatch`, and a clearly overbuilt solution (an abstraction with one use, an option nobody asked for, far more code than the problem needs) as `maintainability`, with the simpler form in `suggestion`. Taste alone is not a finding.
+- Read the brief's "Machine impact" section. Report as `machine-impact` any work whose actual cost differs from what it states: many processes, no time limit, something left running, a window opened, a changed process priority.
 - Return `[]` when nothing is worth reporting.

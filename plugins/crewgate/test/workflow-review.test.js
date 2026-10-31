@@ -21,6 +21,7 @@ const SRC = 'const total = compute(1);\nmodule.exports = total;\n';
 test('validateFinding reports every problem instead of throwing', () => {
   const cats = cfgOf().review.categories;
   assert.deepEqual(rv.validateFinding(u.finding('f1'), cats), []);
+  assert.deepEqual(rv.validateFinding(u.finding('f1', { category: 'machine-impact' }), cats), [], 'machine-impact is a default category');
   assert.deepEqual(rv.validateFinding(null, cats), ['not an object']);
   assert.deepEqual(rv.validateFinding('x', cats), ['not an object']);
   const p = rv.validateFinding({ id: 'a', category: 'bogus', severity: 'huge', line: 0, evidence: [], verified_by: 'guess', confidence: 3 }, cats);

@@ -70,8 +70,9 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
    `references/review-pipeline.md` ("Plan review"). What survives is proposed as `[?]` nodes; accept or reject each
    one (`crew plan accept|reject`). You may skip it for a small plan (under about 3 steps) or a plan the user
    dictated step by step.
-3. **Brief each piece.** Write a brief file with exactly five sections: Goal, Scope (allowed and
-   forbidden files), Must not regress (and who fixes out-of-scope fallout), Acceptance (commands and
+3. **Brief each piece.** Write a brief file with exactly six sections: Goal, Scope (allowed and
+   forbidden files), Must not regress (and who fixes out-of-scope fallout), Machine impact (what runs, how many
+   processes, for how long; "Light: tests only" is fine), Acceptance (commands and
    observable behaviour), Context (paths and line ranges, never pasted dumps). Template and a worked
    example: `references/brief-template.md`. Workers run on the user's machine while they use it: never ask for a
    load or stress test without a process count (at most half the CPU cores) and a time limit after which each
@@ -224,7 +225,7 @@ The same plugin works when the orchestrator is a Codex session. What differs:
 
 ## References (load on demand)
 
-- `references/brief-template.md`: the five-section brief, with an example and the dispatch prompt.
+- `references/brief-template.md`: the six-section brief, with an example and the dispatch prompt.
 - `references/review-pipeline.md`: the three stages, finding schema, filter rules, how to dismiss.
 - `references/commands.md`: every `crew` command in one page, task states and the files they touch.
 - `references/lessons-and-gates.md`: lesson kinds, promotion rules, gate wording, handoff body template.

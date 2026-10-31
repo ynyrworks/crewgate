@@ -10,11 +10,18 @@ Dismissed findings are remembered in `.crew/dismissed.jsonl`.
   (`code-trace`). Pure inference is dropped by default; do not pad the list with it.
 - Check the change against the brief: missing acceptance items, work outside the allowed scope,
   and regressions of behaviour listed under "Must not regress".
+- Read the brief's "Machine impact" section and compare it with what the diff really does. Report a
+  worker, script or test that starts many processes, has no time limit, leaves something running, opens a
+  window or changes process priority, and any work whose actual cost differs from what the section states
+  (category `machine-impact`).
 
 ## Severity calibration
 
 - `blocker`: wrong results, data loss, an exploitable security hole, or a broken build/test on the happy path.
 - `major`: a real defect on a realistic path, or a clear regression of existing behaviour.
+- `machine-impact`: `blocker` for something left running or unbounded (a process with no time limit, a loop
+  that never ends, a leftover process); `major` for more processes than half the cores, a window opened, a
+  priority change, or a cost clearly beyond what the brief states; `minor` for a small mismatch with the brief.
 - `minor`: a defect with limited reach, a missing test for new behaviour, maintainability that will hurt soon.
 - `nit`: naming, formatting, taste. At most a handful; the pipeline caps them.
 

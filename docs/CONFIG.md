@@ -39,11 +39,11 @@ Committed with the project. Created by `crew init`.
 | `limits.orchestrator_read_warn_lines` | integer; min 1; max 100000 | `300` | Warn when the orchestrator reads a file longer than this without a range. | 統籌不帶範圍讀超過此行數的檔案時提醒。 |
 | `limits.orchestrator_edit` | string; one of `off`, `warn`, `block` | `"warn"` | What happens when the orchestrator edits code itself. | 統籌自己改程式時的處理。 |
 | `limits.orchestrator_edit_allow` | array of string | `["**/*.md","docs/**",".claude/**",".crew/**"]` | Globs the orchestrator may edit directly. | 統籌可直接修改的路徑 glob。 |
-| `review` | object | `{"min_confidence":0.6,"report_inference":false,"nit_cap":5,"categories":["correctness","security-exploitable","data-loss","regression","spec-mismatch","test-gap","maintainability","nit"],"downgrade_to_nit":["theoretical-race","style"]}` | Review pipeline settings. | 審查流程設定。 |
+| `review` | object | `{"min_confidence":0.6,"report_inference":false,"nit_cap":5,"categories":["correctness","security-exploitable","data-loss","regression","spec-mismatch","test-gap","maintainability","machine-impact","nit"],"downgrade_to_nit":["theoretical-race","style"]}` | Review pipeline settings. | 審查流程設定。 |
 | `review.min_confidence` | number; min 0; max 1 | `0.6` | Findings below this confidence are dropped. | 低於此信心的發現會被濾掉。 |
 | `review.report_inference` | boolean | `false` | Keep findings that are only inference. | 保留只憑推論的發現。 |
 | `review.nit_cap` | integer; min 0; max 100 | `5` | Most nit findings shown. | 最多顯示幾筆瑣碎意見。 |
-| `review.categories` | array of string | `["correctness","security-exploitable","data-loss","regression","spec-mismatch","test-gap","maintainability","nit"]` | Allowed finding categories. | 允許的發現類別。 |
+| `review.categories` | array of string | `["correctness","security-exploitable","data-loss","regression","spec-mismatch","test-gap","maintainability","machine-impact","nit"]` | Allowed finding categories. | 允許的發現類別。 |
 | `review.downgrade_to_nit` | array of string | `["theoretical-race","style"]` | Patterns downgraded to nit. | 自動降為瑣碎意見的型態。 |
 | `plan` | object | `{"max_proposals_per_round":5,"max_rounds":3,"large_growth":5}` | Plan review limits. | 計畫審查的上限。 |
 | `plan.max_proposals_per_round` | integer; min 1; max 50 | `5` | Most proposed steps one plan review round may add (the most severe kinds are kept, the rest are counted as cut). | 一輪計畫審查最多提出幾個提議節點（保留最嚴重的類型，其餘記為截掉）。 |

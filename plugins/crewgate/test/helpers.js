@@ -63,6 +63,7 @@ const GOOD_BRIEF = [
   '# Goal', 'Add the thing.', '',
   '# Scope', 'Allowed: src/**. Forbidden: docs/**.', '',
   '# Must not regress', 'Existing tests keep passing.', '',
+  '# Machine impact', 'Light: tests only.', '',
   '# Acceptance', 'npm test passes.', '',
   '# Context', 'See src/a.js:10-20.', '',
 ].join('\n');

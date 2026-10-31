@@ -33,6 +33,24 @@ test('createTask: id format, files, marker line, event', () => {
   assert.deepEqual(tasks.load(id, t.id), t);
 });
 
+test('machine impact: createTask refuses a brief without it or with it empty, accepts it; an old brief still shows', () => {
+  const noSection = h.GOOD_BRIEF.replace('# Machine impact\nLight: tests only.\n\n', '');
+  assert.ok(!noSection.includes('Machine impact'));
+  const id = pid();
+  assert.throws(() => tasks.createTask(id, { title: 't', brief: noSection }), (e) => e.key === 'task.briefInvalid' && e.missing.join() === 'Machine impact');
+  const emptied = h.GOOD_BRIEF.replace('Light: tests only.', '<!-- fill in -->');
+  assert.throws(() => tasks.createTask(id, { title: 't', brief: emptied }), (e) => e.key === 'task.briefInvalid' && e.empty.join() === 'Machine impact');
+  assert.deepEqual(tasks.list(id), []);
+  const t = make(id);
+  assert.match(tasks.readBrief(id, t.id), /Machine impact/);
+  // a task created before this section existed: read, load and list do not validate the brief
+  fs.writeFileSync(path.join(paths.taskDir(id, t.id), 'brief.md'), `crew-task: ${t.id}
+${noSection}`);
+  assert.equal(tasks.load(id, t.id).id, t.id);
+  assert.equal(tasks.list(id).length, 1);
+  assert.ok(!tasks.readBrief(id, t.id).includes('Machine impact'));
+});
+
 test('createTask replaces a foreign marker line and redacts the brief', () => {
   const id = pid();
   const t = make(id, { brief: `crew-task: t-19990101-zzzz\n${h.GOOD_BRIEF}\nhost ${ip(10,4,4,4)} password=abc` });
@@ -44,16 +62,16 @@ test('createTask replaces a foreign marker line and redacts the brief', () => {
 
 test('brief validation: every section required and non-empty; zh-TW headings and numbering accepted', () => {
   const missing = tasks.validateBrief('# Goal\nx\n# Scope\ny');
-  assert.deepEqual(missing.missing, ['Must not regress', 'Acceptance', 'Context']);
+  assert.deepEqual(missing.missing, ['Must not regress', 'Machine impact', 'Acceptance', 'Context']);
   assert.equal(missing.ok, false);
   const empty = tasks.validateBrief(h.GOOD_BRIEF.replace('Existing tests keep passing.', '<!-- fill in -->'));
   assert.deepEqual(empty.empty, ['Must not regress']);
-  const numbered = ['## 1. Goal', 'a', '## 2. Scope — allowed / forbidden', 'b', '## 3. Must not regress', 'c', '## 4. Acceptance', 'd', '## 5. Context', 'e'].join('\n');
+  const numbered = ['## 1. Goal', 'a', '## 2. Scope — allowed / forbidden', 'b', '## 3. Must not regress', 'c', '## 4. Machine impact', 'm', '## 5. Acceptance', 'd', '## 6. Context', 'e'].join('\n');
   assert.equal(tasks.validateBrief(numbered).ok, true);
-  const zh = ['# 目標', 'a', '# 範圍', 'b', '# 不可退化', 'c', '# 驗收', 'd', '# 脈絡', 'e'].join('\n');
+  const zh = ['# 目標', 'a', '# 範圍', 'b', '# 不可退化', 'c', '# 機器影響', 'm', '# 驗收', 'd', '# 脈絡', 'e'].join('\n');
   assert.equal(tasks.validateBrief(zh).ok, true);
   // headings inside code fences do not count
-  assert.equal(tasks.validateBrief('```\n# Goal\nx\n```').missing.length, 5);
+  assert.equal(tasks.validateBrief('```\n# Goal\nx\n```').missing.length, 6);
   const id = pid();
   assert.throws(() => tasks.createTask(id, { title: 't', brief: '# Goal\nx' }), (e) => e.key === 'task.briefInvalid' && e.missing.includes('Scope'));
   assert.throws(() => tasks.createTask(id, { title: '', brief: h.GOOD_BRIEF }), (e) => e.key === 'task.titleRequired');
