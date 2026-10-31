@@ -329,3 +329,29 @@ test('ids: a duplicate hand-written id is found first, warned about by show and 
   assert.match(out, /- \[ \] second <!-- id:n2 -->/);
   assert.equal(crewJ(repo, 'doctor').data.checks.find((x) => x.name === 'plans').status, 'ok');
 });
+
+test('plan clarify keeps answers last in the file, as plain lines that are not steps', () => {
+  const repo = u.initRepo();
+  assert.equal(crewJ(repo, 'plan', 'new', 'demo', '--title', 'T', '--goal', 'The goal').code, 0);
+  assert.equal(crewJ(repo, 'plan', 'clarify', 'demo', '--question', 'Which DB?', '--answer', 'SQLite').code, 0);
+  assert.equal(crewJ(repo, 'plan', 'add', 'demo', 'First step').code, 0);
+  assert.equal(crewJ(repo, 'plan', 'clarify', 'demo', '--question', 'CI?', '--answer', 'none', '--by', 'assumed').code, 0);
+  assert.equal(crewJ(repo, 'plan', 'add', 'demo', 'Second step').code, 0);
+  const text = fs.readFileSync(path.join(repo, '.crew', 'plans', 'demo.md'), 'utf8');
+  assert.ok(text.indexOf('First step') < text.indexOf('Second step'), text);
+  assert.ok(text.indexOf('Second step') < text.indexOf('## Clarified'), text);
+  assert.ok(text.indexOf('Which DB?') < text.indexOf('CI?'), text);
+
+  const d = crewJ(repo, 'plan', 'show', 'demo').data;
+  assert.equal(d.goal, 'The goal');
+  assert.equal(d.summary.total, 2, 'answers are not steps');
+  assert.deepEqual(d.clarified, ['Q: Which DB? A: SQLite (user)', 'Q: CI? A: none (assumed)']);
+  assert.match(h.crew(['plan', 'show', 'demo'], repo).out, /Q: CI\? A: none \(assumed\)/);
+  assert.notEqual(crewJ(repo, 'plan', 'clarify', 'demo', '--question', 'No answer').code, 0);
+});
+
+test('with no steps yet, a clarified answer is not read as the goal', () => {
+  const d = plans.parse('# T\nThe goal\n\n## Clarified\n- Q: a A: b (user)\n');
+  assert.equal(d.goal, 'The goal');
+  assert.deepEqual(d.clarified, ['Q: a A: b (user)']);
+});

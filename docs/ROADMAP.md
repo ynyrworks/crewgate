@@ -10,6 +10,8 @@ One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.m
 
 - **0.15.1** — Plan tree step 3: `crew review followup` proposes work a code review found as a `[?]` step that counts only once accepted, next to the task's step or in another plan.
 - **0.15** — The pixel-art Office becomes an optional plugin, `crewgate-office`; plans guard their goal (a warning without one, an `off-goal` review finding, clarifying before a non-trivial plan); a gate set to `never` is denied before the command runs, and detection covers the PowerShell tool and wrapped commands.
+- **0.14** — Plans: a tree of steps kept as Markdown in the repo, and plan review that turns what a reviewer finds into proposed `[?]` steps. The board says why it stopped and can start itself (`board.autostart`).
+- **0.13** — Gates follow the repo a command targets and can be enforced (`gates.enforce`, `gates.require_user_turn`); the History page; timeline search; wider board layouts; Office view v3; stability fixes from real use.
 - **0.12** — Session statistics (duration, prompts, tool counts, tokens, estimated cost), a per-session activity timeline (`#/s/<id>`), the experimental Office view, and fixes from real use (recorded gates, hooks-last-seen, merge records, `via`, agent names, work item updates, default checks detection).
 - **0.11** — Update banner and one-click update on the board (one optional request a day, off with `updates.check`).
 - **0.10** — Codex support (experimental): Codex as worker, reviewer and orchestrator; a richer Sessions view (current activity, role and task, parent / child tree, filters, private mode).
@@ -19,19 +21,15 @@ One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.m
 
 What is on `main` and will ship in the next version (details under "Unreleased" in the [CHANGELOG](../CHANGELOG.md)).
 
-- **Gates follow the repo and can be enforced.** Git events and gate checks use the repository a command targets (`cd`, `git -C`); `gates.enforce` (`remind`, `confirm`, `block`) with a PreToolUse(Bash) hook; `gates.require_user_turn`; the session id read from `CLAUDE_CODE_SESSION_ID`. `confirm` is unverified in bypass-permissions mode, and Codex stays on `remind`.
-- **History.** `#/history` looks back up to 90 days with the Sessions statistics, by day, with a range and project filter.
-- **Timeline polish.** A search box, tool durations across page edges, and crewgate events older than the board's recent event tail.
-- **Board layout.** Capped, scrolling lists inside cards, wide-screen layout up to 2400 px, more grid columns.
-- **Stability fixes from real use.** Redirects and heredocs are not parsed as git words, a hook error log (`hook-errors.jsonl`) and `crew doctor` counts, `subagent.stop` `last` only from a final message, deduplicated Codex session events and merges, orphan subagent marking, timestamps in `board.log`.
-- **Office view v3.** Redrawn pixel art; behaviour follows the activity (reading, searching, editing, running, waiting), errands between sessions, a lounge for idle sessions, walking out when done, and a different look per role.
+- **Review findings cannot skip the refuter unnoticed.** `crew task accept` refuses a round that was never finalized unless a reason is given.
+- **`crew lesson score`.** Shows whether the lessons behind each promoted rule stopped coming back.
+- **`crew plan clarify`.** Settled questions are kept with the plan and shown by `plan show`, the board and plan review.
 
 ## Later
 
 - **Per-account labelling of sessions.** Show which Claude account or plan a session used, with an optional "expected account" warning per project. Idea stage: it is not verified that the account can be detected from what Claude Code exposes locally.
 - **Office view: test-result reactions** (a celebration or a slump when checks pass or fail; the result is not in the data the office receives today) and **bigger character sprites**.
 - **Enhanced WebGL Office (planned for 0.16).** In the same optional `crewgate-office` plugin, sharing its data model, with the pixel-art view as the fallback for browsers without WebGL or too slow for it. The main plugin gains no dependency.
-- **Promoted-rule scoring.** Measure whether a promoted lesson actually reduces repeat corrections.
 - **Codex.** Verification on more platforms and Codex versions, honouring hook `ask` / `deny` if Codex supports it, and Codex subagent workers once their sandbox can commit.
 
 ## Exploring

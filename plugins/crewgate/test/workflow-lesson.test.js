@@ -158,3 +158,31 @@ test('lesson list is empty-safe and survives hand-edited lines', () => {
   assert.match(run(repo, 'lesson', 'suggest').out, /No lesson is ready/);
   assert.equal(run(repo, 'lesson', 'bogus').code, 2);
 });
+
+test('score compares the lessons of a promoted rule before and after its promotion', () => {
+  const repo = u.initRepo();
+  const promote = (key) => u.crewJson(['lesson', 'promote', key, '--rule', `Rule for ${key}.`], repo);
+  for (const [key, dates] of [['quiet', ['2026-10-01', '2026-10-05']], ['new', ['2026-10-18', '2026-10-19']], ['less', ['2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04']], ['same', ['2026-10-01', '2026-10-02']]]) {
+    for (const d of dates) add(repo, key, d);
+    assert.equal(promote(key).code, 0);
+  }
+  add(repo, 'less', '2026-10-10');
+  for (let d = 3; d <= 20; d++) add(repo, 'same', `2026-10-${String(d).padStart(2, '0')}`);
+
+  const r = u.crewJson(['lesson', 'score', '--date', '2026-10-20'], repo);
+  assert.equal(r.code, 0, r.err);
+  const by = Object.fromEntries(r.data.map((s) => [s.key, s]));
+  assert.equal(by.quiet.verdict, 'no-repeats');
+  assert.equal(by.new.verdict, 'too-early', 'one day since the promotion says nothing');
+  assert.equal(by.less.verdict, 'fewer');
+  assert.deepEqual([by.less.before, by.less.before_days, by.less.after, by.less.after_days, by.less.last_repeat], [4, 4, 1, 46, '2026-10-10']);
+  assert.equal(by.same.verdict, 'not-helping');
+  assert.match(run(repo, 'lesson', 'score', '--date', '2026-10-20').out, /quiet .*no repeats/);
+});
+
+test('score with no promoted rules says so; a hand-written rule without a source is skipped', () => {
+  const repo = u.initRepo();
+  fs.writeFileSync(rulesFile(repo), `${lessons.START}\n- Written by hand.\n${lessons.END}\n`);
+  assert.deepEqual(u.crewJson(['lesson', 'score'], repo).data, []);
+  assert.match(run(repo, 'lesson', 'score').out, /No promoted rules/);
+});

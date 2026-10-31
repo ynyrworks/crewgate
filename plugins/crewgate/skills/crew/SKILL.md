@@ -58,12 +58,12 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
    its own plan, or change the goal.
    **Clarify before a non-trivial plan** (about 3 steps or more), and skip this for a smaller one or a plan
    the user dictated step by step. Ask only what would change the plan and what the code cannot answer: read
-   the code first. Ask one question at a time and give your recommended answer. Once the plan file exists, add
-   the questions and answers under a `## Clarified` heading at the end of the file, as plain lines such as
-   `- Q: ... A: ... (user)`, so a later session can read them. Plain lines and headings are not plan steps.
+   the code first. Ask one question at a time and give your recommended answer. Once the plan file exists, keep each
+   answer with `crew plan clarify <slug> --question "..." --answer "..."`. It goes under a `## Clarified` heading
+   at the end of the file, where `crew plan show`, the plan reviewer and a later session can read it.
    Clarify again only when the goal, scope, a constraint or an earlier answer changes (the `plan.large_growth`
    notice is one such signal), and only about what that change affects. If nobody can answer, such as in an
-   unattended run, do not wait: write your assumption there with `(assumed)` and carry on; the next time the
+   unattended run, do not wait: record your assumption with `--by assumed` and carry on; the next time the
    user is present, confirm those lines.
    For a non-trivial plan (about 3 steps or more) run a **plan review** before you dispatch anything:
    `crew plan review run <slug>`, then the reviewer, filter, refuter and finalize steps in

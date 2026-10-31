@@ -2,10 +2,21 @@
 
 ## Unreleased
 
+### New
+
+- `crew plan clarify <slug> --question "..." --answer "..." [--by user|assumed]` keeps a settled question under `## Clarified` at the end of the plan. `plan show` and the board's plan page list these, and a plan review treats them as settled. They were instructions in the skill only, and `plan show` did not show them.
+
+- `crew lesson score` shows, for each promoted rule, the lessons under its key before and after it was promoted, per day: too early, no repeats, fewer repeats or not helping. It counts recorded lessons only, so a correction nobody recorded is not seen.
+
 ### Changed
 
 - `crew task accept` refuses a task whose latest review round has findings that never went through the refuter and `crew review finalize`. It used to accept and print a note, and real runs skipped the refuter in 3 of 6 rounds with findings. `--skip-refuter "reason"` accepts anyway and records the reason in the event. A task with no review round still gets only a note.
 - The `crew` skill's description names Crewgate, so asking for it by name finds the skill.
+- `gates.enforce: confirm` is now checked in real `claude -p` runs: a gated push did not run in `default`, `dontAsk` or `bypassPermissions` mode. An interactive session in bypass-permissions mode is still not verified.
+
+### Fixed
+
+- Text after a later heading in a plan with no steps yet no longer counts as its goal.
 
 ## 0.15.1 — 2026-10-31
 

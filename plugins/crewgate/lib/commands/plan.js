@@ -19,6 +19,10 @@ const SPECS = {
       '--origin': { dest: 'origin', choices: plans.ORIGINS, default: 'plan' }, '--proposed': { dest: 'proposed', flag: true },
     },
   },
+  clarify: {
+    positionals: [{ name: 'slug' }],
+    options: { '--question': { dest: 'question' }, '--answer': { dest: 'answer' }, '--by': { dest: 'by', choices: ['user', 'assumed'], default: 'user' } },
+  },
   link: { positionals: [{ name: 'slug' }, { name: 'node' }, { name: 'task' }], options: {} },
   set: { positionals: [{ name: 'slug' }, { name: 'node' }, { name: 'action', choices: ['open', 'done', 'dropped', 'accept'] }], options: {} },
   rm: { positionals: [{ name: 'slug' }, { name: 'node' }], options: {} },
@@ -164,6 +168,7 @@ function run(argv, ctx) {
       ctx.t('plan.head', { slug: a.slug, title: d.title, pct: d.summary.pct, done: d.summary.done, total: d.summary.total }),
       ...(d.goal ? [d.goal] : []),
       ...treeLines(ctx, d.nodes),
+      ...(d.clarified.length ? [ctx.t('plan.clarifiedHead'), ...d.clarified.map((l) => `  ${l}`)] : []),
       ...(d.duplicates.length ? [ctx.t('plan.dupIds', { ids: d.duplicates.join(', ') })] : []),
       ...(d.truncated ? [ctx.t('plan.truncated')] : []),
     ]);
@@ -171,6 +176,9 @@ function run(argv, ctx) {
     if (a.task) checkTask(proj.id, a.task);
     const r = plans.addTo(root, proj.id, a.slug, { text: a.text, under: a.under, task: a.task, origin: a.origin, proposed: !!a.proposed });
     ctx.emit({ slug: a.slug, ...r }, ctx.t('plan.added', { id: r.id, slug: a.slug }));
+  } else if (sub === 'clarify') {
+    const r = plans.clarify(root, proj.id, a.slug, { question: a.question, answer: a.answer, by: a.by });
+    ctx.emit(r, ctx.t('plan.clarified', { slug: a.slug }));
   } else if (sub === 'link') {
     const r = plans.linkTo(root, proj.id, a.slug, a.node, checkTask(proj.id, a.task));
     ctx.emit({ slug: a.slug, ...r }, ctx.t('plan.linked', { id: r.id, task: r.task }));
@@ -204,6 +212,7 @@ module.exports = {
       '  crew plan list [--json]',
       '  crew plan show SLUG [--json]',
       '  crew plan add SLUG "text" [--under NODE] [--task TASK] [--origin plan|user|review|refute|implementation|send-back] [--proposed]',
+      '  crew plan clarify SLUG --question "..." --answer "..." [--by user|assumed]   (keeps a settled question under ## Clarified)',
       '  crew plan link SLUG NODE TASK',
       '  crew plan set SLUG NODE open|done|dropped|accept',
       '  crew plan rm SLUG NODE   (a leaf only)',
@@ -220,6 +229,7 @@ module.exports = {
       '  crew plan list [--json]',
       '  crew plan show SLUG [--json]',
       '  crew plan add SLUG "文字" [--under NODE] [--task TASK] [--origin plan|user|review|refute|implementation|send-back] [--proposed]',
+      '  crew plan clarify SLUG --question "..." --answer "..." [--by user|assumed]   （把釐清的問題記在 ## Clarified 下）',
       '  crew plan link SLUG NODE TASK',
       '  crew plan set SLUG NODE open|done|dropped|accept',
       '  crew plan rm SLUG NODE   （只能刪葉節點）',

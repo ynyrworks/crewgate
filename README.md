@@ -398,7 +398,7 @@ codex plugin add crewgate@crewgate
   `board.show_text` in the global config. Session statistics (duration, prompts, tool calls, tokens, cost) are numbers only;
   they are cached per transcript under `~/.crewgate/cache/sessions`.
 - Git and gate detection reads only the command text of the Bash and PowerShell tools. A script that pushes, a configured alias, a variable (`$GIT push`), `-EncodedCommand` or a push by another tool (IDE, Git GUI, MCP server) is not seen; the gates guard against the model's ordinary habits, not against a determined bypass.
-- `gates.enforce: confirm` relies on Claude Code honouring a PreToolUse `ask`; its behaviour in bypass-permissions mode (and `dontAsk`) is not verified. `gate.confirmed` means the command ran after an ask was returned, not that a human clicked.
+- `gates.enforce: confirm` relies on Claude Code honouring a PreToolUse `ask`; in `claude -p` (2.1.308) the command did not run in `default`, `dontAsk` or `bypassPermissions` mode, while an interactive session in bypass-permissions mode is not verified. `gate.confirmed` means the command ran after an ask was returned, not that a human clicked.
 - Codex sessions stay on `remind`: whether Codex honours `ask` / `deny` from a hook is not established. Where the session id is unknown (Codex CLI), `gates.require_user_turn` falls back to the weaker `"project"` check: a message in any session of the project counts.
 - The optional Office add-on is experimental and shows activity, not results: whether a command passed is not in the data it receives. A Codex orchestrator is experimental; there is no Gemini support.
 
