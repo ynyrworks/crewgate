@@ -150,6 +150,7 @@
   "sessions.running": "{count} 個子代理中有 {running} 個執行中",
   "sessions.detached": "分離的",
   "sessions.worktree": "工作樹 {name}",
+  "sessions.account": "帳號：{who}",
   "sessions.prompt": "提示：",
   "sessions.reply": "回覆：",
   "sessions.noMatch": "已載入的步驟沒有符合的。",

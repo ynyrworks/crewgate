@@ -13,6 +13,7 @@ const hooklog = require('../core/hooklog');
 const gates = require('../core/gates');
 const clishim = require('../core/clishim');
 const plans = require('../core/plans');
+const account = require('../core/account');
 const boardCmd = require('./board');
 const initFeature = require('../features/init');
 
@@ -47,6 +48,7 @@ async function run(argv, ctx) {
   const proj = ctx.project();
   const wtRoot = proj ? ctx.workTree() : (project.detectWorkTree(ctx.cwd) || root);
   let cfg = config.loadGlobal().config;
+  let expectedAccount = '';
   if (!root && !proj) {
     add('config', 'warn', ctx.t('wf.doctor.noProject'));
     add('registration', 'warn', ctx.t('wf.doctor.noProject'));
@@ -62,6 +64,7 @@ async function run(argv, ctx) {
       add('config', 'warn', loaded.warnings.map((w) => w.message).join('; '));
     } else add('config', 'ok', loaded.file);
     if (loaded.exists && !loaded.errors.length) cfg = { ...cfg, port: loaded.config.board.port, boardEnabled: loaded.config.board.enabled };
+    if (loaded.config.account && typeof loaded.config.account.expected === 'string') expectedAccount = loaded.config.account.expected;
     if (loaded.exists && !loaded.errors.length) {
       const empty = !(loaded.config.checks && loaded.config.checks.length);
       add('checks', empty ? 'warn' : 'ok', empty ? ctx.t('wf.doctor.checksEmpty') : loaded.config.checks.join('; '));
@@ -148,6 +151,16 @@ async function run(argv, ctx) {
     // recorded (another data folder, or one started before the file was lost), so say so instead of claiming it.
     const stale = boardCmd.staleState();
     if (stale) add('board', 'warn', ctx.t('board.stale', { pid: stale.pid, started: stale.started || '?', log: boardCmd.logFile() }));
+  }
+  // The account this shell would start a session under (same sources as the SessionStart hook) and the one the project expects.
+  {
+    const acct = account.current(process.env);
+    const l = acct ? (acct.label || account.label(acct.id)) : null;
+    const who = acct ? [l && l.email, l && l.organization, `${acct.id}…`, acct.plan].filter(Boolean).join(' / ') : ctx.t('wf.doctor.accountNone');
+    const verdict = expectedAccount ? account.matches(acct, expectedAccount) : true;
+    const exp = expectedAccount ? ctx.t('wf.doctor.accountExpected', { expected: expectedAccount }) : ctx.t('wf.doctor.accountNoExpected');
+    add('account', verdict === true ? 'ok' : 'warn', ctx.t('wf.doctor.accountLine', { who, expected: exp })
+      + (verdict === false ? ` ${ctx.t('wf.doctor.accountMismatch')}` : verdict === null ? ` ${ctx.t('wf.doctor.accountUnknown')}` : ''));
   }
   add('autostart', 'ok', ctx.t(config.loadGlobal().config.board.autostart ? 'wf.doctor.autostartOn' : 'wf.doctor.autostartOff'));
 

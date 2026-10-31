@@ -150,6 +150,7 @@
   "sessions.running": "{running} of {count} subagents running",
   "sessions.detached": "detached",
   "sessions.worktree": "worktree {name}",
+  "sessions.account": "Account: {who}",
   "sessions.prompt": "Prompt:",
   "sessions.reply": "Reply:",
   "sessions.noMatch": "No loaded step matches.",

@@ -587,6 +587,16 @@ worker's screen, a refuter stands by the reviewer, an orchestrator hands a paper
 accessory. The result of a command is not in the data the office receives, so there is no reaction to pass or fail. Private mode
 aliases the project name on the cork board; the list under the canvas stays keyboard-operable.
 
+Account label. `core/account.js` finds the Claude account a session runs under: `CLAUDE_CODE_ACCOUNT_UUID` and
+`CLAUDE_CODE_ORGANIZATION_UUID` from the hook's environment, then `oauthAccount` in `<CLAUDE_CONFIG_DIR or home>/.claude.json`
+for the label and plan. When an id from the environment differs from the file's, only the id is used (the file describes another
+account). API-key sessions, Codex sessions and a missing or malformed file give no account. `session.start` records
+`account_id` (first 8 characters of the UUID) and `plan` (`billingType` or `seatTier`), never the email or name; the label
+(`email`, `organization`) is kept in `<home>/accounts.json` by short id, stays on the machine and is read only by the board and
+`crew doctor`. The board shows it on Sessions rows and the session page; private mode hides it. Project config `account.expected`
+(email, organization name or UUID, case-insensitive): on a mismatch, or when the account cannot be determined, SessionStart adds one
+warning line to the brief, appends `account.mismatch` (reason and short id only) and adds one need per session. It never blocks.
+
 ## 15. Testing and acceptance
 
 - Unit tests per module; hook tests feed fixture payloads on stdin and assert stdout,

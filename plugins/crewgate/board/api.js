@@ -13,6 +13,7 @@ const gates = require('../lib/core/gates');
 const plans = require('../lib/core/plans');
 const planReview = require('../lib/core/plan-review');
 const hookseen = require('../lib/core/hookseen');
+const accountLib = require('../lib/core/account');
 const { CrewError } = require('../lib/core/errors');
 const { t } = require('../lib/core/i18n');
 const { createWatcher } = require('./watcher');
@@ -202,6 +203,7 @@ function str(body, key, max = 2000) {
 // ---------------------------------------------------------------- the API
 // opts: { version, watcher, usage, stats }
 function createApi(opts = {}) {
+  const accountIndex = createSessionEnds(() => projects.list().map((p) => paths.eventsFile(p.id)));   // session.start account ids
   const watcher = opts.watcher || createWatcher({ sessionEnds: createSessionEnds(() => projects.list().map((p) => paths.eventsFile(p.id))) });
   const usage = opts.usage || createUsage();
   const sessionStats = opts.stats || createSessionStats();
@@ -270,8 +272,21 @@ function createApi(opts = {}) {
       if (r.task && r.project) r.task = { id: r.task.id, title: taskTitle(r.project, r.task.id) };
       else if (r.task) r.task = { id: r.task.id, title: null };
     }
+    attachAccounts(rows);
     if (withStats) attachStats(rows);
     return rows;
+  }
+
+  // row.account = { id, plan, email, organization } from the session.start event and <home>/accounts.json; absent when unknown.
+  function attachAccounts(rows) {
+    try {
+      accountIndex.refresh();
+      const names = accountLib.labels();
+      for (const r of rows) {
+        const a = r && r.session ? accountIndex.account(r.session) : null;
+        if (a) r.account = { id: a.id, plan: a.plan, ...(names[a.id] || {}) };
+      }
+    } catch { /* the account label is optional */ }
   }
 
   function attachStats(rows, fileFor = watcher.fileFor) {
@@ -409,6 +424,7 @@ function createApi(opts = {}) {
       kids = hs.kids;
       fileFor = history.fileFor;
     }
+    if (old) attachAccounts([row, ...kids]);
     attachStats([row, ...kids], fileFor);
     const uint = (v) => (/^\d{1,15}$/.test(String(v)) ? Number(v) : undefined);
     const kinds = typeof query.kinds === 'string' ? query.kinds.split(',').filter((k) => TIMELINE_KINDS.includes(k)) : [];

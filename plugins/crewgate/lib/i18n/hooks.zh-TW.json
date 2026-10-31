@@ -24,5 +24,9 @@
   "hooks.gate.confirm": "crewgate：{what}（專案「{project}」）屬於「{gate}」關卡。該關卡設為 ask，而且最近 30 分鐘內你沒有核准過。請選擇這次允許，或拒絕並讓 Claude 先問你。",
   "hooks.gate.neverBlock": "crewgate 已擋下 {what}（專案「{project}」）：「{gate}」關卡設為 never，任何核准都無法解除。請告訴使用者是哪個關卡擋下的；只有使用者能改這個設定。",
   "hooks.gate.neverRan": "{what} 已經執行，但「{gate}」關卡設為 never。請立刻告訴使用者。",
-  "hooks.gate.block":"crewgate 已擋下 {what}（專案「{project}」，gates.enforce=block）：「{gate}」關卡設為 ask，且沒有核准記錄。請先執行 {cmd} gate ask {gate} --task <id>，在聊天裡問使用者並等他回覆，再執行 {cmd} gate answer <gate-id> yes 後重試。只有使用者在 ask 之後送出訊息，這個回答才算數。"
+  "hooks.gate.block":"crewgate 已擋下 {what}（專案「{project}」，gates.enforce=block）：「{gate}」關卡設為 ask，且沒有核准記錄。請先執行 {cmd} gate ask {gate} --task <id>，在聊天裡問使用者並等他回覆，再執行 {cmd} gate answer <gate-id> yes 後重試。只有使用者在 ask 之後送出訊息，這個回答才算數。",
+  "hooks.brief.accountMismatch": "警告：此工作階段使用的 Claude 帳號不是此專案預期的帳號（account.expected）。進行會消耗方案用量的工作前，請先告訴使用者。",
+  "hooks.brief.accountUnknown": "警告：無法判斷此工作階段的 Claude 帳號，因此無法對照 account.expected。請告訴使用者。",
+  "hooks.account.needMismatch": "有工作階段以不是 account.expected 所指定的 Claude 帳號開始。請確認目前登入的是哪個帳號（crew doctor）。",
+  "hooks.account.needUnknown": "有工作階段開始了，但無法判斷其 Claude 帳號，所以沒有檢查 account.expected（crew doctor 會顯示找到什麼）。"
 }

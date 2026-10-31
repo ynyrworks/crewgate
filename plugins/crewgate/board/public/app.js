@@ -733,6 +733,8 @@
     var sl = statsLine(r);
     if (sl) li.appendChild(sl);
     if (where.length) li.appendChild(h('div', { class: 's-where', text: where.join(' · ') }));
+    var acc = SM.accountText(r, S.mask);
+    if (acc) li.appendChild(h('div', { class: 's-where muted', text: t('sessions.account', { who: acc }) }));
     if (r.task) li.appendChild(h('div', { class: 's-task' }, h('span', { class: 'task-id', text: r.task.id }), v.taskTitle ? ' ' + v.taskTitle : ''));
     if (v.title) li.appendChild(h('div', { class: 's-title', text: v.title }));
     if (v.prompt) li.appendChild(h('div', { class: 's-snip' }, h('span', { class: 'muted', text: t('sessions.prompt') + ' ' }), v.prompt));
@@ -945,6 +947,8 @@
       h('p', null, h('a', { href: d.history ? '#/history' : '#/sessions', text: '← ' + (d.history ? t('nav.history') : t('sessions.back')) })),
       h('h1', { text: title }), top, h('div', { class: 's-meta muted', text: meta.join(' · ') }));
     if (SM.validId(s.parent)) root.appendChild(h('p', null, h('a', { href: '#/s/' + s.parent, text: t('sessions.parent') })));
+    var acc = SM.accountText(s, S.mask);
+    if (acc) root.appendChild(h('div', { class: 's-meta muted', text: t('sessions.account', { who: acc }) }));
     if (s.task) root.appendChild(h('div', { class: 's-task' }, h('span', { class: 'task-id', text: s.task.id }), v.taskTitle ? ' ' + v.taskTitle : ''));
     var sc = statsCard(d);
     var kids = d.children || [];
