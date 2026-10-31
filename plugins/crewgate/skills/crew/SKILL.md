@@ -135,9 +135,7 @@ Never tag a commit CI has not passed. In this order:
    and every job succeeded. Pending, failed or no run exits non-zero and says which. It blocks nothing and pushes nothing; the decision is yours.
 3. Only then merge to main (step 10) and tag.
 
-CI must have run on the same commit that gets tagged. A fast-forward merge keeps the commit, so the check stays valid. If main moved and the merge made
-a new merge commit (or you rebased), that commit has not been through CI: push it (or the branch it is on), wait, and run `crew release check` again on it before tagging.
-A green check of an earlier commit does not cover a later one. If `gh` is missing the command says so; then check the run on GitHub by hand and do not tag on a guess.
+CI must have run on the same commit that gets tagged: a fast-forward keeps it, while a new merge commit or a rebase needs its own push, wait and `crew release check`. If `gh` is missing the command says so; then check the run on GitHub by hand and do not tag on a guess.
 
 ## Gates
 
@@ -148,7 +146,7 @@ A green check of an earlier commit does not cover a later one. If `gh` is missin
 - `auto`: do it.
 - `ask`: run `crew gate ask <gate> --task <id> --detail "<exact action>"` (it prints a gate id), then stop and ask
   the user in chat, name the exact action (branch, target, size), and wait for a clear yes. Record the reply with
-  `crew gate answer <gate-id> yes|no`. A yes covers that one action only. A hook notices a push, PR or merge under an
+  `crew gate answer <gate-id> yes|no`. A yes covers that one action only: the next push, merge or version asks again. A hook notices a push, PR or merge under an
   `ask` gate that has no recorded yes in the last 30 minutes and reminds you (`gate.missing` on the board).
 - `never`: refuse and say which gate blocks it (`crew gate ask` exits 1). A hook denies a push, PR or merge under it
   before it runs, whatever `gates.enforce` says. `crew task merge` itself refuses when `gates.merge` is `never`.
@@ -165,8 +163,6 @@ A green check of an earlier commit does not cover a later one. If `gh` is missin
 end your turn, and answer only after the user replied, in the same session that asked (the CLI reads `CLAUDE_CODE_SESSION_ID`; the verdict is fixed when `crew gate answer` runs).
 A gate answer needs a real user reply. `crew gate answer <id> yes` is refused (non-zero, nothing recorded as approved, a `gate.refused` event) when a session is known and no user message came after the ask:
 a turn started by a task notification, or the same turn that asked, is not a reply. A `no` is always accepted. When no session is known at all, the old verdict stays (`project` or false) and a warning is printed.
-An earlier approval does not carry over: a yes for one push, one merge or one version covers that action only. A new version, a new commit to tag, or the next push asks again.
-
 Workers are told never to push, use the network or touch remote hosts; if a task needs one, that
 is a gate decision for you and the user, not the worker.
 
