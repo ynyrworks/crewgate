@@ -228,5 +228,5 @@ test('board UI model: account text, private mode hides the label, no record show
   const pub = path.join(__dirname, '..', 'board', 'public');
   for (const l of ['en', 'zh-TW']) assert.match(JSON.parse(fs.readFileSync(path.join(pub, 'i18n', `${l}.json`), 'utf8'))['sessions.account'], /\{who\}/);
   const app = fs.readFileSync(path.join(pub, 'app.js'), 'utf8');
-  assert.equal((app.match(/SM\.accountText\(/g) || []).length, 2, 'session rows and the session page');
+  assert.equal((app.match(/SM\.accountText\(/g) || []).length, 3, 'session rows, the session page and history rows');
 });

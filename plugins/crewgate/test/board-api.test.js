@@ -299,3 +299,19 @@ test('settings: a project-level engines block is reported as ignored, never as a
     if (before === null) fs.rmSync(file, { force: true }); else fs.writeFileSync(file, before);
   }
 });
+
+test('account.expected: unset it is absent from the config but described by the schema with an empty default; set, read back; clearing is refused and keeps the file', async () => {
+  const url = `/api/project/${proj.id}/config`;
+  const schema = (await get('/api/schema')).json.project.find((e) => e.path === 'account.expected');
+  assert.equal(schema.type, 'string');
+  assert.equal(schema.default, '');
+  assert.equal((await get(url)).json.config.account, undefined);
+  const set = await post(url, { config: { account: { expected: 'ann@example.com' } } });
+  assert.equal(set.status, 200);
+  const file = path.join(repo, '.claude', 'crew.json');
+  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).account.expected, 'ann@example.com');
+  const clear = await post(url, { config: { account: { expected: '' } } });
+  assert.equal(clear.status, 400);
+  assert.equal(clear.json.errors[0].path, 'account.expected');
+  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).account.expected, 'ann@example.com', 'the file is unchanged');
+});

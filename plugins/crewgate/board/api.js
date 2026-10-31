@@ -544,6 +544,7 @@ function createApi(opts = {}) {
     const rows = [];
     for (const g of pg.groups) rows.push(g.row, ...g.kids);
     attachStats(rows, history.fileFor);
+    attachAccounts(rows);
     const names = new Map(projects.list().map((p) => [p.id, p.name]));
     const sessions = pg.groups.map((g) => {
       const r = g.row;
