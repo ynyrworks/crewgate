@@ -106,6 +106,11 @@ function room(seated) {
   const desks = seated.map((n) => ({ slot: SLOTS[n], deskArt: n % 2 ? 'desk2' : 'desk' }));
   return { props, desks, ob: H.obstacles(props, SIZES, desks) };
 }
+const clearOfSeated = (spot, ob) => {
+  const u = H.screenU(spot[0], spot[1]);
+  const v = H.screenV(spot[0], spot[1]);
+  return ob.seated.every((b) => !(u - H.CARD_W / 2 < b[1] && b[0] < u + H.CARD_W / 2 && v < b[3] && b[2] < v + H.CARD_H));
+};
 const subsets = [];
 for (let m = 0; m < 256; m++) subsets.push(SLOTS.map((_, n) => n).filter((n) => m & (1 << n)));
 
@@ -128,6 +133,7 @@ test('idle characters: for 1 to 8 of them and every mix with seated ones, none h
       for (let i = 0; i < n; i++) {
         for (let j = i + 1; j < n; j++) assert.ok(!H.cardsOverlap(spots[i], spots[j]), `${tag}: ${spots[i]} and ${spots[j]} overlap`);
         const [x, z] = spots[i];
+        assert.ok(clearOfSeated(spots[i], ob), `${tag}: ${spots[i]} overlaps a seated card`);
         const u = H.screenU(x, z);
         const d = H.depthOf(x, z);
         for (const [art, px, pz, sc] of props) {
@@ -151,6 +157,7 @@ test('idle characters sorted by screen depth are separated sideways whenever the
   for (const seated of [[], [0, 1, 2, 3], [4, 5, 6, 7], [1, 4, 6]]) {
     const { ob } = room(seated);
     const spots = H.standSpots(8 - seated.length, ob).sort((a, b) => H.depthOf(a[0], a[1]) - H.depthOf(b[0], b[1]));
+    spots.forEach((sp) => assert.ok(clearOfSeated(sp, ob), `seated ${seated}: ${sp} overlaps a seated card`));
     for (let i = 0; i < spots.length; i++) {
       for (let j = i + 1; j < spots.length; j++) {
         const dv = H.screenV(spots[j][0], spots[j][1]) - H.screenV(spots[i][0], spots[i][1]);
