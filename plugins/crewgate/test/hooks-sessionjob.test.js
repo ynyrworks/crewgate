@@ -37,6 +37,20 @@ test('start(): other platforms, a non-Claude parent and a bad cap do nothing', (
   assert.strictEqual(spawned.length, 0);
 });
 
+test('start(): a missing session_cleanup starts the holder with off; only an explicit on is on', () => {
+  setupHome();
+  const run = (pid, limits) => {
+    const calls = [];
+    const sp = (shell, args) => { calls.push(args); return { pid: process.pid, unref() {}, on() {} }; };
+    const deps = { platform: 'win32', describe: () => claude, spawn: sp, shell: 'pwsh.exe', wscript: 'C:/Windows/System32/wscript.exe' };
+    assert.strictEqual(sessionjob.start('pabcdef0123', limits, pid, deps), 'started');
+    return calls[0][calls[0].indexOf('-Cleanup') + 1];
+  };
+  assert.strictEqual(run(5101, {}), 'off');
+  assert.strictEqual(run(5102, { session_cpu_percent: 40 }), 'off');
+  assert.strictEqual(run(5103, { session_cleanup: 'on' }), 'on');
+});
+
 test('start(): one detached hidden holder per Claude pid, with the settings; a live holder blocks a second', () => {
   const home = setupHome();
   const calls = [];
