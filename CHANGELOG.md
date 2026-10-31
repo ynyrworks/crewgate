@@ -15,6 +15,8 @@
 ### Fixed
 
 - The doctor's gates line names a project's own gates and their modes; it used to say "ask gates: -" when only those were set to ask.
+- A background-task notification no longer counts as a user message. It used to satisfy `gates.require_user_turn`, so a worker finishing between `crew gate ask` and `crew gate answer` looked like the user had replied. Notifications also no longer inflate prompt counts or appear as prompts on the board.
+- The board's overview counts running sessions without subagents, so it matches the Sessions page. The project page's session panel is titled "Sessions", since it also lists idle and ended ones.
 - The test suite passes when the checkout is itself a crew project.
 
 ## 0.16.0 — 2026-10-31
