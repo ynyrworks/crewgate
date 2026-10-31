@@ -259,9 +259,18 @@ test('start() launches a real holder through wscript; it records the job and the
   const stopSess = () => { if (alive(sess.pid)) { try { process.kill(sess.pid); } catch { /* gone */ } } };
   t.after(stopSess);
   assert.strictEqual(sessionjob.start(f.pid, { session_cpu_percent: 30 }, sess.pid, { describe: () => claude }), 'started');
-  const job = await until(() => events.read(f.pid, { types: 'session.job' })[0]);
-  assert.deepStrictEqual([job.data.assigned, job.data.cap_read], [true, 30]);
   const file = sessionjob.pidFile(f.pid, sess.pid);
+  let job;
+  try { job = await until(() => events.read(f.pid, { types: 'session.job' })[0]); } catch (e) {
+    // Evidence for a failure on CI: every event of the fixture (no command lines in them), the pid file, who is alive.
+    let held = null;
+    try { held = fs.readFileSync(file, 'utf8').trim(); } catch { /* none */ }
+    const hp = Number(held);
+    throw new Error(`${e.message}; events=${JSON.stringify(events.read(f.pid).map((x) => ({ type: x.type, data: x.data })))}; `
+      + `pidFile exists=${fs.existsSync(file)} content=${JSON.stringify(held)}; stand-in ${sess.pid} alive=${alive(sess.pid)}; `
+      + `holder alive=${Number.isInteger(hp) && hp > 0 ? alive(hp) : 'unknown (no pid in the file)'}`);
+  }
+  assert.deepStrictEqual([job.data.assigned, job.data.cap_read], [true, 30]);
   const holder = Number(await until(() => fs.existsSync(file) && fs.readFileSync(file, 'utf8')));
   t.after(() => { if (alive(holder)) { try { process.kill(holder); } catch { /* gone */ } } });
   assert.strictEqual(sessionjob.start(f.pid, {}, sess.pid, { describe: () => claude }), 'already');

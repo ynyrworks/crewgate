@@ -71,10 +71,10 @@ function iterations(list) {
   return words.length && words.every((w) => /^[\w.-]+$/.test(w)) ? words.length : null;
 }
 
-// A `for` loop whose body starts a background job (&) more often than half the CPU cores.
-function manyCopies(command) {
-  const half = Math.floor((os.cpus() || []).length / 2);
-  if (half < 1) return false;
+// A `for` loop whose body starts a background job (&) more often than max(2, half the CPU cores): two copies are never
+// denied, even on a one- or two-core machine. cores is injected by tests.
+function manyCopies(command, cores) {
+  const half = Math.max(2, Math.floor((cores === undefined ? (os.cpus() || []).length : cores) / 2));
   for (const m of stripQuotes(String(command).slice(0, 20000)).matchAll(FOR_RE)) {
     const n = iterations(m[1]);
     if (n !== null && n > half && /&/.test(m[2].replace(/&&|&>|>&\d?|\d>&\d/g, ''))) return true;
@@ -84,10 +84,10 @@ function manyCopies(command) {
 
 // -> { word } for the first thing found; word is the command's first word (no arguments). loop: true for a busy loop.
 // shellTimed: the command line is what `timeout N bash -c` runs, so a shell loop in it has a time limit.
-function scan(command, type, depth = 0, shellTimed = false) {
+function scan(command, type, depth = 0, shellTimed = false, cores) {
   const toks = G.tokenize(command);
   if (psStatement(toks)) return { word: 'while', loop: true };
-  if (manyCopies(command)) return { word: 'for', loop: true };
+  if (manyCopies(command, cores)) return { word: 'for', loop: true };
   let cur = [];
   let prevOp = null;
   let prevSeg = [];
@@ -105,7 +105,7 @@ function scan(command, type, depth = 0, shellTimed = false) {
       if ((cmd === 'cmd' || cmd === 'powershell' || cmd === 'pwsh')
         && ((/(?:^|[;&|(]\s*)nodej?s?(\.exe)?\s+(-e|-pe?|--eval|--print)\b/i.test(bare) && JS_LOOP.test(bare))
           || (/(?:^|[;&|(]\s*)python[\d.]*(\.exe)?\s+-c\b/i.test(bare) && PY_LOOP.test(bare)))) return loop();
-      return scan(wrapped, type, depth + 1, direct);
+      return scan(wrapped, type, depth + 1, direct, cores);
     }
     if (cmd === 'timeout') { const inner = timeoutInner(rest); return inner && inner.length ? one(inner, op, true) : null; }
     const w0 = /^(then|do|else)$/.test(seg[0]) ? seg.slice(1) : seg;

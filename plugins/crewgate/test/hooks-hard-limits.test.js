@@ -4,7 +4,6 @@
 // crew subagent are denied. Commands are only passed to the hook and to scan(); none is ever executed.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const os = require('os');
 const H = require('./hooks-helpers');
 const tasks = require('../lib/core/tasks');
 const limits = require('../lib/hooks/agentlimits');
@@ -165,14 +164,17 @@ test('bounded or ordinary commands pass, a timeout covers a shell loop and node 
   for (const type of ROLES) for (const c of ok) assert.equal(limits.scan(c, type), null, `${type}: ${c}`);
 });
 
-test('more background copies than half the CPU cores is denied; a count it cannot read passes', () => {
-  const half = Math.floor(os.cpus().length / 2);
-  assert.ok(half >= 1);
+test('more background copies than max(2, half the CPU cores) is denied; a count it cannot read passes', () => {
   const loop = (n) => `for i in $(seq 1 ${n}); do node a.js & done`;
+  // The core count is injected, so the test does not depend on the runner.
+  for (const [cores, half] of [[1, 2], [2, 2], [3, 2], [4, 2], [32, 16]]) {
+    assert.ok(limits.scan(loop(48), 'crew-worker', 0, false, cores), `${cores} cores: 48 copies`);
+    assert.ok(limits.scan(`for i in {1..${half + 1}}; do sleep 5 & done`, 'crew-worker', 0, false, cores), `${cores} cores: ${half + 1}`);
+    assert.ok(limits.scan(`bash -c "for i in $(seq ${half + 1}); do sleep 5 & done"`, 'crew-worker', 0, false, cores), `${cores} cores: bash -c`);
+    assert.equal(limits.scan(loop(half), 'crew-worker', 0, false, cores), null, `${cores} cores: ${half}`);
+    assert.equal(limits.scan('for i in 1 2; do node a.js & done', 'crew-worker', 0, false, cores), null, `${cores} cores: two copies`);
+  }
   assert.ok(limits.scan(loop(48), 'crew-worker'));
-  assert.ok(limits.scan(`for i in {1..${half + 1}}; do sleep 5 & done`, 'crew-worker'));
-  assert.ok(limits.scan(`bash -c "for i in $(seq ${half + 1}); do sleep 5 & done"`, 'crew-worker'));
-  assert.equal(limits.scan(loop(half), 'crew-worker'), null);
   assert.equal(limits.scan('for i in $(seq 1 $N); do node a.js & done', 'crew-worker'), null);
   assert.equal(limits.scan('for f in *.js; do node $f & done', 'crew-worker'), null);
 });

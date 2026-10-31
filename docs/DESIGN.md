@@ -413,7 +413,7 @@ PreToolUse(Bash / PowerShell) denies, for a subagent of type `crew-worker`, `cre
 - all three: an inline loop with no end: `node -e` / `python -c` / `powershell -Command` with `for(;;)`, `while(true)`,
   `while(1)` or `while($true)`, a bash `while true; do` / `while :; do`, `yes` with its output discarded, `stress` and
   `stress-ng` without `-t` / `--timeout`. A `timeout N` prefix passes only a shell loop or `node -e` run directly under it.
-  A `for` loop that starts more background jobs (`&`) than half the CPU cores (`os.cpus().length`) is denied; a count
+  A `for` loop that starts more background jobs (`&`) than `max(2, floor(cores / 2))` (`os.cpus().length` cores, so two copies always pass) is denied; a count
   it cannot read passes. The reason tells the agent to give a count and a time limit from the brief.
 
 The command line is tokenised with `gitcmd.js`, so `git -C`, `cd x && ...`, `bash -c`, `powershell -Command` and git

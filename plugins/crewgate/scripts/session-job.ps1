@@ -16,6 +16,10 @@ function Done {
   exit 0
 }
 
+# An error nothing else catches (a StartTime that cannot be read, say) would end the holder with no event at all.
+# The exception type is recorded, never a message (it can hold a path or a command line).
+trap { Record 'session.job.error' @('reason=uncaught', "type=$($_.Exception.GetType().Name)"); Done }
+
 # What cleanup must leave alone. $procs: pid -> @{ ppid; window; boardlike }. Roots are the running board (by pid), every
 # process with a visible main window (a browser or any program the user can see) and, when there is no usable board pid,
 # a process whose command line is this plugin's `board serve`. A root's descendants are kept too. -> hashtable of pids
@@ -103,8 +107,14 @@ try {
   $null = $session.Handle
 } catch { Record 'session.job.error' @('reason=session-gone'); Done }
 # The pid was taken a moment ago by the hook: a process that started after that is not the Claude Code process.
-if ($HookStart -gt 0 -and $session.StartTime.ToUniversalTime() -gt [DateTimeOffset]::FromUnixTimeMilliseconds($HookStart).UtcDateTime) {
-  Record 'session.job.error' @('reason=pid-reused'); Done
+# HookStart is a millisecond count from Node's clock, StartTime a 100 ns creation time from the kernel's: the two clocks
+# and the rounding can differ by a few ms to a tick (about 16 ms), so a process that really started just before the hook
+# could compare later. A margin of 1000 ms covers that. A real session starts seconds before its hook; a reused pid
+# starting within the margin of the hook is not told apart (a pid freed and reused within a second is not seen).
+$StartMargin = 1000
+if ($HookStart -gt 0) {
+  $late = [int64]($session.StartTime.ToUniversalTime() - [DateTimeOffset]::FromUnixTimeMilliseconds($HookStart).UtcDateTime).TotalMilliseconds
+  if ($late -gt $StartMargin) { Record 'session.job.error' @('reason=pid-reused', "late_ms=$late"); Done }
 }
 
 try {

@@ -151,3 +151,5 @@ https://learn.chatgpt.com/docs/agent-configuration/subagents · https://learn.ch
 - Skills: `skills/<name>/SKILL.md` with `name` and `description`; there is no `$ARGUMENTS`.
 - Plugins cannot ship agents. Custom agents are TOML files in `.codex/agents/` (`name`, `description`,
   `developer_instructions`, optional `model`). Subagents inherit the parent's sandbox.
+
+- Windows holder, `StartTime` against the hook's `Date.now()` (measured here): a PowerShell spawned by Node and read back at once has a `StartTime` that is -2 to 0 ms from `Date.now()` taken right after `spawn()` returns, so the two clocks can disagree by a few ms and a strict comparison can call a process that started just before the hook "later". `session-job.ps1` therefore allows 1000 ms and records `late_ms` with `pid-reused`. A real Claude Code process starts seconds before its hook, so real use does not reach this. An uncaught error in the holder is recorded as `session.job.error` with `reason=uncaught` and the exception type only.
