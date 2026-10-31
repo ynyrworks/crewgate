@@ -146,7 +146,7 @@ function byToolUse(pid, toolUseId) {
   return r ? { ...r, id: toolUseId } : null;
 }
 
-function markStopped(pid, toolUseId) { return updateUses(pid, (u) => { if (u[toolUseId]) u[toolUseId].stopped = true; }); }
+function markStopped(pid, toolUseId) { return updateUses(pid, (u) => { if (u[toolUseId]) { u[toolUseId].stopped = true; u[toolUseId].stopped_at = Date.now(); } }); }
 
 const RUNNING_MAX_AGE_MS = 6 * 3600 * 1000;
 

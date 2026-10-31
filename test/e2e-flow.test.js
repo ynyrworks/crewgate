@@ -149,7 +149,8 @@ test('full delegated flow: dispatch, report, review, send-back, accept, merge', 
   const all = events.read(pid);
   const ids = all.map((e) => e.id);
   assert.equal(new Set(ids).size, ids.length, 'no duplicate event ids');
-  assert.deepEqual(all.map((e) => e.type), [
+  // task.leftovers (one per worker stop) exists only when the process listing worked: left out of the fixed order
+  assert.deepEqual(all.map((e) => e.type).filter((t) => t !== 'task.leftovers'), [
     'session.start', 'task.created', 'task.dispatched', 'subagent.start', 'task.returned', 'subagent.stop',
     'task.reviewed', 'task.sent_back', 'task.dispatched', 'subagent.start', 'task.returned', 'subagent.stop',
     'task.accepted', 'gate.asked', 'gate.answered', 'git.merge', 'task.merged', 'session.end',

@@ -6,6 +6,7 @@ const events = require('../core/events');
 const tasks = require('../core/tasks');
 const C = require('./common');
 const sess = require('./session');
+const leftovers = require('./leftovers');
 const { typeFields } = require('../core/agents');
 
 const HEAD = 64 * 1024;
@@ -64,6 +65,44 @@ function hasStart(h, agentId) {
   try { return events.read(h.pid, { types: 'subagent.start' }).some((e) => e.agent === agentId); } catch { return true; }
 }
 
+// True when another subagent started after `since`, or started earlier and has not stopped (never throws: unknown = true).
+function otherSubagents(h, agentId, since) {
+  try {
+    const live = new Map();
+    for (const e of events.read(h.pid, { types: ['subagent.start', 'subagent.stop'] })) {
+      if (!e.agent || e.agent === agentId) continue;
+      const ts = Date.parse(e.ts) || 0;
+      if (e.type === 'subagent.stop') { live.set(e.agent, { stopped: true, ts: live.has(e.agent) ? live.get(e.agent).ts : 0 }); continue; }
+      live.set(e.agent, { stopped: false, ts });
+    }
+    for (const v of live.values()) {
+      if (v.ts >= since || (!v.stopped && Date.now() - v.ts < 6 * 3600 * 1000)) return true;
+    }
+    return false;
+  } catch { return true; }
+}
+
+// Worker stop: look for what it left running and record task.leftovers (count, program names, shared). Reports only.
+function noteLeftovers(h, found, agentId) {
+  try {
+    if (!found.rec.worker || !found.rec.snap) return;
+    const others = Object.entries(sess.readUses(h.pid))
+      .filter(([k, r]) => k !== found.rec.id && r && r.task !== found.id && Date.now() - (r.ts || 0) < 6 * 3600 * 1000)
+      .map(([, r]) => r);
+    // Uncertain when the orchestrator was free to run commands (a background run) or any other subagent (a reviewer,
+    // a refuter, another worker) ran meanwhile: their processes also start under the Claude pid. Main-session tool use
+    // is not observed directly (PostToolUse counts subagent tools too), so a background run stands for it.
+    const since = Number(found.rec.snap.ts) || Number(found.rec.ts) || 0;
+    const sharedHint = found.rec.bg === true || otherSubagents(h, agentId, since);
+    const res = leftovers.check(h.pid, found.rec, others, { sharedHint, budgetMs: leftovers.budgetLeft('subagent-stop') });
+    if (!res) return;
+    events.append(h.pid, {
+      type: 'task.leftovers', src: 'hook', session: h.sid, agent: agentId || null, task: found.id,
+      data: res, key: `${found.rec.id}:${found.rec.ts || 0}:${found.rec.stopped_at || 0}`,
+    });
+  } catch { /* a report only: never stops the stop */ }
+}
+
 function run(payload) {
   const h = C.open(payload);
   if (!h) return null;
@@ -98,6 +137,7 @@ function run(payload) {
       noReport = true;
     } catch { return null; }
   }
+  if (found.rec) noteLeftovers(h, found, agentId);
   if (found.rec) sess.markStopped(h.pid, found.rec.id);
   sess.touch(h, (s) => sess.addTask(s, found.id));
   if (task.state !== 'returned') return null;
