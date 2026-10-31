@@ -66,6 +66,9 @@ button.link { border: 0; background: none; color: var(--accent); padding: 0 4px;
 .list { list-style: none; margin: 0; padding: 0; }
 .list li { padding: 5px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
 details > summary { cursor: pointer; color: var(--text-2); }
+.card.fold { padding: 8px 14px; align-self: start; }
+.card.fold > details > summary { overflow-wrap: anywhere; }
+.card.fold > details[open] > summary { margin-bottom: 8px; }
 .proj { display: grid; grid-template-columns: minmax(140px, 2fr) repeat(4, minmax(70px, 1fr)) minmax(110px, 1.2fr); gap: 4px 12px; align-items: center; padding: 10px 6px; border-bottom: 1px solid var(--border); color: inherit; text-decoration: none; }
 .proj.head { font-weight: 600; color: var(--text-2); }
 .proj:not(.head):hover { background: var(--bg); }

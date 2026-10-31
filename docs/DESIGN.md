@@ -526,6 +526,8 @@ version, kind (fix / new features / major), release notes link, **Update now**, 
 (remembered in the browser per version) and, when the release carries the rehook marker, a re-approval hint
 for Codex. The banner shows progress, the copyable commands when nothing can be run, and the restart.
 
+Empty cards. A project that follows the normal flow never fills work, log, MRs or validation by hand, so the Project page derives what it can from events (`activity` in the project API, read backwards with a bound on bytes, independent of the 40-event tail): with no MRs the card becomes "Recent merges" (merged tasks and pushes, up to 10); with no log lines it lists task steps and gate answers (up to 15), read-only, and the add form stays. Work and validation with no data fold into one `details` line; validation is never derived, only recorded runs count. Cards with data are unchanged. Private mode shows ids only.
+
 Layout. Below 720 px the page scrolls and nothing is capped. From there up, lists and tables inside cards (needs, tasks,
 sessions, work, log, MRs, validation, handoffs, lessons, gates, hooks, events, subagents, the History day groups, the Usage
 model table, the Overview project list) have a capped height and scroll inside the card: a shadow shows where more content is

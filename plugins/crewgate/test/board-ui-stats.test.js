@@ -76,7 +76,7 @@ test('page wiring: route, links, accessible controls, only DOM text nodes, both 
   assert.match(src, /'aria-pressed'/);
   assert.match(src, /SM\.validId\(r\.id\)/, 'the id from the address is checked before it reaches a request');
   assert.doesNotMatch(src, /innerHTML|insertAdjacentHTML|document\.write|eval\(/);
-  assert.match(read('index.html'), /<script src="\/sessions-model\.js"><\/script>\s*<script src="\/update-model\.js"><\/script>\s*<script src="\/app\.js">/, 'no new script tag: the helpers live in sessions-model.js');
+  assert.match(read('index.html'), /<script src="\/sessions-model\.js"><\/script>\s*<script src="\/update-model\.js"><\/script>\s*<script src="\/activity-model\.js"><\/script>\s*<script src="\/app\.js">/, 'no new script tag: the helpers live in sessions-model.js');
   const en = table('en');
   const zh = table('zh-TW');
   const keys = new Set();

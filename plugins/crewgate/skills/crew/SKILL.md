@@ -148,6 +148,16 @@ end your turn, and answer only after the user replied, in the same session that 
 Workers are told never to push, use the network or touch remote hosts; if a task needs one, that
 is a gate decision for you and the user, not the worker.
 
+## What only you can record
+
+Merges, task states, gates and plans are recorded automatically by the `crew` commands and the hooks; the board shows
+them by itself. Never write them by hand. Some things no event can carry, and these are yours to record:
+
+- A decision the user made and why, or a root cause you found: `crew log add orchestrator "..."`.
+- Work that outlives one task, above all parked or waiting items with the reason:
+  `crew work set STREAM "title" STATE "note"`.
+- Validation only for a real run on a real machine (`crew validate set`). Never for a guess or a test that only ran here.
+
 ## Background work
 
 Dispatch long tasks with `run_in_background: true` and keep working on briefs, reviews of other

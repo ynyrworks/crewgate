@@ -349,5 +349,16 @@
   "plan.rcol.refuted": "反駁",
   "plan.rcol.kept": "留下",
   "plan.rcol.accepted": "接受",
-  "plan.rcol.rejected": "拒絕"
+  "plan.rcol.rejected": "拒絕",
+  "project.recentMerges": "最近合併",
+  "work.closed": "沒有工作項目。展開可新增。",
+  "validation.closed": "沒有驗證紀錄。",
+  "act.task.created": "已建立",
+  "act.task.returned": "已交回待審",
+  "act.task.sent_back": "已退回",
+  "act.task.accepted": "已驗收",
+  "act.merged": "已合併",
+  "act.push": "已推送",
+  "act.gate": "關卡 {gate} 已回覆 {answer}",
+  "act.plan": "已建立計畫"
 }

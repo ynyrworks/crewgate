@@ -428,6 +428,16 @@
     return bits.length ? h('span', { class: 'muted', text: ' · ' + bits.join(' · ') }) : '';
   }
 
+  // A card with nothing to show folds into one small line that opens on demand (a native details element).
+  function foldCard(title, line, body) {
+    return h('section', { class: 'card fold' }, h('details', null, h('summary', null, h('strong', { text: title }), h('span', { class: 'muted', text: ' \u00b7 ' + line })), body));
+  }
+  // Activity derived from events (api `activity`): the form and the words come from activity-model.js
+  var AM = ActivityModel;
+  function actWho(a) { return AM.who(a, S.mask); }
+  function actText(a) { return AM.rowText(a, S.mask, t); }
+  function actDetail(a) { return h('span', { class: 'muted', text: AM.detailText(a, S.mask, t) }); }
+
   function projectPage(d) {
     var id = d.project.id;
     var root = h('div', null,
@@ -464,8 +474,8 @@
     // live sessions
     grid.appendChild(card(t('project.sessions'), d.sessions.length ? cap('sessions', t('project.sessions'), sessionTree(d.sessions, false, null)) : empty('sessions.none'), '', d.sessions.length));
     // work
+    var form = AM.forms(d);
     var workBody = h('div', null);
-    if (!d.work.length) workBody.appendChild(empty('work.none'));
     d.work.forEach(function (s) {
       workBody.appendChild(h('h3', { text: s.name }));
       workBody.appendChild(cap('work:' + s.name, s.name, h('ul', { class: 'list' }, s.items.map(function (it) {
@@ -478,18 +488,27 @@
       h('input', { type: 'text', name: 'title', required: true, placeholder: t('work.item'), 'aria-label': t('work.item'), size: 16 }),
       h('select', { name: 'state', 'aria-label': t('task.state') }, ['todo', 'doing', 'done', 'waiting', 'parked'].map(function (s) { return h('option', { value: s, text: t('state.' + s) }); })),
     ], t('add'), function (f) { post('/api/project/' + id + '/work', { stream: f.elements.stream.value, title: f.elements.title.value, state: f.elements.state.value }, function () { f.reset(); }); }));
-    grid.appendChild(card(t('project.work'), workBody, '', d.work.reduce(function (n, s) { return n + s.items.length; }, 0)));
+    if (form.work === 'card') grid.appendChild(card(t('project.work'), workBody, '', form.workItems));
+    else grid.appendChild(foldCard(t('project.work'), t('work.closed'), workBody));
     // log
-    var logBody = h('div', null, d.log.length ? cap('log', t('project.log'), h('ul', { class: 'list' }, d.log.slice(0, 15).map(function (l) { return h('li', null, h('span', { class: 'muted', text: ago(l.time) + ' · ' + l.who + ' · ' }), l.text); }))) : empty('log.none'));
+    var logBody = h('div', null);
+    var logActs = form.log === 'acts' ? AM.stepActs(d.activity) : [];
+    if (form.log === 'log') logBody.appendChild(cap('log', t('project.log'), h('ul', { class: 'list' }, d.log.slice(0, 15).map(function (l) { return h('li', null, h('span', { class: 'muted', text: ago(l.time) + ' \u00b7 ' + l.who + ' \u00b7 ' }), l.text); }))));
+    else if (form.log === 'acts') logBody.appendChild(cap('log', t('project.log'), h('ul', { class: 'list' }, logActs.map(function (a) { return h('li', null, h('span', { class: 'muted', text: ago(a.ts) + ' \u00b7 ' }), actText(a)); }))));
     logBody.appendChild(formRow([h('input', { type: 'text', name: 'text', required: true, placeholder: t('log.add'), 'aria-label': t('log.add'), size: 30 })], t('add'),
       function (f) { post('/api/project/' + id + '/log', { who: 'board', text: f.elements.text.value }, function () { f.reset(); }); }));
-    grid.appendChild(card(t('project.log'), logBody, '', Math.min(d.log.length, 15)));
+    if (form.log !== 'fold') grid.appendChild(card(t('project.log'), logBody, '', form.log === 'log' ? Math.min(d.log.length, 15) : logActs.length));
+    else grid.appendChild(foldCard(t('project.log'), t('log.none'), logBody));
     // merge requests and validation
-    grid.appendChild(card(t('project.mrs'), d.mrs.length
-      ? table(['!', t('task.title'), 'CI', t('mr.merged')], d.mrs.map(function (m) { return h('tr', null, td('!' + m.iid), td(m.title), td(m.ci ? badge(m.ci, m.ci) : ''), td(m.merged ? t('yes') : t('no'))); }), [], 'mrs', t('project.mrs')) : empty('mr.none'), '', d.mrs.length));
+    var merges = form.mrs === 'merges' ? AM.mergeActs(d.activity) : [];
+    if (form.mrs === 'mrs') grid.appendChild(card(t('project.mrs'), table(['!', t('task.title'), 'CI', t('mr.merged')], d.mrs.map(function (m) { return h('tr', null, td('!' + m.iid), td(m.title), td(m.ci ? badge(m.ci, m.ci) : ''), td(m.merged ? t('yes') : t('no'))); }), [], 'mrs', t('project.mrs')), '', d.mrs.length));
+    else if (form.mrs === 'merges') grid.appendChild(card(t('project.recentMerges'), cap('merges', t('project.recentMerges'), h('ul', { class: 'list' }, merges.map(function (a) {
+      return h('li', null, h('span', { class: 'muted', text: ago(a.ts) + ' \u00b7 ' }), actWho(a), actDetail(a));
+    }))), '', merges.length));
     var vrows = [];
     Object.keys(d.validation).forEach(function (k) { (d.validation[k] || []).forEach(function (r) { vrows.push(h('tr', null, td(k), td(r.date), td(r.host), td(r.result))); }); });
-    grid.appendChild(card(t('project.validation'), vrows.length ? table([t('validation.id'), t('validation.date'), t('validation.host'), t('validation.result')], vrows, [], 'validation', t('project.validation')) : empty('validation.none'), '', vrows.length));
+    if (form.validation === 'card') grid.appendChild(card(t('project.validation'), table([t('validation.id'), t('validation.date'), t('validation.host'), t('validation.result')], vrows, [], 'validation', t('project.validation')), '', vrows.length));
+    else grid.appendChild(foldCard(t('project.validation'), t('validation.closed'), empty('validation.none')));
     // handoffs
     var hitems = [];
     ['open', 'accepted', 'cancelled'].forEach(function (st) {
