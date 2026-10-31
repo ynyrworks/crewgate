@@ -296,12 +296,16 @@ function pathRe(dir) {
   return new RegExp(`${lead}${parts.join('[\\\\/]+')}(?=$|[\\\\/\\s"'\`)\\],;:])`, 'gi');
 }
 
+// The project's redaction does not cover email addresses; the record may be public, so they are replaced here (example.com stays).
+const EMAIL_RE = /[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})/g;
+
 // Home becomes "~", absolute paths inside the repo become relative, then the project's redaction runs on the whole text.
 function sanitize(text, root) {
   let s = text;
   s = s.replace(new RegExp(`${pathRe(root).source}[\\\\/]+`, 'gi'), '').replace(pathRe(root), '.');
   s = s.replace(pathRe(os.homedir()), '~');
-  return redact(s);
+  s = redact(s);
+  return s.replace(EMAIL_RE, (m, domain) => (/^example\.com$/i.test(domain) ? m : '<email>'));
 }
 
 // ---------------------------------------------------------------- conclusion

@@ -254,6 +254,17 @@ test('same inputs give the same bytes; home and repo paths are shortened; sessio
   for (const bad of ['SESSION-ID-SHOULD-NOT-APPEAR', 'WORKER-REPORT-TEXT', 'PACKET-TEXT']) assert.ok(!one.includes(bad));
 });
 
+test('email addresses become <email> (example.com kept), conclusion included', () => {
+  const { repo } = fixture();
+  const f = u.writeFile(h.tmpDir('crew-mail-'), 'c.md', 'Checked by jane.doe+x@corp.io and bob@example.com.\n');
+  assert.equal(record(repo, '1.1.0', '--conclusion-file', f).code, 0);
+  const one = read(repo);
+  assert.ok(one.includes('Checked by <email> and bob@example.com.'));
+  assert.ok(!one.includes('corp.io'));
+  const sanitize = require('../lib/features/release').sanitize;
+  assert.equal(sanitize('a@b.org, x@Example.COM, me@mail.example.com', repo), '<email>, x@Example.COM, <email>');
+});
+
 test('--dir and release.record_dir choose the folder; --json lists the tasks', () => {
   const { repo } = fixture();
   const out = h.tmpDir('crew-out-');
