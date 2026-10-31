@@ -18,12 +18,26 @@ function pidAlive(pid) {
   try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
 }
 
-// The runtime file holds the holder's pid (written by the holder); a stale file (holder gone) does not count.
-function held(projectId, claudePid) {
-  try {
-    const n = Number(fs.readFileSync(pidFile(projectId, claudePid), 'utf8').trim());
-    return Number.isInteger(n) && n > 0 && pidAlive(n);
-  } catch { return false; }
+const CLAIM_MS = 30000;   // a claim whose holder never wrote its pid is stale after this long
+
+// The runtime file holds the holder's pid (written by the holder). Before spawning, Node claims it exclusively (flag wx,
+// as takeLock in board.js does), so two SessionStart hooks for one Claude pid start one holder. A file naming a live
+// pid, or a claim younger than CLAIM_MS, means taken; anything older is stale and replaced. -> true when claimed.
+function claim(projectId, claudePid) {
+  const f = pidFile(projectId, claudePid);
+  try { fs.mkdirSync(path.dirname(f), { recursive: true }); } catch { return false; }
+  for (let i = 0; i < 2; i++) {
+    try { fs.writeFileSync(f, `claim:${process.pid}`, { flag: 'wx' }); return true; } catch (e) {
+      if (e.code !== 'EEXIST') return false;
+      try {
+        const n = Number(fs.readFileSync(f, 'utf8').trim());
+        if (Number.isInteger(n) && n > 0 && pidAlive(n)) return false;
+        if (Date.now() - fs.statSync(f).mtimeMs <= CLAIM_MS) return false;
+        fs.unlinkSync(f);
+      } catch { return false; }
+    }
+  }
+  return false;
 }
 
 function note(projectId, type, data) {
@@ -39,24 +53,24 @@ function start(projectId, limits, claudePid = process.ppid, deps = {}) {
     if (!Number.isInteger(claudePid) || claudePid <= 1) return 'no-parent';
     const pri = require('./priority');
     if (!pri.isClaude((deps.describe || pri.describe)(claudePid))) return 'not-claude';
-    if (held(projectId, claudePid)) return 'already';
     const shell = deps.shell || findShell();
     if (!shell) { note(projectId, 'session.job.error', { reason: 'no-powershell' }); return 'no-shell'; }
+    const hookStart = Date.now();
     const cleanup = limits && limits.session_cleanup === 'off' ? 'off' : 'on';
     const file = pidFile(projectId, claudePid);
     const args = ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', deps.script || SCRIPT,
       '-ClaudePid', String(claudePid), '-ProjectId', projectId, '-PidFile', file, '-CrewHome', require('../core/paths').home(),
-      '-NodeExe', process.execPath, '-RecordScript', __filename, '-CapPercent', String(cap), '-Cleanup', cleanup];
-    fs.mkdirSync(path.dirname(file), { recursive: true });
+      '-NodeExe', process.execPath, '-RecordScript', __filename, '-CapPercent', String(cap), '-Cleanup', cleanup, '-HookStart', String(hookStart)];
+    if (!claim(projectId, claudePid)) return 'already';
     // Node's own children die with it (libuv puts them in a kill-on-close job) and a `detached` PowerShell exits at
     // once (measured), so the holder is started by `cmd /c start /b` from a detached cmd: it is then outside both.
     // The holder writes its own pid to the runtime file. Arguments are quoted by hand (cmd re-parses the line).
-    if (args.some((x) => /["%]/.test(x))) { note(projectId, 'session.job.error', { reason: 'bad-path' }); return 'bad-path'; }
+    if (args.some((x) => /["%]/.test(x))) { try { fs.unlinkSync(file); } catch { /* none */ } note(projectId, 'session.job.error', { reason: 'bad-path' }); return 'bad-path'; }
     const q = (x) => `"${x}"`;
     const line = `"start "" /b ${q(shell)} ${args.map(q).join(' ')}"`;
     const child = (deps.spawn || spawn)(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', line],
       { detached: true, stdio: 'ignore', windowsHide: true, windowsVerbatimArguments: true });
-    child.on && child.on('error', () => note(projectId, 'session.job.error', { reason: 'spawn-failed' }));
+    child.on && child.on('error', () => { try { fs.unlinkSync(file); } catch { /* none */ } note(projectId, 'session.job.error', { reason: 'spawn-failed' }); });
     child.unref && child.unref();
     return 'started';
   } catch { return 'error'; }
@@ -67,7 +81,7 @@ function findShell() {
   for (const name of ['pwsh.exe', 'powershell.exe']) {
     for (const d of dirs) { try { const f = path.join(d, name); if (d && fs.statSync(f).isFile()) return f; } catch { /* next */ } }
   }
-  const sys = path.join(process.env.SystemRoot || 'C:\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+  const sys = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   return fs.existsSync(sys) ? sys : '';
 }
 
@@ -85,4 +99,4 @@ function cli(argv) {
 
 if (require.main === module) { try { cli(process.argv.slice(2)); } catch { /* nothing to do */ } }
 
-module.exports = { start, held, pidFile, findShell };
+module.exports = { start, claim, pidFile, findShell };

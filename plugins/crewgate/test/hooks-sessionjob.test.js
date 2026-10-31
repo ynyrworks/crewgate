@@ -51,13 +51,25 @@ test('start(): one detached hidden holder per Claude pid, with the settings; a l
   assert.strictEqual(a[a.indexOf('-Cleanup') + 1], 'off');
   assert.strictEqual(a[a.indexOf('-ClaudePid') + 1], '4242');
   assert.ok(a.includes(home));
-  assert.strictEqual(sessionjob.start('pabcdef0123', {}, 4242, deps), 'started');   // the holder has not written its pid yet
+  assert.ok(a.includes('-HookStart'));
+  // a second start before the holder wrote its pid is refused by the claim; the claim is exclusive
+  assert.strictEqual(sessionjob.start('pabcdef0123', {}, 4242, deps), 'already');
+  assert.strictEqual(calls.length, 1);
   fs.writeFileSync(sessionjob.pidFile('pabcdef0123', 4242), String(process.pid));  // what the holder does
   assert.strictEqual(sessionjob.start('pabcdef0123', {}, 4242, deps), 'already');
-  assert.strictEqual(calls.length, 2);
-  fs.writeFileSync(sessionjob.pidFile('pabcdef0123', 4242), '2147483646');   // a stale file does not block
+  assert.strictEqual(calls.length, 1);
+  // a dead pid in a claim older than the limit is stale; a fresh one is not
+  const file = sessionjob.pidFile('pabcdef0123', 4242);
+  fs.writeFileSync(file, '2147483646');
+  assert.strictEqual(sessionjob.start('pabcdef0123', {}, 4242, deps), 'already');
+  const old = new Date(Date.now() - 60000);
+  fs.utimesSync(file, old, old);
   assert.strictEqual(sessionjob.start('pabcdef0123', {}, 4242, deps), 'started');
-  assert.strictEqual(calls.length, 3);
+  assert.strictEqual(calls.length, 2);
+  // a spawn that fails right away gives the claim back
+  fs.rmSync(file);
+  const bad = { ...deps, spawn: () => { throw new Error('boom'); } };
+  assert.strictEqual(sessionjob.start('pabcdef0123', {}, 4242, bad), 'error');
 });
 
 test('start(): no PowerShell records an event and does not throw', () => {
@@ -111,8 +123,10 @@ async function until(fn, ms = 30000) {
 function writeStandIns(dir) {
   const w = (name, text) => { const f = path.join(dir, name); fs.writeFileSync(f, text); return f; };
   const sleeper = w('sleeper.js', 'setTimeout(() => {}, 60000);');
-  const board = w('board.js', `const k = require('child_process').spawn(process.execPath, [${JSON.stringify(sleeper)}], { stdio: 'ignore' });
-require('fs').writeFileSync(process.argv[2], String(k.pid)); setTimeout(() => {}, 60000);`);
+  const binDir = path.join(dir, 'bin'); fs.mkdirSync(binDir, { recursive: true });
+  const board = path.join(binDir, 'crew.js');
+  fs.writeFileSync(board, `const k = require('child_process').spawn(process.execPath, [${JSON.stringify(sleeper)}], { stdio: 'ignore' });
+require('fs').writeFileSync(process.argv[process.argv.length - 1], String(k.pid)); setTimeout(() => {}, 60000);`);
   const det = w('det.js', `const k = require('child_process').spawn(process.execPath, [${JSON.stringify(sleeper)}], { stdio: 'ignore', detached: true });
 k.unref(); require('fs').writeFileSync(process.argv[2], String(k.pid));`);
   const session = w('session.ps1', `param($flag, $out, $detOut, $boardKid)
@@ -120,13 +134,13 @@ while (-not (Test-Path $flag)) { Start-Sleep -Milliseconds 100 }
 $node = '${process.execPath}'
 $a = Start-Process $node -ArgumentList '"${sleeper}"' -PassThru -WindowStyle Hidden
 $d = Start-Process $node -ArgumentList '"${det}"', ('"' + $detOut + '"') -PassThru -WindowStyle Hidden
-$b = Start-Process $node -ArgumentList '"${board}"', ('"' + $boardKid + '"') -PassThru -WindowStyle Hidden
+$b = Start-Process $node -ArgumentList '"${board}"', 'board', 'serve', ('"' + $boardKid + '"') -PassThru -WindowStyle Hidden
 Set-Content $out ('{"plain":' + $a.Id + ',"board":' + $b.Id + '}')
 Start-Sleep -Seconds 60`);
   return session;
 }
 
-async function scenario(t, cleanup) {
+async function scenario(t, cleanup, boardFile = 'pid', extraArgs = []) {
   const f = H.fixture();
   const dir = tmpDir('crew-sj-');
   const session = writeStandIns(dir);
@@ -140,7 +154,7 @@ async function scenario(t, cleanup) {
   const pidFile = path.join(dir, 'holder.pid');
   const holder = spawn(sessionjob.findShell(), ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', HOLDER,
     '-ClaudePid', String(sess.pid), '-ProjectId', f.pid, '-PidFile', pidFile, '-CrewHome', f.home, '-NodeExe', process.execPath,
-    '-RecordScript', require.resolve('../lib/hooks/sessionjob'), '-CapPercent', '45', '-Cleanup', cleanup],
+    '-RecordScript', require.resolve('../lib/hooks/sessionjob'), '-CapPercent', '45', '-Cleanup', cleanup, ...extraArgs],
   { stdio: 'ignore', windowsHide: true, env: process.env });
   holder.unref();
   started.push(holder.pid);
@@ -152,7 +166,10 @@ async function scenario(t, cleanup) {
   pids.kid = Number(await until(() => fs.existsSync(boardKid) && fs.readFileSync(boardKid, 'utf8')));
   pids.det = Number(await until(() => fs.existsSync(detOut) && fs.readFileSync(detOut, 'utf8')));
   started.push(pids.plain, pids.det, pids.board, pids.kid);
-  fs.writeFileSync(path.join(f.home, 'board.json'), JSON.stringify({ pid: pids.board, port: 1, started: 'x', alive: 'x' }));
+  const bf = path.join(f.home, 'board.json');
+  if (boardFile === 'pid') fs.writeFileSync(bf, JSON.stringify({ pid: pids.board, port: 1, started: 'x', alive: 'x' }));
+  else if (boardFile === 'corrupt') fs.writeFileSync(bf, '{"pid": 12');
+  else if (boardFile === 'nopid') fs.writeFileSync(bf, JSON.stringify({ port: 1 }));
   return { f, pids, sess, holder, pidFile, stop };
 }
 
@@ -206,4 +223,59 @@ test('start() launches a real holder through cmd; it records the job and the cle
   await until(() => events.read(f.pid, { types: 'session.cleanup' })[0]);
   await until(() => !alive(holder));
   assert.ok(!fs.existsSync(file));
+});
+
+test('holder: a corrupt board.json, or one without a pid, stops nothing and says so', realHolder, async (t) => {
+  for (const mode of ['corrupt', 'nopid']) {
+    const s = await scenario(t, 'on', mode);
+    s.stop(s.sess.pid);
+    const ev = await until(() => events.read(s.f.pid, { types: 'session.cleanup' })[0]);
+    assert.strictEqual(ev.data.error, 'board-json-unreadable');
+    assert.strictEqual(ev.data.stopped, 0);
+    await sleep(500);
+    assert.ok(alive(s.pids.plain) && alive(s.pids.det) && alive(s.pids.board) && alive(s.pids.kid), mode);
+  }
+});
+
+test('holder: a missing board.json keeps a board serve command line and its children, and stops the rest', realHolder, async (t) => {
+  const s = await scenario(t, 'on', 'missing');
+  s.stop(s.sess.pid);
+  const ev = await until(() => events.read(s.f.pid, { types: 'session.cleanup' })[0]);
+  assert.ok(ev.data.stopped >= 2 && ev.data.kept >= 2 && !ev.data.error, JSON.stringify(ev.data));
+  await until(() => !alive(s.pids.plain) && !alive(s.pids.det));
+  assert.ok(alive(s.pids.board) && alive(s.pids.kid), 'the board and its child survive without a state file');
+  assert.ok(!JSON.stringify(ev).includes('crew.js'), 'no command lines in the event');
+});
+
+test('holder: refuses a process that started after the hook took its pid, and caps nothing', realHolder, async (t) => {
+  const f = H.fixture();
+  const sess = spawn(sessionjob.findShell(), ['-NoLogo', '-NoProfile', '-Command', 'Start-Sleep -Seconds 60'], { stdio: 'ignore', windowsHide: true });
+  const holder = spawn(sessionjob.findShell(), ['-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', HOLDER,
+    '-ClaudePid', String(sess.pid), '-ProjectId', f.pid, '-PidFile', path.join(f.home, 'h.pid'), '-CrewHome', f.home, '-NodeExe', process.execPath,
+    '-RecordScript', require.resolve('../lib/hooks/sessionjob'), '-CapPercent', '45', '-HookStart', '1'], { stdio: 'ignore', windowsHide: true, env: process.env });
+  t.after(() => { for (const p of [sess.pid, holder.pid]) if (alive(p)) { try { process.kill(p); } catch { /* gone */ } } });
+  const ev = await until(() => events.read(f.pid, { types: 'session.job.error' })[0]);
+  assert.strictEqual(ev.data.reason, 'pid-reused');
+  await until(() => !alive(holder.pid));
+  assert.strictEqual(events.read(f.pid, { types: 'session.job' }).length, 0);
+});
+
+// The keep decision, without any window: the real thing would flash one at the user.
+test('keep decision: the board, visible windows, board-like processes and all their descendants are kept', { skip: !WIN || !sessionjob.findShell() }, () => {
+  const dir = tmpDir('crew-keep-');
+  const file = path.join(dir, 'in.json');
+  const procs = [
+    { pid: 10, ppid: 1 }, { pid: 11, ppid: 10 }, { pid: 12, ppid: 11 },          // board and its tree
+    { pid: 20, ppid: 1, window: true }, { pid: 21, ppid: 20 },                   // a visible program and its child
+    { pid: 30, ppid: 1 }, { pid: 31, ppid: 30 },                                 // background leftovers
+    { pid: 40, ppid: 1, boardlike: true }, { pid: 41, ppid: 40 },                // a board by command line
+  ];
+  const run = (board, list) => {
+    fs.writeFileSync(file, JSON.stringify({ board, procs: list }));
+    const r = require('child_process').spawnSync(sessionjob.findShell(), ['-NoLogo', '-NoProfile', '-File', HOLDER, '-TestKeepFile', file], { encoding: 'utf8' });
+    return JSON.parse(r.stdout.trim());
+  };
+  assert.deepStrictEqual(run(10, procs.map((p) => ({ ...p, boardlike: false }))), [10, 11, 12, 20, 21]);
+  assert.deepStrictEqual(run(0, procs), [20, 21, 40, 41]);
+  assert.deepStrictEqual(run(0, procs.map((p) => ({ ...p, window: false, boardlike: false }))), []);
 });
