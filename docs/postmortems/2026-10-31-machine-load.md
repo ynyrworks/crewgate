@@ -57,7 +57,7 @@ All on Windows 11, 32 threads, Node 24, one run each unless stated. No artificia
 
 ## What is still unknown
 
-- Why those six processes survived the desktop-app quit. Under `claude -p`, a sleeper started as a detached child, with `&`, with `setsid` or with `run_in_background` was gone within 9 s of ending Claude, with cleanup on or off, and the holder's list was empty. The six start times are about 45 s apart, which does not fit one batch of 48. Cleanup is proven with stand-in sessions only.
+- Why those six processes survived the desktop-app quit. Two later quits with the same app version did not reproduce it: 16 processes from a session, loops among them, all ended with the app, and only a process started outside the tree survived. See [PLUGIN-FACTS.md](../PLUGIN-FACTS.md), "Desktop-app quit". Under `claude -p`, a sleeper started as a detached child, with `&`, with `setsid` or with `run_in_background` was gone within 9 s of ending Claude, with cleanup on or off, and the holder's list was empty. The six start times are about 45 s apart, which does not fit one batch of 48. Cleanup is proven with stand-in sessions only.
 - How the 60% cap feels in use was not measured. The whole machine at saturation was measured later, with a probe process: see [PLUGIN-FACTS.md](../PLUGIN-FACTS.md), "Whole-machine saturation".
 - Two Windows CI failures have no established cause: the holder test and `hooks-stability` "keeps quiet about the merge". Both now print their evidence on failure. Both passed on all nine jobs of the `rc/0.21` run 41227043173 (one run), so that evidence has not been produced yet and the cause is still unknown. The test name appears on non-Windows jobs too, but the real holder runs on Windows only.
 

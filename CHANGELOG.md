@@ -14,7 +14,7 @@
 
 ### Fixed
 
-- Session cleanup no longer stops anything by default. `limits.session_cleanup` defaults to `off`: at exit it lists and records what is left (`found`, `kept`, `would_stop`). Only an explicit `on` stops processes. Correction: a project set up with 0.20.1 has that explicit `on`; see 0.21.1. Cleanup is proven with stand-ins only, and every real run so far found nothing to stop.
+- Session cleanup no longer stops anything by default. `limits.session_cleanup` defaults to `off`: at exit it lists and records what is left (`found`, `kept`, `would_stop`). Only an explicit `on` stops processes. Correction: a project set up with 0.20.1 has that explicit `on`; see 0.21.1. Cleanup is proven with stand-ins only, and every real run so far found nothing to stop. Correction: those runs were `claude -p`. On a desktop-app quit the holder ends with the app and records nothing.
 - `crew gate answer <id> yes` is refused when a session is known and no user message came after the ask, with a `gate.refused` event. Before, the yes was stored and marked as not from a user turn, and the push it was for still ran. A `no` is always accepted.
 - Slot test: it read the slot file before its content was written, and failed once on macOS CI. Only the test changed.
 

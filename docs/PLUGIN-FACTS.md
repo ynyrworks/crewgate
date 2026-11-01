@@ -191,3 +191,22 @@ Orchestrator, 2026-11-01, Windows 11, 32 threads, with the user's permission and
 - The dispatch sampler, called repeatedly at 100%, read 99 or 100 every time, from inside the session and outside it, and two samples in a row were over 85 in 107 of 107 pairs. `overLimit` once returned "allowed" at 100% in the phase before; that was not seen again and the cause is not known.
 - With 86% from a session's own 60% plus other programs, the check sits at its limit of 85 and allowed the one dispatch tried.
 - The other way round is the cost of the low priority. With normal-priority loops filling the machine, a process inside the session stalled for up to 8.4 s, and one sample took 6.6 s. The dispatch hook's budget is 5 s, so it could run out; what the hook then does was not measured.
+
+## Desktop-app quit
+
+Orchestrator and user, 2026-11-01, desktop app 4.4212 (installed 2026-10-30, before the incident), Claude Code 2.1.309, Windows 11. The user fully quit the app twice.
+
+| | Cleanup setting of the session | Started from the session | Result |
+|---|---|---|---|
+| First quit | `on` | 7 idle sleepers: `&`, `nohup`, under a waiting `bash`, detached, hidden `Start-Process`, background tool command, subagent | All gone when checked 4 minutes later |
+| Second quit | `off` | The same 7, plus a CPU loop from `&` and one from a subagent | All 9 gone in one poll |
+
+In the second quit, a logger outside the session's job and process tree polled every 100 ms. The app's main process, both Claude Code processes, both holders and all 9 processes from the session were seen gone in the same poll, at 05:43:26.9 UTC.
+
+- Crewgate's cleanup did not do this: it was off. The holder died in the same poll, so it could neither clean up nor record.
+- A sleeper started through WMI, outside the job and the tree, survived as the control. The board survived both quits as well.
+- The events across all five real projects held no `session.cleanup` at all, and no `session.job.error`. On a desktop-app quit the holder leaves no record.
+- `session.end` was recorded for two sessions at the first quit and for none at the second, so that hook does not reliably run on a quit.
+- The cause of the simultaneous end was not read from the app. It fits a job closed with the app, and that is not proven.
+- This does not explain the incident, where six loops outlived a quit with the same app version. Those loops may have been outside the tree, or the quit may have differed. Not known.
+- Not measured: closing one session while the app stays open, and closing a terminal that runs an interactive `claude`.
