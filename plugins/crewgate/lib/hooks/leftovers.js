@@ -55,12 +55,13 @@ function list(deps = {}, timeoutMs = 3000) {
 const LIST_DISPATCH_MS = 1500;
 const LIST_STOP_MS = 3000;
 const MIN_LEFT_MS = 2500;
-// CREWGATE_LEFTOVERS_LIST_MS replaces both limits (a test that needs a real listing must not depend on machine load).
+// CREWGATE_LEFTOVERS_LIST_MS replaces both limits (a test that needs a real listing must not depend on machine load);
+// when the budget is known it is still cut to budgetMs - 1000 like the normal limit.
 function timeoutFor(max, budgetMs) {
   const env = Number(process.env.CREWGATE_LEFTOVERS_LIST_MS);
-  if (env > 0) return env;
-  if (!Number.isFinite(budgetMs)) return max;
-  return budgetMs < MIN_LEFT_MS ? 0 : Math.min(max, budgetMs - 1000);
+  const limit = env > 0 ? env : max;
+  if (!Number.isFinite(budgetMs)) return limit;
+  return budgetMs < MIN_LEFT_MS ? 0 : Math.min(limit, budgetMs - 1000);
 }
 
 // At dispatch -> { pids, ts }, { skipped: 'too-many-processes', ts } when the list is over the cap (a cut list would
@@ -187,4 +188,4 @@ function budgetLeft(event) {
   return guard - process.uptime() * 1000;
 }
 
-module.exports = { budgetLeft, list, snapshot, find, check, parseWin, parsePosix, knownRoots };
+module.exports = { budgetLeft, timeoutFor, list, snapshot, find, check, parseWin, parsePosix, knownRoots };

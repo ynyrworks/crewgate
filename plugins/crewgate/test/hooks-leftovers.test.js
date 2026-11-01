@@ -118,6 +118,13 @@ test('the listing timeout follows the budget; a short budget lists nothing and g
   try { budgetCase(); } finally { process.env.CREWGATE_LEFTOVERS_LIST_MS = keep; }
 });
 
+test('a large CREWGATE_LEFTOVERS_LIST_MS stays within the budget; with no known budget it is used as it is', () => {
+  assert.strictEqual(process.env.CREWGATE_LEFTOVERS_LIST_MS, '20000');
+  assert.strictEqual(L.timeoutFor(1500, 4000), 3000);
+  assert.strictEqual(L.timeoutFor(1500, 2000), 0);
+  assert.strictEqual(L.timeoutFor(1500, undefined), 20000);
+});
+
 function budgetCase() {
   const seen = [];
   const deps = { list: () => { seen.push(1); return base; } };
