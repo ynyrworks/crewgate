@@ -191,7 +191,7 @@ test('CLI: new, add, link, set, show, list, rm in a scratch repo', () => {
   assert.ok(proj, 'init registers the project');
   assert.equal(crewJ(repo, 'plan', 'new', 'demo', '--title', 'Demo plan', '--goal', 'Ship it').code, 0);
   const file = path.join(repo, '.crew', 'plans', 'demo.md');
-  assert.equal(fs.readFileSync(file, 'utf8'), '# Demo plan\nShip it\n\n');
+  assert.equal(fs.readFileSync(file, 'utf8'), '# Demo plan\n<!-- crew-plan state:draft -->\nShip it\n\n');
   assert.equal(crewJ(repo, 'plan', 'new', 'demo', '--title', 'again').code, 1, 'exists');
   assert.equal(crewJ(repo, 'plan', 'new', 'Bad Slug', '--title', 'x').code, 1);
   assert.equal(crewJ(repo, 'plan', 'new', 'x').code, 2, 'title required');

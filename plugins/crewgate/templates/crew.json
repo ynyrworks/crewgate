@@ -73,7 +73,10 @@
   "plan": {
     "max_proposals_per_round": 5,
     "max_rounds": 3,
-    "large_growth": 5
+    "large_growth": 5,
+    "interview": "on",
+    "enforce": "block",
+    "review": "large"
   },
   "checks": [],
   "forbidden": {

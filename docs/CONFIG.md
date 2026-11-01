@@ -46,10 +46,13 @@ Committed with the project. Created by `crew init`.
 | `review.nit_cap` | integer; min 0; max 100 | `5` | Most nit findings shown. | 最多顯示幾筆瑣碎意見。 |
 | `review.categories` | array of string | `["correctness","security-exploitable","data-loss","regression","spec-mismatch","test-gap","maintainability","machine-impact","nit"]` | Allowed finding categories. | 允許的發現類別。 |
 | `review.downgrade_to_nit` | array of string | `["theoretical-race","style"]` | Patterns downgraded to nit. | 自動降為瑣碎意見的型態。 |
-| `plan` | object | `{"max_proposals_per_round":5,"max_rounds":3,"large_growth":5}` | Plan review limits. | 計畫審查的上限。 |
+| `plan` | object | `{"max_proposals_per_round":5,"max_rounds":3,"large_growth":5,"interview":"on","enforce":"block","review":"large"}` | Plan review limits. | 計畫審查的上限。 |
 | `plan.max_proposals_per_round` | integer; min 1; max 50 | `5` | Most proposed steps one plan review round may add (the most severe kinds are kept, the rest are counted as cut). | 一輪計畫審查最多提出幾個提議節點（保留最嚴重的類型，其餘記為截掉）。 |
 | `plan.max_rounds` | integer; min 1; max 20 | `3` | Plan review rounds allowed per plan (--force on "plan review run" overrides). | 每份計畫最多可做幾輪計畫審查（「plan review run」加 --force 可超過）。 |
 | `plan.large_growth` | integer; min 1; max 100 | `5` | When more than this many proposals have been accepted in one plan since the last large_task approval, the CLI prints the large_task gate hint and records a need (it does not block). | 同一份計畫自上次 large_task 核准後，接受的提議超過此數量時，CLI 會印出 large_task 關卡提示並記一筆待決事項（不阻擋）。 |
+| `plan.interview` | string; one of `on`, `off` | `"on"` | Whether the /crewgate:plan skill interviews you about a plan before drafting it: on or off. | /crewgate:plan 技能在起草計畫前是否先訪談你：on 或 off。 |
+| `plan.enforce` | string; one of `block`, `remind`, `off` | `"block"` | What happens when work starts from a plan that is still a draft: block (refuse), remind (only warn) or off (nothing). | 從仍是草稿的計畫開工時的處理：block（拒絕）、remind（只提醒）、off（不處理）。 |
+| `plan.review` | string; one of `large`, `ask`, `off` | `"large"` | When a plan review is offered before the plan is finalized: large (only for a large plan), ask (always ask you) or off (never). | 定案前何時提供計畫審查：large（只有大型計畫）、ask（每次都問你）、off（不提供）。 |
 | `checks` | array of string | `[]` | Commands a worker must run before reporting. | worker 回報前必須執行的指令。 |
 | `forbidden` | object | `{"paths":[],"actions":[]}` | Boundaries rendered into the worker agent file. | 寫進 worker agent 檔的禁止事項。 |
 | `forbidden.paths` | array of string | `[]` | Paths a worker must not touch. | worker 不可碰的路徑。 |

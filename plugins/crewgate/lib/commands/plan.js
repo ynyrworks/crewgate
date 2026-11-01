@@ -7,9 +7,11 @@ const plans = require('../core/plans');
 const pr = require('../core/plan-review');
 const tasks = require('../core/tasks');
 const common = require('../features/common');
+const gates = require('../core/gates');
+const sess = require('../hooks/session');
 
 const SPECS = {
-  new: { positionals: [{ name: 'slug' }], options: { '--title': { dest: 'title' }, '--goal': { dest: 'goal' } } },
+  new: { positionals: [{ name: 'slug' }], options: { '--title': { dest: 'title' }, '--goal': { dest: 'goal' }, '--not-doing': { dest: 'notDoing' }, '--done-when': { dest: 'doneWhen' } } },
   list: { positionals: [], options: {} },
   show: { positionals: [{ name: 'slug' }], options: {} },
   add: {
@@ -25,6 +27,11 @@ const SPECS = {
   },
   link: { positionals: [{ name: 'slug' }, { name: 'node' }, { name: 'task' }], options: {} },
   set: { positionals: [{ name: 'slug' }, { name: 'node' }, { name: 'action', choices: ['open', 'done', 'dropped', 'accept'] }], options: {} },
+  part: { positionals: [{ name: 'slug' }, { name: 'part', choices: ['not-doing', 'done-when'] }, { name: 'text' }], options: {} },
+  finalize: { positionals: [{ name: 'slug' }], options: { '--gate': { dest: 'gate' } } },
+  close: { positionals: [{ name: 'slug' }, { name: 'to', choices: ['done', 'parked'] }], options: { '--gate': { dest: 'gate' } } },
+  reopen: { positionals: [{ name: 'slug' }], options: {} },
+  adopt: { positionals: [{ name: 'slug' }], options: {} },
   rm: { positionals: [{ name: 'slug' }, { name: 'node' }], options: {} },
   accept: { positionals: [{ name: 'slug' }, { name: 'node' }], options: {} },
   reject: { positionals: [{ name: 'slug' }, { name: 'node' }], options: { '--note': { dest: 'note' } } },
@@ -135,6 +142,35 @@ function reviewRun(argv, ctx) {
   return 0;
 }
 
+// The options `crew gate answer` builds from the session: the user-turn check needs the session's prompt times.
+function answerOptions(proj) {
+  const session = gates.currentSession();
+  const promptsOf = (id) => { const s = sess.read(id); return s && Array.isArray(s.prompt_ts) ? s.prompt_ts : []; };
+  return { src: 'cli', session, prompts: session ? promptsOf(session) : [], promptsOf, projectPrompts: () => sess.promptsOfProject(proj.id) };
+}
+
+// finalize and close: without --gate they ask the user; with --gate they take the user's reply.
+function askOrAnswer(sub, a, proj, root, ctx) {
+  const session = gates.currentSession();
+  const cfg = ctx.config().config;
+  if (sub === 'finalize') {
+    if (a.gate) {
+      const r = plans.finalizeAnswer(root, proj.id, a.slug, a.gate, answerOptions(proj));
+      return ctx.emit(r, ctx.t('plan.finalizedOk', { slug: a.slug }));
+    }
+    const r = plans.finalizeAsk(root, proj.id, cfg, a.slug, { session, t: ctx.t });
+    const msg = ctx.t('plan.finalizeAsked', { slug: a.slug, id: r.gate_id });
+    return ctx.emit({ ...r, next: msg }, msg);
+  }
+  if (a.gate) {
+    const r = plans.closeAnswer(root, proj.id, a.slug, a.gate, answerOptions(proj));
+    return ctx.emit(r, ctx.t('plan.closedOk', { slug: a.slug, state: r.state }));
+  }
+  const r = plans.closeAsk(root, proj.id, cfg, a.slug, a.to, { session });
+  const msg = ctx.t('plan.closeAsked', { slug: a.slug, id: r.gate_id, to: a.to });
+  return ctx.emit({ ...r, next: msg }, msg);
+}
+
 function run(argv, ctx) {
   const sub = argv[0];
   if (sub === 'review') return reviewRun(argv.slice(1), ctx);
@@ -145,7 +181,7 @@ function run(argv, ctx) {
   if (a.slug !== undefined) plans.checkSlug(a.slug);
   if (sub === 'new') {
     if (!a.title) throw new UsageError('args.missing', { name: '--title' });
-    const r = plans.create(root, proj.id, a.slug, { title: a.title, goal: a.goal });
+    const r = plans.create(root, proj.id, a.slug, { title: a.title, goal: a.goal, notDoing: a.notDoing, doneWhen: a.doneWhen });
     ctx.emit(r, ctx.t('plan.created', { slug: r.slug, file: r.file }));
     if (!a.goal || !a.goal.trim()) ctx.err(ctx.t('plan.noGoal'));
   } else if (sub === 'list') {
@@ -155,18 +191,23 @@ function run(argv, ctx) {
       const doc = plans.readCapped(root, slug);
       if (!doc) continue;
       const d = plans.derive(doc, states);
-      rows.push({ slug, title: d.title, ...d.summary });
+      rows.push({ slug, title: d.title, ...d.summary, state: plans.stateOf(root, proj.id, slug) });
     }
     ctx.emit(rows, rows.length
-      ? rows.map((r) => `${r.slug}  ${r.pct}% (${r.done}/${r.total})  ${r.title}`)
+      ? rows.map((r) => `${r.slug}  ${r.pct}% (${r.done}/${r.total})  ${r.title}  [${r.state}]`)
       : [ctx.t('plan.empty')]);
   } else if (sub === 'show') {
     const doc = plans.readCapped(root, a.slug);
     if (!doc) throw new CrewError('plan.notFound', { slug: a.slug });
     const d = plans.derive(doc, plans.taskStates(proj.id));
-    ctx.emit({ slug: a.slug, ...d }, [
+    const info = plans.stateInfo(root, proj.id, a.slug);
+    ctx.emit({ slug: a.slug, ...d, state: info.state, file_state: info.file_state, record_state: info.record_state, state_conflict: info.conflict }, [
       ctx.t('plan.head', { slug: a.slug, title: d.title, pct: d.summary.pct, done: d.summary.done, total: d.summary.total }),
+      ctx.t('plan.stateLine', { state: info.state }),
+      ...(info.conflict ? [ctx.t('plan.stateConflict', { file: info.file_state, record: info.record_state })] : []),
       ...(d.goal ? [d.goal] : []),
+      ...(d.not_doing ? [ctx.t('plan.notDoingLine', { text: d.not_doing })] : []),
+      ...(d.done_when ? [ctx.t('plan.doneWhenLine', { text: d.done_when })] : []),
       ...treeLines(ctx, d.nodes),
       ...(d.clarified.length ? [ctx.t('plan.clarifiedHead'), ...d.clarified.map((l) => `  ${l}`)] : []),
       ...(d.duplicates.length ? [ctx.t('plan.dupIds', { ids: d.duplicates.join(', ') })] : []),
@@ -179,6 +220,17 @@ function run(argv, ctx) {
   } else if (sub === 'clarify') {
     const r = plans.clarify(root, proj.id, a.slug, { question: a.question, answer: a.answer, by: a.by });
     ctx.emit(r, ctx.t('plan.clarified', { slug: a.slug }));
+  } else if (sub === 'part') {
+    const r = plans.setPart(root, proj.id, a.slug, a.part, a.text);
+    ctx.emit(r, ctx.t('plan.partSet', { slug: a.slug, part: a.part }));
+  } else if (sub === 'finalize' || sub === 'close') {
+    askOrAnswer(sub, a, proj, root, ctx);
+  } else if (sub === 'reopen') {
+    const r = plans.reopen(root, proj.id, a.slug);
+    ctx.emit(r, ctx.t('plan.reopenedOk', { slug: a.slug }));
+  } else if (sub === 'adopt') {
+    const r = plans.adopt(root, proj.id, a.slug);
+    ctx.emit(r, ctx.t('plan.adoptedOk', { slug: a.slug }));
   } else if (sub === 'link') {
     const r = plans.linkTo(root, proj.id, a.slug, a.node, checkTask(proj.id, a.task));
     ctx.emit({ slug: a.slug, ...r }, ctx.t('plan.linked', { id: r.id, task: r.task }));
@@ -208,9 +260,12 @@ module.exports = {
   summary: { en: 'Plan trees with progress from linked tasks', 'zh-TW': '計畫樹，進度由連結的任務算出' },
   usage: {
     en: [
-      '  crew plan new SLUG --title "..." [--goal "..."]',
+      '  crew plan new SLUG --title "..." [--goal "..."] [--not-doing "..."] [--done-when "..."]   (starts as a draft)',
       '  crew plan list [--json]',
       '  crew plan show SLUG [--json]',
+      '  crew plan part SLUG not-doing|done-when "text"   (sets the ## Not doing or ## Done when section before the steps)',
+      '  crew plan finalize SLUG   (asks the user; show them the plan, end your turn)   |   crew plan finalize SLUG --gate ID   (after their reply)',
+      '  crew plan close SLUG done|parked [--gate ID]   |   crew plan reopen SLUG   |   crew plan adopt SLUG   (a legacy plan becomes a draft)',
       '  crew plan add SLUG "text" [--under NODE] [--task TASK] [--origin plan|user|review|refute|implementation|send-back] [--proposed]',
       '  crew plan clarify SLUG --question "..." --answer "..." [--by user|assumed]   (keeps a settled question under ## Clarified)',
       '  crew plan link SLUG NODE TASK',
@@ -225,9 +280,12 @@ module.exports = {
       '  (plans live in .crew/plans/SLUG.md; NODE is an id such as n2, or Lnn for a hand-written line without an id)',
     ].join('\n'),
     'zh-TW': [
-      '  crew plan new SLUG --title "..." [--goal "..."]',
+      '  crew plan new SLUG --title "..." [--goal "..."] [--not-doing "..."] [--done-when "..."]   （一開始是草稿）',
       '  crew plan list [--json]',
       '  crew plan show SLUG [--json]',
+      '  crew plan part SLUG not-doing|done-when "文字"   （設定步驟之前的 ## Not doing 或 ## Done when 區段）',
+      '  crew plan finalize SLUG   （詢問使用者；把計畫給他看，結束這一輪）   |   crew plan finalize SLUG --gate ID   （他回覆之後）',
+      '  crew plan close SLUG done|parked [--gate ID]   |   crew plan reopen SLUG   |   crew plan adopt SLUG   （舊計畫變成草稿）',
       '  crew plan add SLUG "文字" [--under NODE] [--task TASK] [--origin plan|user|review|refute|implementation|send-back] [--proposed]',
       '  crew plan clarify SLUG --question "..." --answer "..." [--by user|assumed]   （把釐清的問題記在 ## Clarified 下）',
       '  crew plan link SLUG NODE TASK',
