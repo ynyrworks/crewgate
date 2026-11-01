@@ -719,7 +719,7 @@ function deepNodes(root) {
 
 module.exports = {
   SLUG_RE, ORIGINS, MAX_DEPTH, MAX_BYTES, MAX_NODES, planDir, planFile, checkSlug, parse, serialize, assignIds, find, addNode, removeNode,
-  STATES, PARTS, planOfTask, draftPlanOfTask, stateOf, stateInfo, contentHash, fileHash, readRecord, setPart, readyProblems, finalizeAsk, finalizeAnswer, closeAsk, closeAnswer, reopen, adopt,
+  STATES, PARTS, planOfTask, draftPlanOfTask, stateOf, stateInfo, contentHash, fileHash, readRecord, setPart, readyProblems, finalizeAsk, finalizeAnswer, closeAsk, closeAnswer, reopen, adopt, takeReply, writeRecord,
   KINDS, ACTIONS, encodeToken, decodeToken, proposalMeta, record, setBox, touch, BOX_STATE, cleanText, MAX_TEXT,
   derive, taskStates, slugs, readCapped, update, create, clarify, addTo, linkTo: linkTask, setState, removeFrom, deepNodes, duplicateNodes, duplicateIds, exists, today, refOf,
 };

@@ -1,5 +1,5 @@
 {
-  "plan.usage": "plan 可用 new | list | show | part | finalize | close | reopen | adopt | add | link | set | rm | accept | reject | review",
+  "plan.usage": "plan 可用 new | list | show | part | finalize | close | reopen | adopt | add | link | set | rm | accept | reject | drift | drift-stats | review",
   "plan.badSlug": "計畫名稱「{slug}」不合法：1 到 40 個字元，只能用 a-z、0-9 和 -",
   "plan.noNode": "找不到計畫節點「{node}」（用 n2 這類 id；沒有 id 的行用 Lnn）",
   "plan.noText": "節點文字是空的",
@@ -91,5 +91,23 @@
   "plan.stateLine": "狀態：{state}",
   "plan.stateConflict": "警告：計畫檔寫的是 {file}，但紀錄是 {record}。兩者不一致，以紀錄為準。",
   "plan.notDoingLine": "不做什麼：{text}",
-  "plan.doneWhenLine": "完成條件：{text}"
+  "plan.doneWhenLine": "完成條件：{text}",
+  "plan.driftNotFinal": "計畫 {slug} 是 {state}；只有已定案的計畫才會詢問偏離",
+  "plan.driftBadKind": "未知的偏離種類「{kind}」：請用 {kinds}",
+  "plan.driftBadAnswer": "未知的偏離答案「{answer}」：請用 {answers}",
+  "plan.driftBadGate": "關卡 {id} 不是計畫 {slug} 的偏離詢問。請重新詢問：crew plan drift {slug} --kind ...",
+  "plan.driftAlreadyAnswered": "關卡 {id} 已用來回答過偏離。計畫又偏離時請重新詢問。",
+  "plan.driftAsked": "已就計畫 {slug} 的偏離（種類 {kind}）開了關卡 {id}。請在聊天裡告訴使用者發生什麼事，列出這些答案，然後結束這一輪：",
+  "plan.driftAnswer.add": "  add    - 加進計畫，成為使用者要求的步驟（回答就算核准，不必重新定案）",
+  "plan.driftAnswer.goal": "  goal   - 把計畫的目標改成這段文字（不必重新定案）",
+  "plan.driftAnswer.new": "  new    - 以這段文字（slug）開一份新草稿計畫；這份計畫不變",
+  "plan.driftAnswer.drop": "  drop   - 不做：這段文字寫進 ## Not doing",
+  "plan.driftAnswer.defer": "  defer  - 之後再說：這段文字變成工作流 drift 的待辦項目",
+  "plan.driftNext": "他回覆之後執行：crew plan drift {slug} --gate {id} --answer add|goal|new|drop|defer --text \"...\"。他說不行就執行：crew gate answer {id} no，什麼都不要改。",
+  "plan.driftAnswered": "計畫 {slug} 的偏離（{kind}）已回答：{answer}。",
+  "plan.driftStatsPlan": "計畫 {slug}：詢問 {asked} 次",
+  "plan.driftStatsAnswers": "  答案：{list}",
+  "plan.driftStatsKinds": "  依種類（詢問/回答）：{list}",
+  "plan.driftStatsNone": "還沒有詢問過偏離。",
+  "plan.driftStatsOutside": "此專案 --outside-plan 的使用次數：{n}"
 }

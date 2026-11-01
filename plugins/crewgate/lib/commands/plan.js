@@ -8,6 +8,7 @@ const pr = require('../core/plan-review');
 const tasks = require('../core/tasks');
 const common = require('../features/common');
 const gates = require('../core/gates');
+const drift = require('../core/drift');
 const sess = require('../hooks/session');
 
 const SPECS = {
@@ -35,6 +36,14 @@ const SPECS = {
   rm: { positionals: [{ name: 'slug' }, { name: 'node' }], options: {} },
   accept: { positionals: [{ name: 'slug' }, { name: 'node' }], options: {} },
   reject: { positionals: [{ name: 'slug' }, { name: 'node' }], options: { '--note': { dest: 'note' } } },
+  drift: {
+    positionals: [{ name: 'slug' }],
+    options: {
+      '--kind': { dest: 'kind', choices: drift.KINDS }, '--detail': { dest: 'detail' },
+      '--gate': { dest: 'gate' }, '--answer': { dest: 'answer', choices: drift.ANSWERS }, '--text': { dest: 'text' },
+    },
+  },
+  'drift-stats': { positionals: [{ name: 'slug', optional: true }], options: {} },
 };
 const ROUND = { '--round': { dest: 'round', int: true } };
 const REVIEW_SPECS = {
@@ -171,6 +180,35 @@ function askOrAnswer(sub, a, proj, root, ctx) {
   return ctx.emit({ ...r, next: msg }, msg);
 }
 
+// drift: without --gate it asks the user (the plan must be final); with --gate and --answer it takes their reply.
+function driftRun(a, proj, root, ctx) {
+  if (a.gate) {
+    if (!a.answer) throw new UsageError('args.missing', { name: '--answer' });
+    if (!a.text) throw new UsageError('args.missing', { name: '--text' });
+    const r = drift.answer(root, proj.id, a.slug, a.gate, a.answer, a.text, answerOptions(proj));
+    return ctx.emit(r, ctx.t('plan.driftAnswered', { slug: a.slug, kind: r.kind, answer: r.answer }));
+  }
+  if (!a.kind) throw new UsageError('args.missing', { name: '--kind' });
+  const r = drift.ask(root, proj.id, ctx.config().config, a.slug, a.kind, a.detail, { session: gates.currentSession() });
+  const L = [ctx.t('plan.driftAsked', { slug: a.slug, kind: r.kind, id: r.gate_id })];
+  for (const k of drift.ANSWERS) L.push(ctx.t(`plan.driftAnswer.${k}`));
+  L.push(ctx.t('plan.driftNext', { slug: a.slug, id: r.gate_id }));
+  return ctx.emit({ ...r, answers: drift.ANSWERS }, L);
+}
+
+function driftStats(a, proj, ctx) {
+  const r = drift.stats(proj.id, a.slug);
+  const L = [];
+  for (const p of r.plans) {
+    L.push(ctx.t('plan.driftStatsPlan', { slug: p.slug, asked: p.asked }));
+    L.push(ctx.t('plan.driftStatsAnswers', { list: drift.ANSWERS.map((k) => `${k} ${p.answers[k]}`).join(', ') }));
+    L.push(ctx.t('plan.driftStatsKinds', { list: drift.KINDS.map((k) => `${k} ${p.by_kind[k].asked}/${p.by_kind[k].answered}`).join(', ') }));
+  }
+  if (!r.plans.length) L.push(ctx.t('plan.driftStatsNone'));
+  L.push(ctx.t('plan.driftStatsOutside', { n: r.outside_plan }));
+  return ctx.emit(r, L);
+}
+
 function run(argv, ctx) {
   const sub = argv[0];
   if (sub === 'review') return reviewRun(argv.slice(1), ctx);
@@ -179,7 +217,11 @@ function run(argv, ctx) {
   const proj = ctx.requireProject();
   const root = ctx.workTree(); // plans are tracked files: use the work tree like LESSONS.md
   if (a.slug !== undefined) plans.checkSlug(a.slug);
-  if (sub === 'new') {
+  if (sub === 'drift') {
+    driftRun(a, proj, root, ctx);
+  } else if (sub === 'drift-stats') {
+    driftStats(a, proj, ctx);
+  } else if (sub === 'new') {
     if (!a.title) throw new UsageError('args.missing', { name: '--title' });
     const r = plans.create(root, proj.id, a.slug, { title: a.title, goal: a.goal, notDoing: a.notDoing, doneWhen: a.doneWhen });
     ctx.emit(r, ctx.t('plan.created', { slug: r.slug, file: r.file }));
@@ -268,6 +310,8 @@ module.exports = {
       '  crew plan close SLUG done|parked [--gate ID]   |   crew plan reopen SLUG   |   crew plan adopt SLUG   (a legacy plan becomes a draft)',
       '  crew plan add SLUG "text" [--under NODE] [--task TASK] [--origin plan|user|review|refute|implementation|send-back] [--proposed]',
       '  crew plan clarify SLUG --question "..." --answer "..." [--by user|assumed]   (keeps a settled question under ## Clarified)',
+      '  crew plan drift SLUG --kind new-step|changed-text|unlinked-task|out-of-scope [--detail "..."]   (asks the user how to treat work that left a final plan; end your turn)',
+      '  crew plan drift SLUG --gate ID --answer add|goal|new|drop|defer --text "..."   (after their reply)   |   crew plan drift-stats [SLUG] [--json]',
       '  crew plan link SLUG NODE TASK',
       '  crew plan set SLUG NODE open|done|dropped|accept',
       '  crew plan rm SLUG NODE   (a leaf only)',
@@ -288,6 +332,8 @@ module.exports = {
       '  crew plan close SLUG done|parked [--gate ID]   |   crew plan reopen SLUG   |   crew plan adopt SLUG   （舊計畫變成草稿）',
       '  crew plan add SLUG "文字" [--under NODE] [--task TASK] [--origin plan|user|review|refute|implementation|send-back] [--proposed]',
       '  crew plan clarify SLUG --question "..." --answer "..." [--by user|assumed]   （把釐清的問題記在 ## Clarified 下）',
+      '  crew plan drift SLUG --kind new-step|changed-text|unlinked-task|out-of-scope [--detail "..."]   （工作偏離已定案的計畫時詢問使用者；結束這一輪）',
+      '  crew plan drift SLUG --gate ID --answer add|goal|new|drop|defer --text "..."   （他回覆之後）   |   crew plan drift-stats [SLUG] [--json]',
       '  crew plan link SLUG NODE TASK',
       '  crew plan set SLUG NODE open|done|dropped|accept',
       '  crew plan rm SLUG NODE   （只能刪葉節點）',
