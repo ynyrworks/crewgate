@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.21.2 — 2026-11-01
+
+### Fixed
+
+- The description of `limits.session_cleanup` says only what was measured. Under `claude -p` cleanup found nothing to stop. When the desktop app quits, everything from the session ends at once, so cleanup stops nothing and records nothing.
+- `CREWGATE_LEFTOVERS_LIST_MS`, a setting for tests, can no longer push a process listing past the hook's time budget.
+
+### Changed
+
+- The last fixes of three 0.21 tasks had a second review. Two of those findings are fixed in this version. The other two were dismissed: they affect only the probe that runs on CI.
+
 ## 0.21.1 — 2026-11-01
 
 ### Fixed

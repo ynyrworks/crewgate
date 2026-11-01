@@ -8,6 +8,7 @@ the [CHANGELOG](../CHANGELOG.md).
 
 One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.md).
 
+- **0.21.2** — The description of session cleanup says only what was measured, and a test setting can no longer push a process listing past the hook budget.
 - **0.21.1** — `crew doctor` and `crew init` warn when a project has session cleanup on. 0.20.1 wrote `on` into each project it set up, so 0.21's new default of `off` did not reach them.
 - **0.21** — Machine safety on evidence: session cleanup only records by default, dispatch looks at real CPU load, a worker's leftovers are found by the system, test slots are shared across worktrees, briefs state machine impact, `gate answer` refuses outside a user turn, and `crew release check` reads CI. macOS and Linux were probed; nothing new is built for them.
 - **0.20.1** — Machines with few cores are no longer denied two background copies, and the session holder leaves a trace when it dies. 0.20.0 was tagged with failing CI and has no release.
