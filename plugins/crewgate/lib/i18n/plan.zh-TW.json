@@ -107,6 +107,8 @@
   "plan.driftNext": "他回覆之後執行：crew plan drift {slug} --gate {id} --answer add|goal|new|drop|defer --text \"...\"。他說不行就執行：crew gate answer {id} no，什麼都不要改。",
   "plan.driftNewStep": "計畫 {slug} 已定案：新增步驟會改變使用者核准的內容，所以什麼都沒有改。請先詢問他：執行 crew plan drift {slug} --kind new-step --detail \"...\"（說明是什麼步驟、為什麼），結束這一輪，他回覆後再執行 crew plan drift {slug} --gate <gate id> --answer add|goal|new|drop|defer --text \"...\"。然後再新增步驟。",
   "plan.driftUnasked": "警告：計畫 {slug} 已定案，而這個步驟沒有先問使用者就加入（plan.enforce=remind）。請詢問他：crew plan drift {slug} --kind new-step --detail \"...\"。",
+  "plan.driftUnlinkedTask": "沒有建立任務：此專案有已定案的計畫（{slugs}），而這個任務沒有掛在任何計畫上。請用 --plan <slug>:<node> 掛上去，或先問使用者：執行 crew plan drift {slug} --kind unlinked-task --detail \"...\"（說明任務是什麼、為什麼），結束你的回合，使用者回覆後執行 crew plan drift {slug} --gate <gate id> --answer add|goal|new|drop|defer --text \"...\"，再重新建立任務。若只是無關的小修正，不需使用者回覆：--outside-plan \"原因\"。",
+  "plan.driftUnlinkedWarn": "警告：此專案有已定案的計畫（{slugs}），而這個任務沒有掛在計畫上就建立了（plan.enforce=remind）。請詢問使用者：crew plan drift {slug} --kind unlinked-task --detail \"...\"，或使用 --plan <slug>:<node> 或 --outside-plan \"原因\"。",
   "plan.driftAnswered": "計畫 {slug} 的偏離（{kind}）已回答：{answer}。",
   "plan.driftStatsPlan": "計畫 {slug}：詢問 {asked} 次",
   "plan.driftStatsAnswers": "  答案：{list}",

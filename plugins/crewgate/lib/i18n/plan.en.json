@@ -107,6 +107,8 @@
   "plan.driftNext": "After they reply, run: crew plan drift {slug} --gate {id} --answer add|goal|new|drop|defer --text \"...\". If they say no, run: crew gate answer {id} no, and change nothing.",
   "plan.driftNewStep": "Plan {slug} is final: adding a step changes what the user approved, so nothing was changed. Ask them first: run crew plan drift {slug} --kind new-step --detail \"...\" (say what step and why), end your turn, and after they reply run crew plan drift {slug} --gate <gate id> --answer add|goal|new|drop|defer --text \"...\". Then add the step again.",
   "plan.driftUnasked": "Warning: plan {slug} is final and this step was added without asking the user (plan.enforce=remind). Ask them: crew plan drift {slug} --kind new-step --detail \"...\".",
+  "plan.driftUnlinkedTask": "No task was created: a plan is final in this project ({slugs}) and this task has no plan. Link it with --plan <slug>:<node>, or ask the user first: run crew plan drift {slug} --kind unlinked-task --detail \"...\" (say what the task is and why), end your turn, and after they reply run crew plan drift {slug} --gate <gate id> --answer add|goal|new|drop|defer --text \"...\", then create the task again. For an unrelated small fix that needs no reply: --outside-plan \"reason\".",
+  "plan.driftUnlinkedWarn": "Warning: a plan is final in this project ({slugs}) and this task was created without a plan (plan.enforce=remind). Ask the user: crew plan drift {slug} --kind unlinked-task --detail \"...\", or use --plan <slug>:<node> or --outside-plan \"reason\".",
   "plan.driftAnswered": "Drift of plan {slug} ({kind}) answered: {answer}.",
   "plan.driftStatsPlan": "Plan {slug}: asked {asked}",
   "plan.driftStatsAnswers": "  answers: {list}",

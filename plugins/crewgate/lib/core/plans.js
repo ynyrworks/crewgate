@@ -497,6 +497,20 @@ function stateOf(root, projectId, slug) {
   return i ? i.state : null;
 }
 
+// The slugs of the plans that are final (the open plans work is measured against), or [] when there are none.
+function finalSlugs(root, projectId) {
+  return slugs(root).filter((slug) => stateOf(root, projectId, slug) === 'final');
+}
+
+// The first final plan that links the task, or null.
+function finalPlanOfTask(root, projectId, taskId) {
+  for (const slug of slugs(root)) {
+    const doc = readCapped(root, slug);
+    if (doc && doc.nodes.some((n) => n.meta.task === taskId) && stateOf(root, projectId, slug) === 'final') return slug;
+  }
+  return null;
+}
+
 // Writes the state line into the file (replacing it, or adding it right under the title) and nothing else.
 function writeFileState(root, slug, state) {
   const file = planFile(root, checkSlug(slug));
@@ -751,7 +765,7 @@ function deepNodes(root) {
 
 module.exports = {
   SLUG_RE, ORIGINS, MAX_DEPTH, MAX_BYTES, MAX_NODES, planDir, planFile, checkSlug, parse, serialize, assignIds, find, addNode, removeNode,
-  STATES, PARTS, planOfTask, draftPlanOfTask, stateOf, stateInfo, contentHash, fileHash, approvedHash, fileApprovedHash, changedSinceApproved, approveNow, changedPlanOfTask, readRecord, setPart, readyProblems, finalizeAsk, finalizeAnswer, closeAsk, closeAnswer, reopen, adopt, takeReply, writeRecord,
+  STATES, PARTS, planOfTask, draftPlanOfTask, finalSlugs, finalPlanOfTask, stateOf, stateInfo, contentHash, fileHash, approvedHash, fileApprovedHash, changedSinceApproved, approveNow, changedPlanOfTask, readRecord, setPart, readyProblems, finalizeAsk, finalizeAnswer, closeAsk, closeAnswer, reopen, adopt, takeReply, writeRecord,
   KINDS, ACTIONS, encodeToken, decodeToken, proposalMeta, record, setBox, touch, BOX_STATE, cleanText, MAX_TEXT,
   derive, taskStates, slugs, readCapped, update, create, clarify, addTo, linkTo: linkTask, setState, removeFrom, deepNodes, duplicateNodes, duplicateIds, exists, today, refOf,
 };

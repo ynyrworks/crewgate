@@ -14,6 +14,9 @@ const review = require('../features/review');
 const lessons = require('../features/lessons');
 const codexrun = require('../features/codexrun');
 const plans = require('../core/plans');
+const drift = require('../core/drift');
+const gates = require('../core/gates');
+const sess = require('../hooks/session');
 const release = require('../features/release');
 
 const STATES = tasks.STATES;
@@ -25,7 +28,7 @@ const SPECS = {
       '--title': { dest: 'title' }, '--brief-file': { dest: 'briefFile' }, '--role': { dest: 'role' },
       '--branch': { dest: 'branch' }, '--worktree': { dest: 'worktree' },
       '--allow': { dest: 'allow', multi: true }, '--deny': { dest: 'deny', multi: true },
-      '--plan': { dest: 'plan' },
+      '--plan': { dest: 'plan' }, '--outside-plan': { dest: 'outsidePlan' },
     },
   },
   list: { positionals: [], options: { '--state': { dest: 'state', choices: STATES } } },
@@ -35,7 +38,7 @@ const SPECS = {
     options: { '--report-file': { dest: 'reportFile' }, '--packet-file': { dest: 'packetFile' } },
   },
   'send-back': { positionals: [{ name: 'id' }], options: NOTE },
-  accept: { positionals: [{ name: 'id' }], options: { ...NOTE, '--skip-refuter': { dest: 'skipRefuter' } } },
+  accept: { positionals: [{ name: 'id' }], options: { ...NOTE, '--skip-refuter': { dest: 'skipRefuter' }, '--widen': { dest: 'widen' }, '--gate': { dest: 'gate' } } },
   merge: { positionals: [{ name: 'id' }], options: NOTE },
   cancel: { positionals: [{ name: 'id' }], options: NOTE },
   run: {
@@ -131,6 +134,7 @@ function showData(ctx, proj, task) {
       id: task.id, title: task.title, state: task.state, returns: task.returns, role: task.role,
       branch: task.branch, worktree: task.worktree, updated: task.updated,
       last_note: (task.history[task.history.length - 1] || {}).note || '',
+      outside_plan: task.outside_plan || '',
     },
     brief_path: path.join(dir, 'brief.md'),
     report: tasks.readReport(proj.id, task.id),
@@ -147,6 +151,7 @@ function showLines(ctx, d, max) {
     `${t.id}  ${t.state}  ${ctx.t('wf.task.returnsOf', { n: t.returns, max })}  ${t.title}`,
   ];
   if (t.branch) L.push(ctx.t('wf.task.branch', { branch: t.branch, worktree: t.worktree || '-' }));
+  if (t.outside_plan) L.push(ctx.t('wf.task.outsidePlan', { reason: t.outside_plan }));
   if (t.last_note) L.push(ctx.t('wf.task.lastNote', { note: t.last_note }));
   if (d.leftovers && d.leftovers.skipped) L.push(ctx.t('wf.task.leftoversSkipped', { why: d.leftovers.skipped }));
   if (d.leftovers && d.leftovers.count > 0) {
@@ -215,6 +220,73 @@ function planChangedOnAccept(ctx, proj, cfg, id) {
   return ctx.t('wf.task.acceptPlanChangedWarn', { id, slug });
 }
 
+// The files changed on a task's branch against its base, as `crew task show` finds them. Both paths of a rename are listed (the old
+// one was touched too). -> { files } or { failed: reason } when git cannot say.
+function changedFiles(root, branch) {
+  const r = common.branchRange(root, branch);
+  if (!r) return { failed: 'no branch range' };
+  const out = common.git(['diff', '--name-only', '--no-renames', '-z', r.base, r.branch], root);
+  if (out === null) return { failed: 'git diff failed' };
+  return { files: out.split('\0').filter(Boolean) };
+}
+
+const evAppend = (proj, type, id, data, session) => {
+  try { events.append(proj.id, { type, src: 'cli', task: id, session, data: { task: id, ...data }, key: `${id}:${type}:${Date.now()}` }); } catch { /* ignore */ }
+};
+const listFiles = (files) => files.slice(0, 20).join(', ') + (files.length > 20 ? ` (+${files.length - 20} more)` : '');
+
+// Takes the user's reply to a task_scope gate asked for this task, once. A gate already answered is judged by what is stored.
+function takeWiden(proj, id, gateId) {
+  const asked = events.read(proj.id, { types: ['gate.asked'] }).find((e) => e.data && e.data.id === gateId);
+  if (!asked || asked.data.gate !== 'task_scope' || asked.task !== id) throw new CrewError('wf.task.widenBadGate', { id, gate: gateId });
+  if (events.read(proj.id, { types: ['task.scope_widened'] }).some((e) => e.data && e.data.gate === gateId)) throw new CrewError('wf.task.widenUsed', { gate: gateId });
+  const session = gates.currentSession();
+  const promptsOf = (sid) => { const x = sess.read(sid); return x && Array.isArray(x.prompt_ts) ? x.prompt_ts : []; };
+  const prior = events.read(proj.id, { types: ['gate.answered'] }).find((e) => e.data && e.data.id === gateId);
+  const ans = prior ? prior.data : gates.answer(proj.id, gateId, 'yes', '', {
+    src: 'cli', session, prompts: session ? promptsOf(session) : [], promptsOf, projectPrompts: () => sess.promptsOfProject(proj.id), requireUserTurn: true,
+  });
+  if (ans.answer !== 'yes') throw new CrewError('wf.task.widenNo', { id });
+  if (ans.user_turn !== true && ans.user_turn !== 'project') throw new CrewError('gate.needUserReply', { id: gateId });
+}
+
+// `crew task accept`: the files really changed against the task's --allow and --deny (plan.enforce). -> { lines, after, asked } where
+// `after` runs once the task is accepted and `asked` is a task_scope gate that was just asked (nothing is accepted then).
+// A task with no scope, and plan.enforce off, read no diff. A git failure never blocks: it is printed and recorded.
+function scopeOnAccept(ctx, proj, cfg, id, a) {
+  const none = { lines: [], after: null, asked: null };
+  const mode = cfg.plan.enforce;
+  if (mode === 'off') return none;
+  const task = tasks.load(proj.id, id);
+  if (!task.scope.allow.length && !task.scope.deny.length) return none;
+  const session = gates.currentSession();
+  const got = changedFiles(proj.path, task.branch);
+  if (got.failed) {
+    evAppend(proj, 'task.scope_check_failed', id, { reason: got.failed }, session);
+    return { ...none, lines: [ctx.t('wf.task.scopeCheckFailed', { id, reason: got.failed })] };
+  }
+  const files = drift.outsideFiles(task.scope, got.files, process.platform === 'win32' || process.platform === 'darwin');
+  if (!files.length) return none;
+  const list = listFiles(files);
+  if (mode === 'remind') {
+    return { ...none, lines: [ctx.t('wf.task.scopeWarn', { id, files: list })], after: () => evAppend(proj, 'task.scope_warned', id, { files: files.slice(0, 50), count: files.length }, session) };
+  }
+  const root = ctx.workTree() || proj.path;
+  const slug = plans.finalPlanOfTask(root, proj.id, id);
+  if (slug) {
+    if (drift.covered(root, proj.id, slug, 'out-of-scope', session)) return none;
+    evAppend(proj, 'plan.drift_denied', id, { slug, kind: 'out-of-scope' }, session);
+    throw new CrewError('wf.task.acceptOutOfScopePlan', { id, slug, files: list });
+  }
+  if (a.widen === undefined) throw new CrewError('wf.task.acceptOutOfScope', { id, files: list });
+  if (!a.gate) {
+    const g = gates.ask(proj.id, { ...cfg, gates: { ...cfg.gates, task_scope: 'ask' } }, { gate: 'task_scope', task: id, detail: `widen the scope of task ${id}: ${clean(a.widen, 200)}; files ${clean(list, 200)}` }, { src: 'cli', session });
+    return { ...none, asked: { gate_id: g.id, files } };
+  }
+  takeWiden(proj, id, a.gate);
+  return { ...none, after: () => evAppend(proj, 'task.scope_widened', id, { reason: clean(a.widen, 500), files: files.slice(0, 50), gate: a.gate }, session) };
+}
+
 function run(argv, ctx) {
   const sub = argv[0];
   if (!Object.prototype.hasOwnProperty.call(SPECS, sub)) throw new UsageError('wf.task.usage');
@@ -229,6 +301,10 @@ function run(argv, ctx) {
     need(a.briefFile, '--brief-file');
     const brief = common.readText(a.briefFile, 'brief');
     const role = a.role || 'worker';
+    if (a.outsidePlan !== undefined) {
+      if (a.plan) throw new UsageError('wf.task.outsideWithPlan');
+      if (!a.outsidePlan.trim()) throw new UsageError('wf.task.outsideEmpty');
+    }
     // check the plan target before the task exists, so a typo leaves no orphan task
     let planRef = null;
     if (a.plan) {
@@ -239,10 +315,16 @@ function run(argv, ctx) {
       plans.find(doc, m[2]);
       planRef = { slug: m[1], node: m[2] };
     }
+    // a task with no plan while a plan is final raises the drift question; --outside-plan is the way out for an unrelated small fix
+    const root = ctx.workTree() || proj.path;
+    const unlinked = !planRef && a.outsidePlan === undefined ? drift.unlinkedCheck(root, proj.id, cfg, { session: gates.currentSession() }) : null;
     const task = tasks.createTask(proj.id, {
       title: a.title, brief, role, branch: common.checkBranch(a.branch || ''), worktree: a.worktree || '',
       scope: { allow: common.splitList(a.allow), deny: common.splitList(a.deny) },
+      outsidePlan: a.outsidePlan === undefined ? '' : a.outsidePlan.trim(),
     }, { src: 'cli' });
+    if (a.outsidePlan !== undefined) evAppend(proj, 'task.outside_plan', task.id, { reason: task.outside_plan, plans: plans.finalSlugs(root, proj.id) }, gates.currentSession());
+    drift.noteUnlinked(proj.id, unlinked, task.id);
     if (planRef) planRef.node = plans.linkTo(ctx.workTree(), proj.id, planRef.slug, planRef.node, task.id).id;
     const briefPath = path.join(paths.taskDir(proj.id, task.id), 'brief.md');
     const prompt = dispatchPrompt(task, cfg, briefPath);
@@ -261,6 +343,7 @@ function run(argv, ctx) {
       '--- prompt ---', prompt, '--- end ---',
     ];
     if (planRef) L.splice(1, 0, ctx.t('plan.taskLinked', planRef));
+    if (unlinked && unlinked.warn) L.splice(1, 0, ctx.t('plan.driftUnlinkedWarn', { slugs: unlinked.slugs.join(', '), slug: unlinked.slugs[0] }));
     if (busy >= cfg.limits.max_parallel_workers) L.push(ctx.t('wf.task.parallelWarn', { n: busy, max: cfg.limits.max_parallel_workers }));
     ctx.emit(data, L);
   } else if (sub === 'run') {
@@ -320,9 +403,19 @@ function run(argv, ctx) {
     // Findings nobody tried to refute are what the review exists to catch: going past them takes a stated reason.
     if (gap && gap.kind === 'unfinalized' && !a.skipRefuter) throw new CrewError('wf.task.acceptUnfinalized', { id: a.id, round: gap.round, n: gap.n });
     const skipped = gap && gap.kind === 'unfinalized' ? { review_gap: gap, skip_refuter: a.skipRefuter } : null;
+    if (a.gate !== undefined && a.widen === undefined) throw new UsageError('args.missing', { name: '--widen' });
+    if (a.widen !== undefined && !a.widen.trim()) throw new UsageError('args.missing', { name: '--widen' });
+    const scope = scopeOnAccept(ctx, proj, cfg, a.id, a);
+    if (scope.asked) {
+      return ctx.emit({ gate_id: scope.asked.gate_id, files: scope.asked.files }, [
+        ctx.t('wf.task.widenAsked', { id: a.id, gate: scope.asked.gate_id, files: listFiles(scope.asked.files) }),
+        ctx.t('wf.task.widenNext', { id: a.id, gate: scope.asked.gate_id, reason: clean(a.widen, 200) }),
+      ]);
+    }
     const task = tasks.transition(proj.id, a.id, 'accepted', { ...opts, note: a.note || '', data: skipped || undefined });
+    if (scope.after) scope.after();
     const open = (findingsSummary(taskDir) || { items: [] }).items.filter((f) => f.severity === 'blocker' || f.severity === 'major');
-    const L = [ctx.t('wf.task.accepted', { id: task.id }), ...(changedWarn ? [changedWarn] : [])];
+    const L = [ctx.t('wf.task.accepted', { id: task.id }), ...(changedWarn ? [changedWarn] : []), ...scope.lines];
     if (open.length) L.push(ctx.t('wf.task.acceptedWithFindings', { n: open.length, ids: open.map((f) => f.id).join(', ') }));
     if (gap) {
       if (gap.kind === 'none') L.push(ctx.t('wf.task.acceptedNoReview'));
@@ -350,23 +443,23 @@ module.exports = {
   summary: { en: 'Create, track, review-gate and merge delegated tasks', 'zh-TW': '建立、追蹤、驗收與合併分派出去的任務' },
   usage: {
     en: [
-      '  crew task create --title T --brief-file F [--role worker] [--branch B] [--worktree W] [--allow G] [--deny G] [--plan SLUG:NODE]',
+      '  crew task create --title T --brief-file F [--role worker] [--branch B] [--worktree W] [--allow G] [--deny G] [--plan SLUG:NODE | --outside-plan "reason"]',
       '  crew task list [--state S]',
       '  crew task show <id>',
       '  crew task report <id> --report-file F [--packet-file F]   (used by the worker)',
       '  crew task send-back <id> --note "..."',
-      '  crew task accept <id> [--note "..."] [--skip-refuter "reason"]   (the reason is needed when a review round was not finalized)',
+      '  crew task accept <id> [--note "..."] [--skip-refuter "reason"] [--widen "reason" [--gate ID]]   (the reason is needed when a review round was not finalized; --widen takes files outside the scope after the user agrees)',
       '  crew task merge <id> [--note "..."]    (records the merge; it does not run git)',
       '  crew task cancel <id> [--note "..."]',
       '  crew task run <id> [--engine codex] [--timeout 1800] [--model M]   (run a Codex CLI worker in the task worktree)',
     ].join('\n'),
     'zh-TW': [
-      '  crew task create --title T --brief-file F [--role worker] [--branch B] [--worktree W] [--allow G] [--deny G] [--plan SLUG:NODE]',
+      '  crew task create --title T --brief-file F [--role worker] [--branch B] [--worktree W] [--allow G] [--deny G] [--plan SLUG:NODE | --outside-plan "reason"]',
       '  crew task list [--state S]',
       '  crew task show <id>',
       '  crew task report <id> --report-file F [--packet-file F]   （worker 使用）',
       '  crew task send-back <id> --note "..."',
-      '  crew task accept <id> [--note "..."] [--skip-refuter "原因"]   （審查輪次沒有定案時必須說明原因）',
+      '  crew task accept <id> [--note "..."] [--skip-refuter "原因"] [--widen "原因" [--gate ID]]   （審查輪次沒有定案時必須說明原因；--widen 在使用者同意後接受範圍外的檔案）',
       '  crew task merge <id> [--note "..."]    （只記錄合併，不執行 git）',
       '  crew task cancel <id> [--note "..."]',
       '  crew task run <id> [--engine codex] [--timeout 1800] [--model M]   (run a Codex CLI worker in the task worktree)',

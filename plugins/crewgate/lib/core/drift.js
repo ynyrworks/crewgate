@@ -182,6 +182,34 @@ function approveStep(root, projectId, slug, chk) {
   if (chk && chk.covered && chk.clean) plans.approveNow(root, projectId, slug);
 }
 
+// A task created with no plan while a plan is final. -> null when nothing applies (plan.enforce off, or no final plan), else
+// { mode, slugs, covered, warn? }. block with unlinked-task not answered on any final plan throws plan.driftUnlinkedTask (no task is
+// made yet); remind returns warn (the caller records plan.drift_unasked once the task exists, see noteUnlinked).
+function unlinkedCheck(root, projectId, cfg, opts = {}) {
+  const mode = cfg && cfg.plan && cfg.plan.enforce;
+  if (mode === 'off') return null;
+  const open = plans.finalSlugs(root, projectId);
+  if (!open.length) return null;
+  if (open.some((slug) => covered(root, projectId, slug, 'unlinked-task', opts.session))) return { mode, slugs: open, covered: true };
+  if (mode === 'remind') return { mode, slugs: open, covered: false, warn: true, session: opts.session };
+  try { events.append(projectId, { type: 'plan.drift_denied', src: 'cli', session: opts.session, data: { slug: open[0], slugs: open, kind: 'unlinked-task' }, key: `unlinked:drift_denied:${Date.now()}` }); } catch { /* ignore */ }
+  throw new CrewError('plan.driftUnlinkedTask', { slugs: open.join(', '), slug: open[0] });
+}
+function noteUnlinked(projectId, chk, taskId) {
+  if (!chk || !chk.warn) return;
+  try { events.append(projectId, { type: 'plan.drift_unasked', src: 'cli', session: chk.session, task: taskId, data: { slug: chk.slugs[0], slugs: chk.slugs, task: taskId, kind: 'unlinked-task' }, key: `${taskId}:drift_unasked:unlinked` }); } catch { /* ignore */ }
+}
+
+// The files of `files` that lie outside a task's scope: a file matching --deny, or any file matching no --allow when --allow is set.
+// Paths follow hooks/glob.js (forward slashes; `ci` for a case-insensitive file system, as the edit guard does).
+function outsideFiles(scope, files, ci) {
+  const glob = require('../hooks/glob');
+  const allow = (scope && scope.allow) || [];
+  const deny = (scope && scope.deny) || [];
+  if (!allow.length && !deny.length) return [];
+  return files.filter((f) => glob.matchAny(deny, f, ci) || (allow.length > 0 && !glob.matchAny(allow, f, ci)));
+}
+
 // ---------------------------------------------------------------- statistics
 // stats(projectId, slug?) -> { plans: [{ slug, asked, answers, by_kind }], outside_plan }
 function stats(projectId, slug) {
@@ -203,4 +231,4 @@ function stats(projectId, slug) {
   return { plans: [...by.values()].sort((a, b) => (a.slug < b.slug ? -1 : 1)), outside_plan: outside };
 }
 
-module.exports = { KINDS, ANSWERS, GATE, ask, answer, covered, stepCheck, approveStep, stats };
+module.exports = { KINDS, ANSWERS, GATE, ask, answer, covered, stepCheck, approveStep, unlinkedCheck, noteUnlinked, outsideFiles, stats };
