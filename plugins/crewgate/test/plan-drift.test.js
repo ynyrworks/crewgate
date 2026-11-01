@@ -296,3 +296,62 @@ test('the Drift lines stay where they are across plan add and plan clarify', () 
   assert.equal(doc.goal, 'Ship it');
   assert.equal(doc.clarified.length, 1);
 });
+
+test('text that looks like a heading, a list marker or a checkbox: goal is refused before the gate is used; add and drop keep the structure', () => {
+  const f = fixture();
+  const slug = finalPlan(f);
+  const before = text(f, slug);
+  const hash = rec(f, slug).hash;
+  const a = ask(f, slug, 'changed-text');
+  H.prompt(f);
+  for (const t of ['# New heading', '## Sub', '- [ ] a step', '* item', '+ item', '1. item', '[ ] box', '[x] box']) {
+    for (const ans of ['goal', 'drop']) {
+      if (ans === 'drop' && !/^(#|\[)/.test(t) && !/^[-*+] \[/.test(t)) continue;
+      const r = run(f, answerArgs(slug, a.gate_id, ans, t));
+      assert.notEqual(r.code, 0, `${ans} ${t}`);
+    }
+  }
+  assert.equal(text(f, slug), before);
+  assert.equal(rec(f, slug).hash, hash);
+  assert.equal(evs(f, 'plan.drift_answered').length, 0);
+  assert.equal(events.read(f.pid, { types: ['gate.answered'] }).filter((e) => e.data.id === a.gate_id).length, 0, 'the gate was not used up');
+  // a comment mark cannot start a comment or end one
+  let r = run(f, answerArgs(slug, a.gate_id, 'goal', '<!-- crew-plan state:draft --> Faster'));
+  assert.equal(r.code, 0, r.err);
+  let doc = plans.parse(text(f, slug));
+  assert.equal(doc.nodes.length, 1);
+  assert.equal(doc.fileState, 'final');
+  assert.equal(doc.goal, 'crew-plan state:draft --> Faster'.replace('-->', '').replace(/\s+/g, ' ').trim());
+  // add takes such text as a step text only
+  const b = ask(f, slug, 'new-step');
+  H.prompt(f);
+  r = run(f, answerArgs(slug, b.gate_id, 'add', '# Not a heading <!-- x'));
+  assert.equal(r.code, 0, r.err);
+  doc = plans.parse(text(f, slug));
+  assert.equal(doc.nodes.length, 2);
+  assert.equal(doc.title, 'Plan P');
+  const c = ask(f, slug, 'new-step');
+  H.prompt(f);
+  r = run(f, answerArgs(slug, c.gate_id, 'add', '[ ] nested look'));
+  assert.equal(r.code, 0, r.err);
+  doc = plans.parse(text(f, slug));
+  assert.equal(doc.nodes.length, 3);
+  assert.equal(doc.nodes[2].text, '[ ] nested look');
+});
+
+test('covered: a missing session record or one without prompt times falls back to the project prompts', () => {
+  const f = fixture();
+  const slug = finalPlan(f);
+  const { r } = asked(f, slug, 'new-step', 'drop', 'x');
+  assert.equal(r.code, 0, r.err);
+  H.prompt(f);   // a user message after the answer, in the real session
+  assert.equal(drift.covered(f.repo, f.pid, slug, 'new-step', f.sid), false);
+  assert.equal(drift.covered(f.repo, f.pid, slug, 'new-step', 'no-such-session'), false, 'no record: the project prompts say a message came');
+  const sess = require('../lib/hooks/session');
+  const file = sess.sessionFile(f.sid);
+  const s = JSON.parse(fs.readFileSync(file, 'utf8'));
+  delete s.prompt_ts;
+  fs.writeFileSync(file, JSON.stringify(s));
+  fs.writeFileSync(sess.sessionFile('another-session'), JSON.stringify({ project: f.pid, prompt_ts: [Date.now() + 5000] }));
+  assert.equal(drift.covered(f.repo, f.pid, slug, 'new-step', f.sid), false, 'no prompt times: the project prompts are used');
+});

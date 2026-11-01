@@ -28,6 +28,17 @@ function one(text) {
   return s;
 }
 
+// Text that would become a heading or a step when written as a line of the plan file. A goal is a bare line, so a heading, a list
+// marker or a checkbox breaks it; a line under ## Not doing is written as "- text", so only a heading (when the section is made) or
+// a checkbox breaks it. A step's text is kept inside its own "- [ ] text" line and cannot break anything.
+const LOOKS_LIKE = {
+  goal: /^(?:#|[-*+](?:\s|$)|\d+[.)](?:\s|$)|\[[ xX~?]\])/,
+  drop: /^(?:#|\[[ xX~?]\])/,
+};
+function checkLooks(reply, body) {
+  if (LOOKS_LIKE[reply] && LOOKS_LIKE[reply].test(body)) throw new CrewError('plan.driftTextShape', { answer: reply, text: body });
+}
+
 function mustBeFinal(root, projectId, slug) {
   const info = plans.stateInfo(root, projectId, slug);
   if (!info) throw new CrewError('plan.notFound', { slug });
@@ -113,6 +124,7 @@ function answer(root, projectId, slug, gateId, reply, text, answerOpts) {
   }
   mustBeFinal(root, projectId, slug);
   const body = one(text);
+  checkLooks(reply, body);
   if (reply === 'new') {
     plans.checkSlug(body);
     if (plans.exists(root, body)) throw new CrewError('plan.exists', { slug: body });
@@ -139,7 +151,8 @@ function covered(root, projectId, slug, kind, session) {
   if (!last) return false;
   const sess = require('../hooks/session');
   let prompts;
-  if (session) { const s = sess.read(session); prompts = s && Array.isArray(s.prompt_ts) ? s.prompt_ts : []; } else prompts = sess.promptsOfProject(projectId);
+  const s = session ? sess.read(session) : null;
+  if (s && Array.isArray(s.prompt_ts)) prompts = s.prompt_ts; else prompts = sess.promptsOfProject(projectId);
   const from = Date.parse(last.ts);
   return !prompts.some((t) => t > from);
 }

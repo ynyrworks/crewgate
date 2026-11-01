@@ -96,6 +96,7 @@
   "plan.driftBadKind": "Unknown drift kind \"{kind}\": use {kinds}",
   "plan.driftBadAnswer": "Unknown drift answer \"{answer}\": use {answers}",
   "plan.driftBadGate": "Gate {id} is not a drift ask of plan {slug}. Ask again: crew plan drift {slug} --kind ...",
+  "plan.driftTextShape": "The text for \"{answer}\" would become a heading, a list item or a step in the plan file: \"{text}\". Give it as plain words. Nothing was changed and the gate is not used up.",
   "plan.driftAlreadyAnswered": "Gate {id} was already used for a drift answer. Ask again if the plan drifted again.",
   "plan.driftAsked": "Gate {id} asked about drift (kind {kind}) from plan {slug}. Tell the user in chat what happened, offer these answers, and end your turn:",
   "plan.driftAnswer.add": "  add    - add it to the plan as a step the user asked for (the answer is the approval; no new finalize)",

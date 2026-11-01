@@ -96,6 +96,7 @@
   "plan.driftBadKind": "未知的偏離種類「{kind}」：請用 {kinds}",
   "plan.driftBadAnswer": "未知的偏離答案「{answer}」：請用 {answers}",
   "plan.driftBadGate": "關卡 {id} 不是計畫 {slug} 的偏離詢問。請重新詢問：crew plan drift {slug} --kind ...",
+  "plan.driftTextShape": "「{answer}」的文字「{text}」寫進計畫檔會變成標題、清單項或步驟。請改用一般文字。沒有任何改動，gate 也沒有用掉。",
   "plan.driftAlreadyAnswered": "關卡 {id} 已用來回答過偏離。計畫又偏離時請重新詢問。",
   "plan.driftAsked": "已就計畫 {slug} 的偏離（種類 {kind}）開了關卡 {id}。請在聊天裡告訴使用者發生什麼事，列出這些答案，然後結束這一輪：",
   "plan.driftAnswer.add": "  add    - 加進計畫，成為使用者要求的步驟（回答就算核准，不必重新定案）",
