@@ -128,6 +128,7 @@ function run(payload) {
   try { require('./priority').lower(h.cfg().limits && h.cfg().limits.process_priority, ppid, { describe }); } catch { /* the session goes on */ }
   // Windows: one Job Object for the session (CPU cap, cleanup at exit), made by a detached holder. Never waits.
   try { require('./sessionjob').start(h.pid, h.cfg().limits || {}, ppid, { describe }); } catch { /* the session goes on */ }
+  try { require('./plan-settings').sync(h.pid, h.cfg(), 'session-start'); } catch { /* a missed comparison is made next time */ }
   try { require('../core/clishim').write(); } catch { /* scripts lose a convenience; the session goes on */ }
   // Optional (global board.autostart): start the board if it is down. Spawns detached, never waits, never throws.
   try {

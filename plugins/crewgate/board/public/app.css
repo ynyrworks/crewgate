@@ -254,6 +254,10 @@ button.older { margin: 0 0 10px; min-height: 36px; }
 .ps-todo, .ps-dropped { color: var(--muted); }
 .ps-dropped { border-style: dotted; }
 .ps-proposed { color: var(--text-2); border-style: dashed; }
+.pst-draft { color: var(--warn); border-color: var(--warn); border-style: dashed; }
+.pst-final { color: var(--accent); border-color: var(--accent); }
+.pst-done { color: var(--good); border-color: var(--good); }
+.pst-parked { color: var(--muted); border-style: dotted; }
 .ps-new { color: var(--accent); border-color: var(--accent); }
 .po { color: var(--text-2); border-style: dashed; }
 .list.nested { margin: 2px 0 0 14px; }
