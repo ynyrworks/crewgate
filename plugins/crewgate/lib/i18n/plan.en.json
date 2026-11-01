@@ -105,6 +105,8 @@
   "plan.driftAnswer.drop": "  drop   - do not do it: the text goes under ## Not doing",
   "plan.driftAnswer.defer": "  defer  - later: the text becomes a to-do item in stream drift",
   "plan.driftNext": "After they reply, run: crew plan drift {slug} --gate {id} --answer add|goal|new|drop|defer --text \"...\". If they say no, run: crew gate answer {id} no, and change nothing.",
+  "plan.driftNewStep": "Plan {slug} is final: adding a step changes what the user approved, so nothing was changed. Ask them first: run crew plan drift {slug} --kind new-step --detail \"...\" (say what step and why), end your turn, and after they reply run crew plan drift {slug} --gate <gate id> --answer add|goal|new|drop|defer --text \"...\". Then add the step again.",
+  "plan.driftUnasked": "Warning: plan {slug} is final and this step was added without asking the user (plan.enforce=remind). Ask them: crew plan drift {slug} --kind new-step --detail \"...\".",
   "plan.driftAnswered": "Drift of plan {slug} ({kind}) answered: {answer}.",
   "plan.driftStatsPlan": "Plan {slug}: asked {asked}",
   "plan.driftStatsAnswers": "  answers: {list}",

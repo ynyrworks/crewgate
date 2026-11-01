@@ -446,6 +446,38 @@ function contentHash(text) {
   if (doc.stateLine >= 0) doc.lines.splice(doc.stateLine, 1);
   return crypto.createHash('sha256').update(serialize(doc)).digest('hex');
 }
+// What the user approved: the title, goal, ## Not doing, ## Done when, and each step's text and nesting. Not the box, the comment,
+// the state line, ## Drift or ## Clarified, and not a proposed [?] step (a plan review's proposal is not part of the plan until accepted).
+function approvedHash(text) {
+  const doc = parse(text);
+  const steps = doc.nodes.filter((n) => n.box !== '?').map((n) => [n.depth, n.text]);
+  return crypto.createHash('sha256').update(JSON.stringify([doc.title, doc.goal, doc.notDoing, doc.doneWhen, steps])).digest('hex');
+}
+function fileApprovedHash(root, slug) {
+  try { return approvedHash(fs.readFileSync(planFile(root, checkSlug(slug)), 'utf8')); } catch { return null; }
+}
+// True when a final plan's file no longer matches what was approved. A record without `approved` (finalized before it was kept) stores the
+// current hash and says false. A plan that is not final, or has no record, is never changed.
+function changedSinceApproved(root, projectId, slug) {
+  const rec = readRecord(projectId, slug);
+  if (!rec || rec.state !== 'final') return false;
+  const cur = fileApprovedHash(root, slug);
+  if (!cur) return false;
+  if (!rec.approved) { writeRecord(projectId, slug, { approved: cur }); return false; }
+  return cur !== rec.approved;
+}
+function approveNow(root, projectId, slug) {
+  const cur = fileApprovedHash(root, slug);
+  if (cur) writeRecord(projectId, slug, { approved: cur });
+}
+// The first final plan linked to the task whose file differs from what was approved, or null.
+function changedPlanOfTask(root, projectId, taskId) {
+  for (const slug of slugs(root)) {
+    const doc = readCapped(root, slug);
+    if (doc && doc.nodes.some((n) => n.meta.task === taskId) && changedSinceApproved(root, projectId, slug)) return slug;
+  }
+  return null;
+}
 function fileHash(root, slug) {
   try { return contentHash(fs.readFileSync(planFile(root, checkSlug(slug)), 'utf8')); } catch { return null; }
 }
@@ -590,7 +622,7 @@ function finalizeAnswer(root, projectId, slug, gateId, answerOpts) {
   const pend = pendingOf(projectId, slug, gateId, 'finalize');
   if (fileHash(root, slug) !== pend.hash) throw new CrewError('plan.changedSinceAsk', { slug });
   takeReply(projectId, slug, gateId, answerOpts);
-  transition(root, projectId, slug, 'final', { hash: pend.hash, gate_id: gateId, finalized: new Date().toISOString() });
+  transition(root, projectId, slug, 'final', { hash: pend.hash, approved: fileApprovedHash(root, slug), gate_id: gateId, finalized: new Date().toISOString() });
   record(projectId, 'plan.finalized', { slug, hash: pend.hash, gate: gateId });
   return { slug, hash: pend.hash, gate_id: gateId };
 }
@@ -719,7 +751,7 @@ function deepNodes(root) {
 
 module.exports = {
   SLUG_RE, ORIGINS, MAX_DEPTH, MAX_BYTES, MAX_NODES, planDir, planFile, checkSlug, parse, serialize, assignIds, find, addNode, removeNode,
-  STATES, PARTS, planOfTask, draftPlanOfTask, stateOf, stateInfo, contentHash, fileHash, readRecord, setPart, readyProblems, finalizeAsk, finalizeAnswer, closeAsk, closeAnswer, reopen, adopt, takeReply, writeRecord,
+  STATES, PARTS, planOfTask, draftPlanOfTask, stateOf, stateInfo, contentHash, fileHash, approvedHash, fileApprovedHash, changedSinceApproved, approveNow, changedPlanOfTask, readRecord, setPart, readyProblems, finalizeAsk, finalizeAnswer, closeAsk, closeAnswer, reopen, adopt, takeReply, writeRecord,
   KINDS, ACTIONS, encodeToken, decodeToken, proposalMeta, record, setBox, touch, BOX_STATE, cleanText, MAX_TEXT,
   derive, taskStates, slugs, readCapped, update, create, clarify, addTo, linkTo: linkTask, setState, removeFrom, deepNodes, duplicateNodes, duplicateIds, exists, today, refOf,
 };

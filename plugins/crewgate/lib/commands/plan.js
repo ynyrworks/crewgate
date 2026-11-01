@@ -196,6 +196,11 @@ function driftRun(a, proj, root, ctx) {
   return ctx.emit({ ...r, answers: drift.ANSWERS }, L);
 }
 
+// A step added to a final plan raises the drift question first (plan.enforce); see drift.stepCheck.
+function stepCheck(a, proj, root, ctx) {
+  return drift.stepCheck(root, proj.id, ctx.config().config, a.slug, { session: gates.currentSession() });
+}
+
 function driftStats(a, proj, ctx) {
   const r = drift.stats(proj.id, a.slug);
   const L = [];
@@ -257,8 +262,10 @@ function run(argv, ctx) {
     ]);
   } else if (sub === 'add') {
     if (a.task) checkTask(proj.id, a.task);
+    const chk = a.proposed ? null : stepCheck(a, proj, root, ctx);
     const r = plans.addTo(root, proj.id, a.slug, { text: a.text, under: a.under, task: a.task, origin: a.origin, proposed: !!a.proposed });
-    ctx.emit({ slug: a.slug, ...r }, ctx.t('plan.added', { id: r.id, slug: a.slug }));
+    drift.approveStep(root, proj.id, a.slug, chk);
+    ctx.emit({ slug: a.slug, ...r }, [ctx.t('plan.added', { id: r.id, slug: a.slug }), ...(chk && chk.warn ? [ctx.t('plan.driftUnasked', { slug: a.slug })] : [])]);
   } else if (sub === 'clarify') {
     const r = plans.clarify(root, proj.id, a.slug, { question: a.question, answer: a.answer, by: a.by });
     ctx.emit(r, ctx.t('plan.clarified', { slug: a.slug }));
@@ -277,12 +284,15 @@ function run(argv, ctx) {
     const r = plans.linkTo(root, proj.id, a.slug, a.node, checkTask(proj.id, a.task));
     ctx.emit({ slug: a.slug, ...r }, ctx.t('plan.linked', { id: r.id, task: r.task }));
   } else if (sub === 'accept' || (sub === 'set' && a.action === 'accept' && isReviewProposal(root, a.slug, a.node))) {
+    const chk = stepCheck(a, proj, root, ctx);
     const r = pr.accept(root, proj.id, ctx.config().config, a.slug, a.node);
+    drift.approveStep(root, proj.id, a.slug, chk);
     const L = [ctx.t(r.removed ? `plan.review.accepted.${r.action}` : 'plan.review.accepted.add', { id: r.id, target: r.target })];
     if (r.growth) {
       L.push(ctx.t('plan.review.growth', { slug: a.slug, count: r.growth.count, limit: r.growth.limit }));
       if (r.growth.need) L.push(ctx.t('plan.review.growthNeed', { need: r.growth.need }));
     }
+    if (chk && chk.warn) L.push(ctx.t('plan.driftUnasked', { slug: a.slug }));
     ctx.emit({ slug: a.slug, ...r }, L);
   } else if (sub === 'reject') {
     const r = pr.reject(root, proj.id, a.slug, a.node, a.note);

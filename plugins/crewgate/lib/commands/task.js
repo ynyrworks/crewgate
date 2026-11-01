@@ -198,6 +198,23 @@ function recordGitMerge(proj, task, cwd) {
   return { status: 'recorded', commit };
 }
 
+// `crew task accept` on a task of a final plan whose text no longer matches what the user approved (plan.enforce): block refuses, remind
+// returns a warning line, off does nothing. A failure to read the plan lets the accept through and is recorded.
+function planChangedOnAccept(ctx, proj, cfg, id) {
+  const mode = cfg.plan.enforce;
+  if (mode === 'off') return null;
+  let slug;
+  try { slug = plans.changedPlanOfTask(ctx.workTree() || proj.path, proj.id, id); } catch (e) {
+    try { events.append(proj.id, { type: 'plan.check_failed', src: 'cli', task: id, data: { task: id, reason: clean(e && e.message, 120) }, key: `${id}:plan.check_failed:${Date.now()}` }); } catch { /* ignore */ }
+    return null;
+  }
+  if (!slug) return null;
+  const type = mode === 'remind' ? 'plan.drift_unasked' : 'plan.drift_denied';
+  events.append(proj.id, { type, src: 'cli', task: id, data: { slug, task: id, kind: 'changed-text' }, key: `${id}:${type}:${Date.now()}` });
+  if (mode !== 'remind') throw new CrewError('wf.task.acceptPlanChanged', { id, slug });
+  return ctx.t('wf.task.acceptPlanChangedWarn', { id, slug });
+}
+
 function run(argv, ctx) {
   const sub = argv[0];
   if (!Object.prototype.hasOwnProperty.call(SPECS, sub)) throw new UsageError('wf.task.usage');
@@ -297,6 +314,7 @@ function run(argv, ctx) {
     }
     ctx.emit({ task, returns: task.returns, max }, ctx.t('wf.task.sentBack', { id: task.id, n: task.returns, max }));
   } else if (sub === 'accept') {
+    const changedWarn = planChangedOnAccept(ctx, proj, cfg, a.id);
     const taskDir = paths.taskDir(proj.id, a.id);
     const gap = reviewGap(taskDir, proj.id, a.id);
     // Findings nobody tried to refute are what the review exists to catch: going past them takes a stated reason.
@@ -304,7 +322,7 @@ function run(argv, ctx) {
     const skipped = gap && gap.kind === 'unfinalized' ? { review_gap: gap, skip_refuter: a.skipRefuter } : null;
     const task = tasks.transition(proj.id, a.id, 'accepted', { ...opts, note: a.note || '', data: skipped || undefined });
     const open = (findingsSummary(taskDir) || { items: [] }).items.filter((f) => f.severity === 'blocker' || f.severity === 'major');
-    const L = [ctx.t('wf.task.accepted', { id: task.id })];
+    const L = [ctx.t('wf.task.accepted', { id: task.id }), ...(changedWarn ? [changedWarn] : [])];
     if (open.length) L.push(ctx.t('wf.task.acceptedWithFindings', { n: open.length, ids: open.map((f) => f.id).join(', ') }));
     if (gap) {
       if (gap.kind === 'none') L.push(ctx.t('wf.task.acceptedNoReview'));

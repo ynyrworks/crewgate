@@ -105,6 +105,8 @@
   "plan.driftAnswer.drop": "  drop   - 不做：這段文字寫進 ## Not doing",
   "plan.driftAnswer.defer": "  defer  - 之後再說：這段文字變成工作流 drift 的待辦項目",
   "plan.driftNext": "他回覆之後執行：crew plan drift {slug} --gate {id} --answer add|goal|new|drop|defer --text \"...\"。他說不行就執行：crew gate answer {id} no，什麼都不要改。",
+  "plan.driftNewStep": "計畫 {slug} 已定案：新增步驟會改變使用者核准的內容，所以什麼都沒有改。請先詢問他：執行 crew plan drift {slug} --kind new-step --detail \"...\"（說明是什麼步驟、為什麼），結束這一輪，他回覆後再執行 crew plan drift {slug} --gate <gate id> --answer add|goal|new|drop|defer --text \"...\"。然後再新增步驟。",
+  "plan.driftUnasked": "警告：計畫 {slug} 已定案，而這個步驟沒有先問使用者就加入（plan.enforce=remind）。請詢問他：crew plan drift {slug} --kind new-step --detail \"...\"。",
   "plan.driftAnswered": "計畫 {slug} 的偏離（{kind}）已回答：{answer}。",
   "plan.driftStatsPlan": "計畫 {slug}：詢問 {asked} 次",
   "plan.driftStatsAnswers": "  答案：{list}",

@@ -137,7 +137,7 @@ function answer(root, projectId, slug, gateId, reply, text, answerOpts) {
   else store.workSet(projectId, { stream: 'drift', title: body, state: 'todo', note: `plan ${slug}, ${asked.kind}` });
   addDriftLine(root, slug, `- ${plans.today()} ${asked.kind} ${reply}: ${body}`);
   const hash = plans.fileHash(root, slug);
-  plans.writeRecord(projectId, slug, { hash });
+  plans.writeRecord(projectId, slug, { hash, approved: plans.fileApprovedHash(root, slug) });
   plans.record(projectId, 'plan.drift_answered', { slug, kind: asked.kind, answer: reply, gate: String(gateId) });
   return { slug, kind: asked.kind, answer: reply, gate_id: String(gateId), hash };
 }
@@ -155,6 +155,28 @@ function covered(root, projectId, slug, kind, session) {
   if (s && Array.isArray(s.prompt_ts)) prompts = s.prompt_ts; else prompts = sess.promptsOfProject(projectId);
   const from = Date.parse(last.ts);
   return !prompts.some((t) => t > from);
+}
+
+// ---------------------------------------------------------------- the triggers
+// A step added to a final plan. -> { mode, covered, clean } or null when nothing applies (plan not final, or plan.enforce off).
+// mode block with the kind not covered throws plan.driftNewStep (nothing has changed yet); remind records plan.drift_unasked.
+// `clean` says the file matched what was approved before the step: only then is the new step approved along with it (approveStep).
+function stepCheck(root, projectId, cfg, slug, opts = {}) {
+  const mode = cfg && cfg.plan && cfg.plan.enforce;
+  if (mode === 'off' || plans.stateOf(root, projectId, slug) !== 'final') return null;
+  const isCovered = covered(root, projectId, slug, 'new-step', opts.session);
+  const clean0 = !plans.changedSinceApproved(root, projectId, slug);
+  if (!isCovered) {
+    if (mode === 'remind') {
+      try { events.append(projectId, { type: 'plan.drift_unasked', src: 'cli', session: opts.session, data: { slug, kind: 'new-step' }, key: `${slug}:drift_unasked:${Date.now()}` }); } catch { /* ignore */ }
+      return { mode, covered: false, clean: clean0, warn: true };
+    }
+    throw new CrewError('plan.driftNewStep', { slug });
+  }
+  return { mode, covered: true, clean: clean0 };
+}
+function approveStep(root, projectId, slug, chk) {
+  if (chk && chk.covered && chk.clean) plans.approveNow(root, projectId, slug);
 }
 
 // ---------------------------------------------------------------- statistics
@@ -178,4 +200,4 @@ function stats(projectId, slug) {
   return { plans: [...by.values()].sort((a, b) => (a.slug < b.slug ? -1 : 1)), outside_plan: outside };
 }
 
-module.exports = { KINDS, ANSWERS, GATE, ask, answer, covered, stats };
+module.exports = { KINDS, ANSWERS, GATE, ask, answer, covered, stepCheck, approveStep, stats };

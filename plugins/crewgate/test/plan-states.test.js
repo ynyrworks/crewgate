@@ -308,6 +308,7 @@ test('no other command changes the state', () => {
   const f = fixture();
   ready(f, 'p');
   assert.equal(finalizeWithReply(f, 'p').r.code, 0);
+  H.writeConfig(f.repo, { gates: { enforce: 'confirm' }, plan: { enforce: 'off' } }); // adding a step to a final plan asks the user otherwise
   for (const args of [['add', 'p', 'more'], ['clarify', 'p', '--question', 'q', '--answer', 'a'], ['set', 'p', 'n1', 'done'], ['part', 'p', 'done-when', 'new text']]) {
     assert.equal(run(f, ['plan', ...args]).code, 0, args.join(' '));
   }
