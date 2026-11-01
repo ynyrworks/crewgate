@@ -36,7 +36,7 @@ Skip this section when `plan.interview` is `off` (still write the plan, section 
 - Number the questions. Give each a **recommended answer**, worded so a plain "yes" accepts it:
   "2. Keep the old file format? Recommended: yes, so nothing saved breaks."
 - Then **stop and wait**; next ask the questions the answers unlocked. Medium work counts every
-  question against its 5. **Stop** when nothing that would change the plan is still open.
+  question against its 5. **Stop** when nothing that would change the plan is still open. Do not ask for comfort.
 - Keep each settled answer with `crew plan clarify <slug> --question "..." --answer "..."` (record
   them right after `plan new`). Later, clarify again only about what a changed goal or scope touches.
 
@@ -92,6 +92,7 @@ chat. When you change one by hand, say the old and new value; crewgate records i
 A refused command (a new step, changed text, a task with no plan step, files outside the task's scope) is
 not an error to work around. Tell the user in one sentence what happened. Run the `crew plan drift` command
 it printed, offer the answers below, and end the turn. After their reply, run it with `--gate <id> --answer <answer> --text "..."`.
+A task with no plan and files outside its scope prints `task accept --widen`, not `crew plan drift`; follow that.
 
 - `add`: a step of this plan. Recommend it for a small piece of the same goal.
 - `goal`: the goal itself changed. Recommend it only when the user says so.
