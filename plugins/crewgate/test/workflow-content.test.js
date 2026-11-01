@@ -85,6 +85,9 @@ test('plan skill: exists, under its limit, trigger phrases and commands', () => 
   for (const c of ['plan new', 'plan part', 'plan add', 'plan clarify', 'plan finalize', '--gate', 'plan adopt', '--by assumed', 'plan.interview', 'plan.review', 'plan.enforce', 'Not doing'.toLowerCase()]) {
     assert.ok(text.toLowerCase().includes(c.toLowerCase()), c);
   }
+  for (const c of ['(assumed)', '(user)', 'Never change it without their answer', 'No CLI command does this', '`ask`', '`off`', 'ask the user']) {
+    assert.ok(text.replace(/\s+/g, ' ').toLowerCase().includes(c.toLowerCase()), c);
+  }
 });
 
 test('crew skill points at the plan skill and commands.md lists the plan state commands', () => {
