@@ -127,13 +127,24 @@ test('SendMessage on a final plan passes untouched', () => {
 
 test('a failure reading the plan lets the dispatch through and records plan.check_failed', () => {
   const { f, task } = setup('block', 'draft');
-  const orig = plans.planOfTask;
-  plans.planOfTask = () => { throw new Error('disk gone'); };
+  const orig = plans.draftPlanOfTask;
+  plans.draftPlanOfTask = () => { throw new Error('disk gone'); };
   let out;
-  try { out = require('../lib/hooks/pre-tool-use').run(H.agentPayload(f, task)); } finally { plans.planOfTask = orig; }
+  try { out = require('../lib/hooks/pre-tool-use').run(H.agentPayload(f, task)); } finally { plans.draftPlanOfTask = orig; }
   assert.ok(!out || out.hookSpecificOutput.permissionDecision !== 'deny');
   assert.equal(tasks.load(f.pid, task.id).state, 'dispatched');
   assert.equal(H.evs(f, ['plan.check_failed']).length, 1);
+});
+
+test('a task linked in a final plan and a draft plan is denied, and the message names the draft one', () => {
+  const { f, task } = setup('block');
+  writePlan(f.repo, 'a-final', 'final', task.id);
+  writePlan(f.repo, 'b-draft', 'draft', task.id);
+  const r = pre(f, H.agentPayload(f, task));
+  assert.equal(decision(r), 'deny', r.out);
+  assert.match(reason(r), /plan b-draft/);
+  assert.doesNotMatch(reason(r), /a-final/);
+  assert.equal(tasks.load(f.pid, task.id).state, 'created');
 });
 
 // ---------------------------------------------------------------- crew task run (fake codex)
@@ -204,4 +215,34 @@ test('crew task run: legacy, final, done, parked and no plan run as before', () 
     assert.equal(fs.existsSync(s.log), true);
     assert.equal(events.read(s.pid, { types: ['plan.dispatch_denied', 'plan.dispatch_unfinalized'] }).length, 0);
   }
+});
+
+test('crew task run: a task linked in a final plan and a draft plan is refused, naming the draft one', () => {
+  h.setupHome();
+  const s = runSetup('block', 'final');
+  fs.renameSync(path.join(s.repo, '.crew', 'plans', 'p.md'), path.join(s.repo, '.crew', 'plans', 'a-final.md'));
+  writePlan(s.repo, 'b-draft', 'draft', s.task.id);
+  const r = s.run();
+  assert.equal(r.code, 1, r.err);
+  assert.match(r.err, /plan b-draft/);
+  assert.equal(fs.existsSync(s.log), false, 'no worker started');
+  assert.equal(taskState(s), 'created');
+});
+
+test('crew task run: a failure reading the plan lets the run go on and records one plan.check_failed', () => {
+  h.setupHome();
+  const s = runSetup('block', 'draft');
+  const pre = u.writeFile(h.tmpDir('crew-preload-'), 'preload.js',
+    `require(${JSON.stringify(require.resolve('../lib/core/plans'))}).draftPlanOfTask = () => { throw new Error('disk gone'); };
+`);
+  const r = h.crew(['task', 'run', s.task.id], s.repo, {
+    PATH: `${path.dirname(s.log)}${path.delimiter}${process.env.PATH || process.env.Path}`, FAKE_LOG: s.log,
+    NODE_OPTIONS: `--require ${JSON.stringify(pre)}`,
+  });
+  assert.equal(r.code, 0, r.err);
+  assert.equal(fs.existsSync(s.log), true, 'worker ran');
+  const ev = events.read(s.pid, { types: ['plan.check_failed'] });
+  assert.equal(ev.length, 1);
+  assert.match(ev[0].data.reason, /disk gone/);
+  assert.equal(events.read(s.pid, { types: ['plan.dispatch_denied'] }).length, 0);
 });

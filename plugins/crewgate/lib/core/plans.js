@@ -352,6 +352,15 @@ function planOfTask(root, taskId) {
   return null;
 }
 
+// The slug of a draft plan that links the task, or null. A task linked in several plans counts as draft if any one is.
+function draftPlanOfTask(root, projectId, taskId) {
+  for (const slug of slugs(root)) {
+    const doc = readCapped(root, slug);
+    if (doc && doc.nodes.some((n) => n.meta.task === taskId) && stateOf(root, projectId, slug) === 'draft') return slug;
+  }
+  return null;
+}
+
 // Reads for display: capped at 256 KiB and 500 nodes (doc.truncated says so). null when missing.
 function readCapped(root, slug) {
   checkSlug(slug);
@@ -710,7 +719,7 @@ function deepNodes(root) {
 
 module.exports = {
   SLUG_RE, ORIGINS, MAX_DEPTH, MAX_BYTES, MAX_NODES, planDir, planFile, checkSlug, parse, serialize, assignIds, find, addNode, removeNode,
-  STATES, PARTS, planOfTask, stateOf, stateInfo, contentHash, fileHash, readRecord, setPart, readyProblems, finalizeAsk, finalizeAnswer, closeAsk, closeAnswer, reopen, adopt,
+  STATES, PARTS, planOfTask, draftPlanOfTask, stateOf, stateInfo, contentHash, fileHash, readRecord, setPart, readyProblems, finalizeAsk, finalizeAnswer, closeAsk, closeAnswer, reopen, adopt,
   KINDS, ACTIONS, encodeToken, decodeToken, proposalMeta, record, setBox, touch, BOX_STATE, cleanText, MAX_TEXT,
   derive, taskStates, slugs, readCapped, update, create, clarify, addTo, linkTo: linkTask, setState, removeFrom, deepNodes, duplicateNodes, duplicateIds, exists, today, refOf,
 };

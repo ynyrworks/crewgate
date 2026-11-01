@@ -181,8 +181,8 @@ async function runCodex(ctx, proj, cfg, task, a) {
   // A task linked to a draft plan does not start (plan.enforce). A read failure lets it through and is recorded.
   try {
     const mode = cfg.plan.enforce;
-    const slug = mode === 'off' ? null : plans.planOfTask(a.workTree || root, task.id);
-    if (slug && plans.stateOf(a.workTree || root, proj.id, slug) === 'draft') {
+    const slug = mode === 'off' ? null : plans.draftPlanOfTask(a.workTree || root, proj.id, task.id);
+    if (slug) {
       const type = mode === 'remind' ? 'plan.dispatch_unfinalized' : 'plan.dispatch_denied';
       events.append(proj.id, { type, src: 'cli', task: task.id, data: { slug, task: task.id }, key: `${task.id}:${type}:${Date.now()}` });
       if (mode !== 'remind') { ctx.err(ctx.t('wf.task.run.planDraft', { id: task.id, slug })); return 1; }

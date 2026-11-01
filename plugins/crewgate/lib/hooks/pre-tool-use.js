@@ -41,8 +41,8 @@ function draftPlan(h, id) {
   try {
     const mode = h.cfg().plan.enforce;
     if (mode === 'off') return null;
-    const slug = plans.planOfTask(h.workTree, id);
-    if (!slug || plans.stateOf(h.workTree, h.pid, slug) !== 'draft') return null;
+    const slug = plans.draftPlanOfTask(h.workTree, h.pid, id);
+    if (!slug) return null;
     const vars = { id, slug, cmd: C.crewCmd() };
     const rec = (type) => { try { events.append(h.pid, { type, src: 'hook', session: h.sid, task: id, data: { slug, task: id }, key: `${id}:${type}:${Date.now()}` }); } catch { /* ignore */ } };
     if (mode === 'remind') { rec('plan.dispatch_unfinalized'); return { line: h.t('warn.planDraft', vars) }; }
