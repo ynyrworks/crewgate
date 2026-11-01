@@ -203,6 +203,42 @@ test('plan accept of a proposed step on a final plan: block refuses (nothing cha
   }
 });
 
+test('plan set accept of a plain [?] step on a final plan: block refuses (nothing changes), remind warns, off is silent; covered goes through and approves', () => {
+  for (const mode of MODES) {
+    const f = fixture(mode);
+    finalPlan(f);
+    assert.equal(run(f, ['plan', 'add', 'p', 'Proposed one', '--proposed']).code, 0);
+    const before = text(f);
+    const r = run(f, ['plan', 'set', 'p', 'n2', 'accept']);
+    if (mode === 'block') {
+      assert.equal(r.code, 1, r.out);
+      assert.match(r.err, /crew plan drift p --kind new-step/);
+      assert.equal(text(f), before);
+      answerKind(f, 'new-step', 'defer', 'ok');
+      const r2 = run(f, ['plan', 'set', 'p', 'n2', 'accept']);
+      assert.equal(r2.code, 0, r2.err);
+      assert.match(text(f), /\[ \] Proposed one/);
+      assert.equal(changed(f), false);
+    } else {
+      assert.equal(r.code, 0, r.err);
+      assert.match(text(f), /\[ \] Proposed one/);
+      assert.equal(/without asking/.test(r.out + r.err), mode === 'remind');
+      assert.equal(evs(f, 'plan.drift_unasked').length, mode === 'remind' ? 1 : 0);
+    }
+  }
+});
+
+test('plan add with a bad --under on a final plan under remind: the add fails and no plan.drift_unasked is recorded', () => {
+  const f = fixture('remind');
+  finalPlan(f);
+  const r = run(f, ['plan', 'add', 'p', 'A new step', '--under', 'n99']);
+  assert.notEqual(r.code, 0);
+  assert.equal(evs(f, 'plan.drift_unasked').length, 0);
+  const ok = run(f, ['plan', 'add', 'p', 'A new step']);
+  assert.equal(ok.code, 0, ok.err);
+  assert.equal(evs(f, 'plan.drift_unasked').length, 1);
+});
+
 // ---------------------------------------------------------------- changed text: Agent and SendMessage
 test('Agent dispatch on a final plan whose text changed: block denies and the task stays created; remind warns; off passes; matching plan passes', () => {
   for (const mode of MODES) {

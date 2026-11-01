@@ -159,7 +159,7 @@ function covered(root, projectId, slug, kind, session) {
 
 // ---------------------------------------------------------------- the triggers
 // A step added to a final plan. -> { mode, covered, clean } or null when nothing applies (plan not final, or plan.enforce off).
-// mode block with the kind not covered throws plan.driftNewStep (nothing has changed yet); remind records plan.drift_unasked.
+// mode block with the kind not covered throws plan.driftNewStep (nothing has changed yet); remind returns warn (approveStep records plan.drift_unasked once the step is written).
 // `clean` says the file matched what was approved before the step: only then is the new step approved along with it (approveStep).
 function stepCheck(root, projectId, cfg, slug, opts = {}) {
   const mode = cfg && cfg.plan && cfg.plan.enforce;
@@ -168,14 +168,17 @@ function stepCheck(root, projectId, cfg, slug, opts = {}) {
   const clean0 = !plans.changedSinceApproved(root, projectId, slug);
   if (!isCovered) {
     if (mode === 'remind') {
-      try { events.append(projectId, { type: 'plan.drift_unasked', src: 'cli', session: opts.session, data: { slug, kind: 'new-step' }, key: `${slug}:drift_unasked:${Date.now()}` }); } catch { /* ignore */ }
-      return { mode, covered: false, clean: clean0, warn: true };
+      return { mode, covered: false, clean: clean0, warn: true, session: opts.session };
     }
     throw new CrewError('plan.driftNewStep', { slug });
   }
   return { mode, covered: true, clean: clean0 };
 }
+// Called after the step was written: under remind, the step went in without the question, so that is recorded now (never for a failed add).
 function approveStep(root, projectId, slug, chk) {
+  if (chk && chk.warn) {
+    try { events.append(projectId, { type: 'plan.drift_unasked', src: 'cli', session: chk.session, data: { slug, kind: 'new-step' }, key: `${slug}:drift_unasked:${Date.now()}` }); } catch { /* ignore */ }
+  }
   if (chk && chk.covered && chk.clean) plans.approveNow(root, projectId, slug);
 }
 

@@ -298,8 +298,10 @@ function run(argv, ctx) {
     const r = pr.reject(root, proj.id, a.slug, a.node, a.note);
     ctx.emit({ slug: a.slug, ...r }, ctx.t('plan.review.rejected', { id: r.id }));
   } else if (sub === 'set') {
+    const chk = a.action === 'accept' ? stepCheck(a, proj, root, ctx) : null; // a plain [?] step becomes a real step
     const r = plans.setState(root, proj.id, a.slug, a.node, a.action);
-    ctx.emit({ slug: a.slug, ...r }, ctx.t('plan.changed', { id: r.id, state: ctx.t(`plan.state.${r.state}`) }));
+    drift.approveStep(root, proj.id, a.slug, chk);
+    ctx.emit({ slug: a.slug, ...r }, [ctx.t('plan.changed', { id: r.id, state: ctx.t(`plan.state.${r.state}`) }), ...(chk && chk.warn ? [ctx.t('plan.driftUnasked', { slug: a.slug })] : [])]);
   } else {
     const r = plans.removeFrom(root, proj.id, a.slug, a.node);
     ctx.emit({ slug: a.slug, ...r, removed: true }, ctx.t('plan.removed', { id: r.id }));
