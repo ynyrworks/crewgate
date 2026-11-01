@@ -174,3 +174,20 @@ https://learn.chatgpt.com/docs/agent-configuration/subagents · https://learn.ch
 - Windows holder, `StartTime` against the hook's `Date.now()` (measured here): a PowerShell spawned by Node and read back at once has a `StartTime` that is -2 to 0 ms from `Date.now()` taken right after `spawn()` returns, so the two clocks can disagree by a few ms and a strict comparison can call a process that started just before the hook "later". `session-job.ps1` therefore allows 1000 ms and records `late_ms` with `pid-reused`. A real Claude Code process starts seconds before its hook, so real use does not reach this. An uncaught error in the holder is recorded as `session.job.error` with `reason=uncaught` and the exception type only.
 
 - Process listing with parent pids on Windows (measured here, 2026-11-01, about 400 processes): `wmic` is absent (ENOENT); `tasklist` has no parent pid and takes about 1.0 s; `powershell -NoProfile -NonInteractive` with `Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,Name` takes 0.6 to 0.85 s (a bare `powershell -Command 1` is about 0.25 s), `Get-WmiObject` about 1.2 s. `lib/hooks/leftovers.js` uses the CIM one; with `windowsHide: true` no window opens.
+
+## Whole-machine saturation
+
+Orchestrator, 2026-11-01, Windows 11, 32 threads, with the user's permission and their usual programs open. 32 CPU loops per phase, each ending by itself. One run per phase. The probe is a normal-priority process outside the session's job that wakes every 5 ms, which stands in for an app. It says nothing about how a window or a game feels. A watcher saw no new window.
+
+| Loops | Whole-machine CPU, median | Probe delay: median / p99 / max | Probe wake-ups in the window |
+|---|---|---|---|
+| None | 23% | 0 / 2 / 2 ms | 3281 |
+| In a session's job (below normal, 60% cap) | 86% | 0 / 2 / 5 ms | 3261 |
+| Below normal, no job | 100% | 1 / 2 / 5 ms | 3256 |
+| Normal, no job (control) | 100% | 4 / 35 / 41 ms | 1386 |
+
+- Below-normal priority alone kept the probe at its idle delay with the whole machine at 100%. The normal-priority control shows the difference.
+- The 60% cap held: the machine rose from 23% to 86%.
+- The dispatch sampler, called repeatedly at 100%, read 99 or 100 every time, from inside the session and outside it, and two samples in a row were over 85 in 107 of 107 pairs. `overLimit` once returned "allowed" at 100% in the phase before; that was not seen again and the cause is not known.
+- With 86% from a session's own 60% plus other programs, the check sits at its limit of 85 and allowed the one dispatch tried.
+- The other way round is the cost of the low priority. With normal-priority loops filling the machine, a process inside the session stalled for up to 8.4 s, and one sample took 6.6 s. The dispatch hook's budget is 5 s, so it could run out; what the hook then does was not measured.
