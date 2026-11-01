@@ -131,6 +131,7 @@ function createTask(projectId, input, opts = {}) {
     scope: { allow: strList(i.scope && i.scope.allow), deny: strList(i.scope && i.scope.deny) },
     acceptance: strList(i.acceptance).map((x) => clean(x, 500)),
     repro: clean(i.repro || '', 1000),
+    ...(typeof i.outsidePlan === 'string' && i.outsidePlan ? { outside_plan: clean(i.outsidePlan, 500) } : {}),
     state: 'created',
     returns: 0,
     created: ts,

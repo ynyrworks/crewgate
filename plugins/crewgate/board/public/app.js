@@ -585,6 +585,33 @@
     return kids.length ? h('div', null, kids) : null;
   }
 
+  // Drift on the project page: the --outside-plan count (marked when it is high) and the last events, in words.
+  // Nothing is drawn when there is nothing to show.
+  var DRIFT_LINE = { 'plan.drift_asked': 'asked', 'plan.drift_answered': 'answered', 'plan.drift_unasked': 'unasked', 'plan.drift_denied': 'denied', 'task.outside_plan': 'outside', 'task.scope_widened': 'widened', 'task.scope_warned': 'warned' };
+  function driftSentence(e) {
+    var key = DRIFT_LINE[e.type];
+    if (!key) return t('plan.drift.other');
+    var kind = e.kind ? t('plan.driftKind.' + e.kind) : '';
+    var answer = e.answer ? t('plan.driftAnswer.' + e.answer) : '';
+    return t('plan.drift.' + key, { kind: kind, answer: answer, reason: S.mask ? '' : (e.reason || ''), count: e.count === undefined ? '' : e.count });
+  }
+  function driftNote(dr) {
+    if (!dr) return null;
+    var kids = [];
+    var n = dr.outside_plan || 0;
+    if (n) kids.push(h('p', { class: n >= 3 ? 'err drift-outside' : 'drift-outside', text: n === 1 ? t('plan.driftOutsideOne') : t(n >= 3 ? 'plan.driftOutsideHigh' : 'plan.driftOutside', { n: n }) }));
+    if (dr.recent && dr.recent.length) {
+      kids.push(h('ul', { class: 'list drift' }, dr.recent.map(function (e) {
+        var where = e.slug || e.task;
+        return h('li', null,
+          h('span', { class: 'muted', text: when(e.ts) + ' · ' }),
+          where && !S.mask ? h('code', { text: where }) : null, where && !S.mask ? ' ' : null,
+          driftSentence(e));
+      })));
+    }
+    return kids.length ? h('div', null, [h('h3', { text: t('plan.driftTitle') })].concat(kids)) : null;
+  }
+
   // Project page card: one row per plan with a progress bar.
   function plansCard(d) {
     var list = d.plans || [];
@@ -598,6 +625,8 @@
     if (waiting) body = h('div', null, h('p', { class: 'pending' }, h('span', { class: 'badge ps ps-proposed', text: plural('plan.pendingProject', waiting) })), body);
     var note = planSettingsNote(d.plan_settings);
     if (note) body = h('div', null, body, note);
+    var drift = driftNote(d.plan_drift);
+    if (drift) body = h('div', null, body, drift);
     return card(t('project.plans'), body, '', list.length ? list.length : null);
   }
 

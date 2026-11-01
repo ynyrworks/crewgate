@@ -191,6 +191,19 @@ async function runCodex(ctx, proj, cfg, task, a) {
   } catch (e) {
     try { events.append(proj.id, { type: 'plan.check_failed', src: 'cli', task: task.id, data: { task: task.id, reason: clean(e && e.message, 120) }, key: `${task.id}:plan.check_failed:${Date.now()}` }); } catch { /* ignore */ }
   }
+  // A task linked to a final plan whose text no longer matches what the user approved: the drift question comes first.
+  try {
+    const mode = cfg.plan.enforce;
+    const slug = mode === 'off' ? null : plans.changedPlanOfTask(a.workTree || root, proj.id, task.id);
+    if (slug) {
+      const type = mode === 'remind' ? 'plan.drift_unasked' : 'plan.drift_denied';
+      events.append(proj.id, { type, src: 'cli', task: task.id, data: { slug, task: task.id, kind: 'changed-text' }, key: `${task.id}:${type}:${Date.now()}` });
+      if (mode !== 'remind') { ctx.err(ctx.t('wf.task.run.planChanged', { id: task.id, slug })); return 1; }
+      ctx.err(ctx.t('wf.task.run.planChangedWarn', { id: task.id, slug }));
+    }
+  } catch (e) {
+    try { events.append(proj.id, { type: 'plan.check_failed', src: 'cli', task: task.id, data: { task: task.id, reason: clean(e && e.message, 120) }, key: `${task.id}:plan.check_failed:${Date.now()}` }); } catch { /* ignore */ }
+  }
   const lang = cfg.language === 'zh-TW' ? 'zh-TW' : 'en';
   const dir = paths.taskDir(proj.id, task.id);
   const model = a.model || '';

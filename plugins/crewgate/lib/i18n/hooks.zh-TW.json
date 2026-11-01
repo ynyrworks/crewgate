@@ -36,5 +36,7 @@
   "hooks.deny.parallel": "crewgate 已擋下任務 {id} 的派出：這樣會有 {count} 個 worker 同時執行（上限 {max}）。目前進行中：{ids}。請等其中一個回報，或調高 limits.max_parallel_workers（limits.parallel_enforce=warn 只提醒）。",
   "hooks.deny.planDraft": "crewgate 已擋下任務 {id} 的開工：它屬於計畫 {slug}，而該計畫仍是草稿（plan.enforce=block）。必須先由使用者核准計畫。請執行：{cmd} plan finalize {slug}（會詢問使用者），使用者在對話中回覆後再執行：{cmd} plan finalize {slug} --gate <gate id>，然後重新開工。",
   "hooks.warn.planDraft": "任務 {id} 屬於計畫 {slug}，而該計畫仍是草稿（plan.enforce=remind）。請讓使用者核准：{cmd} plan finalize {slug}。",
+  "hooks.deny.planChanged": "crewgate 已擋下任務 {id} 的開工：計畫 {slug} 已定案，但它的內容和使用者核准的不一致（plan.enforce=block）。請先詢問他：執行 {cmd} plan drift {slug} --kind changed-text --detail \"...\"（說明改了什麼），結束這一輪，他回覆後再執行 {cmd} plan drift {slug} --gate <gate id> --answer add|goal|new|drop|defer --text \"...\"，然後重新開工。",
+  "hooks.warn.planChanged": "計畫 {slug}（任務 {id}）已定案，但它的內容和使用者核准的不一致（plan.enforce=remind）。請詢問他：{cmd} plan drift {slug} --kind changed-text --detail \"...\"。",
   "hooks.limit.loop": "crewgate 已擋下「{word}」：{type} 不得啟動無止盡的迴圈或不設上限的大量程序。請依任務書給的數量與時間限制執行（例如 timeout 60 node -e ...，或限制份數，最多 CPU 核心數的一半），並只依 pid 停止自己啟動的程序。"
 }

@@ -8,6 +8,7 @@ const pr = require('../core/plan-review');
 const tasks = require('../core/tasks');
 const common = require('../features/common');
 const gates = require('../core/gates');
+const drift = require('../core/drift');
 const sess = require('../hooks/session');
 
 const SPECS = {
@@ -35,6 +36,14 @@ const SPECS = {
   rm: { positionals: [{ name: 'slug' }, { name: 'node' }], options: {} },
   accept: { positionals: [{ name: 'slug' }, { name: 'node' }], options: {} },
   reject: { positionals: [{ name: 'slug' }, { name: 'node' }], options: { '--note': { dest: 'note' } } },
+  drift: {
+    positionals: [{ name: 'slug' }],
+    options: {
+      '--kind': { dest: 'kind', choices: drift.KINDS }, '--detail': { dest: 'detail' },
+      '--gate': { dest: 'gate' }, '--answer': { dest: 'answer', choices: drift.ANSWERS }, '--text': { dest: 'text' },
+    },
+  },
+  'drift-stats': { positionals: [{ name: 'slug', optional: true }], options: {} },
 };
 const ROUND = { '--round': { dest: 'round', int: true } };
 const REVIEW_SPECS = {
@@ -171,6 +180,40 @@ function askOrAnswer(sub, a, proj, root, ctx) {
   return ctx.emit({ ...r, next: msg }, msg);
 }
 
+// drift: without --gate it asks the user (the plan must be final); with --gate and --answer it takes their reply.
+function driftRun(a, proj, root, ctx) {
+  if (a.gate) {
+    if (!a.answer) throw new UsageError('args.missing', { name: '--answer' });
+    if (!a.text) throw new UsageError('args.missing', { name: '--text' });
+    const r = drift.answer(root, proj.id, a.slug, a.gate, a.answer, a.text, answerOptions(proj));
+    return ctx.emit(r, ctx.t('plan.driftAnswered', { slug: a.slug, kind: r.kind, answer: r.answer }));
+  }
+  if (!a.kind) throw new UsageError('args.missing', { name: '--kind' });
+  const r = drift.ask(root, proj.id, ctx.config().config, a.slug, a.kind, a.detail, { session: gates.currentSession() });
+  const L = [ctx.t('plan.driftAsked', { slug: a.slug, kind: r.kind, id: r.gate_id })];
+  for (const k of drift.ANSWERS) L.push(ctx.t(`plan.driftAnswer.${k}`));
+  L.push(ctx.t('plan.driftNext', { slug: a.slug, id: r.gate_id }));
+  return ctx.emit({ ...r, answers: drift.ANSWERS }, L);
+}
+
+// A step added to a final plan raises the drift question first (plan.enforce); see drift.stepCheck.
+function stepCheck(a, proj, root, ctx) {
+  return drift.stepCheck(root, proj.id, ctx.config().config, a.slug, { session: gates.currentSession() });
+}
+
+function driftStats(a, proj, ctx) {
+  const r = drift.stats(proj.id, a.slug);
+  const L = [];
+  for (const p of r.plans) {
+    L.push(ctx.t('plan.driftStatsPlan', { slug: p.slug, asked: p.asked }));
+    L.push(ctx.t('plan.driftStatsAnswers', { list: drift.ANSWERS.map((k) => `${k} ${p.answers[k]}`).join(', ') }));
+    L.push(ctx.t('plan.driftStatsKinds', { list: drift.KINDS.map((k) => `${k} ${p.by_kind[k].asked}/${p.by_kind[k].answered}`).join(', ') }));
+  }
+  if (!r.plans.length) L.push(ctx.t('plan.driftStatsNone'));
+  L.push(ctx.t('plan.driftStatsOutside', { n: r.outside_plan }));
+  return ctx.emit(r, L);
+}
+
 function run(argv, ctx) {
   const sub = argv[0];
   if (sub === 'review') return reviewRun(argv.slice(1), ctx);
@@ -179,7 +222,11 @@ function run(argv, ctx) {
   const proj = ctx.requireProject();
   const root = ctx.workTree(); // plans are tracked files: use the work tree like LESSONS.md
   if (a.slug !== undefined) plans.checkSlug(a.slug);
-  if (sub === 'new') {
+  if (sub === 'drift') {
+    driftRun(a, proj, root, ctx);
+  } else if (sub === 'drift-stats') {
+    driftStats(a, proj, ctx);
+  } else if (sub === 'new') {
     if (!a.title) throw new UsageError('args.missing', { name: '--title' });
     const r = plans.create(root, proj.id, a.slug, { title: a.title, goal: a.goal, notDoing: a.notDoing, doneWhen: a.doneWhen });
     ctx.emit(r, ctx.t('plan.created', { slug: r.slug, file: r.file }));
@@ -215,8 +262,10 @@ function run(argv, ctx) {
     ]);
   } else if (sub === 'add') {
     if (a.task) checkTask(proj.id, a.task);
+    const chk = a.proposed ? null : stepCheck(a, proj, root, ctx);
     const r = plans.addTo(root, proj.id, a.slug, { text: a.text, under: a.under, task: a.task, origin: a.origin, proposed: !!a.proposed });
-    ctx.emit({ slug: a.slug, ...r }, ctx.t('plan.added', { id: r.id, slug: a.slug }));
+    drift.approveStep(root, proj.id, a.slug, chk);
+    ctx.emit({ slug: a.slug, ...r }, [ctx.t('plan.added', { id: r.id, slug: a.slug }), ...(chk && chk.warn ? [ctx.t('plan.driftUnasked', { slug: a.slug })] : [])]);
   } else if (sub === 'clarify') {
     const r = plans.clarify(root, proj.id, a.slug, { question: a.question, answer: a.answer, by: a.by });
     ctx.emit(r, ctx.t('plan.clarified', { slug: a.slug }));
@@ -235,19 +284,24 @@ function run(argv, ctx) {
     const r = plans.linkTo(root, proj.id, a.slug, a.node, checkTask(proj.id, a.task));
     ctx.emit({ slug: a.slug, ...r }, ctx.t('plan.linked', { id: r.id, task: r.task }));
   } else if (sub === 'accept' || (sub === 'set' && a.action === 'accept' && isReviewProposal(root, a.slug, a.node))) {
+    const chk = stepCheck(a, proj, root, ctx);
     const r = pr.accept(root, proj.id, ctx.config().config, a.slug, a.node);
+    drift.approveStep(root, proj.id, a.slug, chk);
     const L = [ctx.t(r.removed ? `plan.review.accepted.${r.action}` : 'plan.review.accepted.add', { id: r.id, target: r.target })];
     if (r.growth) {
       L.push(ctx.t('plan.review.growth', { slug: a.slug, count: r.growth.count, limit: r.growth.limit }));
       if (r.growth.need) L.push(ctx.t('plan.review.growthNeed', { need: r.growth.need }));
     }
+    if (chk && chk.warn) L.push(ctx.t('plan.driftUnasked', { slug: a.slug }));
     ctx.emit({ slug: a.slug, ...r }, L);
   } else if (sub === 'reject') {
     const r = pr.reject(root, proj.id, a.slug, a.node, a.note);
     ctx.emit({ slug: a.slug, ...r }, ctx.t('plan.review.rejected', { id: r.id }));
   } else if (sub === 'set') {
+    const chk = a.action === 'accept' ? stepCheck(a, proj, root, ctx) : null; // a plain [?] step becomes a real step
     const r = plans.setState(root, proj.id, a.slug, a.node, a.action);
-    ctx.emit({ slug: a.slug, ...r }, ctx.t('plan.changed', { id: r.id, state: ctx.t(`plan.state.${r.state}`) }));
+    drift.approveStep(root, proj.id, a.slug, chk);
+    ctx.emit({ slug: a.slug, ...r }, [ctx.t('plan.changed', { id: r.id, state: ctx.t(`plan.state.${r.state}`) }), ...(chk && chk.warn ? [ctx.t('plan.driftUnasked', { slug: a.slug })] : [])]);
   } else {
     const r = plans.removeFrom(root, proj.id, a.slug, a.node);
     ctx.emit({ slug: a.slug, ...r, removed: true }, ctx.t('plan.removed', { id: r.id }));
@@ -268,6 +322,8 @@ module.exports = {
       '  crew plan close SLUG done|parked [--gate ID]   |   crew plan reopen SLUG   |   crew plan adopt SLUG   (a legacy plan becomes a draft)',
       '  crew plan add SLUG "text" [--under NODE] [--task TASK] [--origin plan|user|review|refute|implementation|send-back] [--proposed]',
       '  crew plan clarify SLUG --question "..." --answer "..." [--by user|assumed]   (keeps a settled question under ## Clarified)',
+      '  crew plan drift SLUG --kind new-step|changed-text|unlinked-task|out-of-scope [--detail "..."]   (asks the user how to treat work that left a final plan; end your turn)',
+      '  crew plan drift SLUG --gate ID --answer add|goal|new|drop|defer --text "..."   (after their reply)   |   crew plan drift-stats [SLUG] [--json]',
       '  crew plan link SLUG NODE TASK',
       '  crew plan set SLUG NODE open|done|dropped|accept',
       '  crew plan rm SLUG NODE   (a leaf only)',
@@ -288,6 +344,8 @@ module.exports = {
       '  crew plan close SLUG done|parked [--gate ID]   |   crew plan reopen SLUG   |   crew plan adopt SLUG   （舊計畫變成草稿）',
       '  crew plan add SLUG "文字" [--under NODE] [--task TASK] [--origin plan|user|review|refute|implementation|send-back] [--proposed]',
       '  crew plan clarify SLUG --question "..." --answer "..." [--by user|assumed]   （把釐清的問題記在 ## Clarified 下）',
+      '  crew plan drift SLUG --kind new-step|changed-text|unlinked-task|out-of-scope [--detail "..."]   （工作偏離已定案的計畫時詢問使用者；結束這一輪）',
+      '  crew plan drift SLUG --gate ID --answer add|goal|new|drop|defer --text "..."   （他回覆之後）   |   crew plan drift-stats [SLUG] [--json]',
       '  crew plan link SLUG NODE TASK',
       '  crew plan set SLUG NODE open|done|dropped|accept',
       '  crew plan rm SLUG NODE   （只能刪葉節點）',

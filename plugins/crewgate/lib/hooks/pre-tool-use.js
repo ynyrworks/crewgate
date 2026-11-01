@@ -54,6 +54,25 @@ function draftPlan(h, id) {
   }
 }
 
+// A worker run for a task linked to a final plan whose text no longer matches what the user approved (plan.enforce): the same shape
+// as draftPlan. The first check of a plan finalized before the approved hash was kept stores the current one.
+function changedPlan(h, id) {
+  try {
+    const mode = h.cfg().plan.enforce;
+    if (mode === 'off') return null;
+    const slug = plans.changedPlanOfTask(h.workTree, h.pid, id);
+    if (!slug) return null;
+    const vars = { id, slug, cmd: C.crewCmd() };
+    const rec = (type) => { try { events.append(h.pid, { type, src: 'hook', session: h.sid, task: id, data: { slug, task: id, kind: 'changed-text' }, key: `${id}:${type}:${Date.now()}` }); } catch { /* ignore */ } };
+    if (mode === 'remind') { rec('plan.drift_unasked'); return { line: h.t('warn.planChanged', vars) }; }
+    rec('plan.drift_denied');
+    return { deny: C.deny(h.t('deny.planChanged', vars)) };
+  } catch (e) {
+    try { events.append(h.pid, { type: 'plan.check_failed', src: 'hook', session: h.sid, task: id, data: { task: id, reason: C.snippet(e && e.message, 120) }, key: `${id}:plan.check_failed:${Date.now()}` }); } catch { /* ignore */ }
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------- Agent / Task
 function onAgent(payload) {
   if (payload.agent_id) return null; // dispatches come from the main session
@@ -90,6 +109,8 @@ function onAgent(payload) {
     const busy = denyLoad(h, id, lim);
     if (busy) return busy;
     draft = draftPlan(h, id);
+    if (draft && draft.deny) return draft.deny;
+    if (!draft) draft = changedPlan(h, id);
     if (draft && draft.deny) return draft.deny;
   }
 
@@ -139,7 +160,9 @@ function onSend(payload) {
   }
   const busy = denyLoad(h, rec.task, lim);
   if (busy) return busy;
-  const draft = draftPlan(h, rec.task);
+  let draft = draftPlan(h, rec.task);
+  if (draft && draft.deny) return draft.deny;
+  if (!draft) draft = changedPlan(h, rec.task);
   if (draft && draft.deny) return draft.deny;
   const snap = leftovers.snapshot({}, leftovers.budgetLeft('pre-tool-use'));
   sess.remember(h.pid, rec.id, { ...rec, id: undefined, stopped: false, stopped_at: undefined, resumed: true, ts: Date.now(), session: h.sid || null, snap: snap || undefined });
