@@ -342,6 +342,16 @@ function slugs(root) {
   return names.sort().map((n) => /^([a-z0-9-]{1,40})\.md$/.exec(n)).filter(Boolean).map((m) => m[1]);
 }
 
+// The slug of the plan whose nodes carry `task:<taskId>`, or null. One directory read when there are no plans; each
+// plan is read capped (256 KiB, 500 nodes).
+function planOfTask(root, taskId) {
+  for (const slug of slugs(root)) {
+    const doc = readCapped(root, slug);
+    if (doc && doc.nodes.some((n) => n.meta.task === taskId)) return slug;
+  }
+  return null;
+}
+
 // Reads for display: capped at 256 KiB and 500 nodes (doc.truncated says so). null when missing.
 function readCapped(root, slug) {
   checkSlug(slug);
@@ -700,7 +710,7 @@ function deepNodes(root) {
 
 module.exports = {
   SLUG_RE, ORIGINS, MAX_DEPTH, MAX_BYTES, MAX_NODES, planDir, planFile, checkSlug, parse, serialize, assignIds, find, addNode, removeNode,
-  STATES, PARTS, stateOf, stateInfo, contentHash, fileHash, readRecord, setPart, readyProblems, finalizeAsk, finalizeAnswer, closeAsk, closeAnswer, reopen, adopt,
+  STATES, PARTS, planOfTask, stateOf, stateInfo, contentHash, fileHash, readRecord, setPart, readyProblems, finalizeAsk, finalizeAnswer, closeAsk, closeAnswer, reopen, adopt,
   KINDS, ACTIONS, encodeToken, decodeToken, proposalMeta, record, setBox, touch, BOX_STATE, cleanText, MAX_TEXT,
   derive, taskStates, slugs, readCapped, update, create, clarify, addTo, linkTo: linkTask, setState, removeFrom, deepNodes, duplicateNodes, duplicateIds, exists, today, refOf,
 };

@@ -34,5 +34,7 @@
   "hooks.account.needUnknown": "A session started but its Claude account could not be determined, so account.expected was not checked (crew doctor shows what was found).",
   "hooks.deny.load": "crewgate blocked dispatching task {id}: the machine is at {pct}% CPU (limit {max}%, limits.dispatch_max_cpu). Wait for a running worker to return or for the test run or other load to end, then dispatch again; do not retry in a tight loop. limits.dispatch_max_cpu=100 turns this check off.",
   "hooks.deny.parallel": "crewgate blocked dispatching task {id}: {count} workers would run at once (limit {max}). Running now: {ids}. Wait for one of them to return, or raise limits.max_parallel_workers (limits.parallel_enforce=warn only reminds).",
+  "hooks.deny.planDraft": "crewgate blocked starting task {id}: it belongs to plan {slug}, which is still a draft (plan.enforce=block). The user has to approve the plan first. Run: {cmd} plan finalize {slug} (it asks the user), then after the user replies in chat: {cmd} plan finalize {slug} --gate <gate id>. Then start the task again.",
+  "hooks.warn.planDraft": "Task {id} belongs to plan {slug}, which is still a draft (plan.enforce=remind). Have the user approve it: {cmd} plan finalize {slug}.",
   "hooks.limit.loop": "crewgate blocked \"{word}\": a {type} does not start an endless loop or an unbounded number of copies. Run it with a count and a time limit taken from the brief (for example timeout 60 node -e ... or a bounded number of copies, at most half the CPU cores), and stop only processes you started, by pid."
 }

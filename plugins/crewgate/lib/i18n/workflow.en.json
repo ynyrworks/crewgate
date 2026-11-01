@@ -57,6 +57,8 @@
   "wf.task.cancelled": "Task {id} cancelled.",
   "wf.task.run.claude": "task run starts an external engine (for example codex); Claude workers are dispatched with the Agent tool",
   "wf.task.run.badState": "Task {id} is {state}; only a created or dispatched task can be run",
+  "wf.task.run.planDraft": "Task {id} belongs to plan {slug}, which is still a draft (plan.enforce=block), so no worker was started. The user has to approve the plan: run crew plan finalize {slug}, then after the user replies in chat, crew plan finalize {slug} --gate <gate id>.",
+  "wf.task.run.planDraftWarn": "Warning: task {id} belongs to plan {slug}, which is still a draft (plan.enforce=remind). Have the user approve it: crew plan finalize {slug}.",
   "wf.task.run.insideRepo": "The worktree {path} is inside the repository; use a sibling folder",
   "wf.task.run.worktreeBusy": "The folder {path} exists, is not empty and is not a git worktree",
   "wf.task.run.worktreeFailed": "Could not create the worktree: {detail}",
