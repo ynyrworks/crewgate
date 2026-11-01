@@ -209,6 +209,8 @@
   "wf.doctor.name.shim": "CLI shim",
   "wf.doctor.name.plans": "計畫",
   "wf.doctor.plansOk": "{n} 個計畫檔",
+  "wf.doctor.name.cleanup": "工作階段清理",
+  "wf.cleanupOn": "此專案已開啟工作階段清理：工作階段結束時會停止背景程序。這可能是 crewgate 0.20 寫入的，而非你自己的選擇。此設定只在 Windows 上生效，但檔案可能隨專案帶到其他平台，所以每個平台都會提示。要關閉，請在 .claude/crew.json 把 limits.session_cleanup 設為 \"off\"；新的工作階段起生效。",
   "wf.doctor.plansDeep": "巢狀超過 {max} 層：{where}",
   "wf.doctor.plansDup": "id 重複使用：{where}",
   "wf.doctor.name.autostart": "看板自動啟動",

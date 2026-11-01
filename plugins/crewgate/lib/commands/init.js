@@ -33,6 +33,10 @@ function run(argv, ctx) {
   if (res.files.some((f) => f.action === 'kept')) L.push(ctx.t('wf.init.keptHint'));
   if (res.checks.written) L.push(ctx.t('wf.init.checksChosen', { checks: res.checks.detected.join(', ') }));
   else if (!res.checks.kept) L.push(ctx.t('wf.init.checksNone'));
+  try {
+    const lim = config.load(root).config.limits;
+    if (lim && lim.session_cleanup === 'on') L.push(ctx.t('wf.cleanupOn'));
+  } catch { /* an unreadable config is doctor's business */ }
   L.push(ctx.t('wf.init.agentsPrecedence'));
   L.push(ctx.t('wf.init.next'));
   ctx.emit(res, L);
