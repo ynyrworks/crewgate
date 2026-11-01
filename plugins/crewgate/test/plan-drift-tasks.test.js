@@ -13,7 +13,7 @@ const events = require('../lib/core/events');
 const tasks = require('../lib/core/tasks');
 
 function fixture(enforce = 'block') {
-  const f = H.fixture({ config: { gates: { enforce: 'confirm' }, plan: { enforce } } });
+  const f = H.fixture({ config: { gates: { enforce: 'confirm' }, plan: { enforce }, limits: { dispatch_max_cpu: 100 } } });
   H.start(f);
   f.env = { CLAUDE_CODE_SESSION_ID: f.sid };
   return f;

@@ -29,7 +29,7 @@ function writePlan(repo, slug, state, taskId) {
   fs.writeFileSync(path.join(dir, `${slug}.md`), lines.join('\n'));
 }
 function setup(enforce, state) {
-  const f = H.fixture(enforce ? { config: { plan: { enforce } } } : {});
+  const f = H.fixture({ config: { ...(enforce ? { plan: { enforce } } : {}), limits: { dispatch_max_cpu: 100 } } });
   H.start(f);
   const task = H.newTask(f);
   if (state !== undefined) writePlan(f.repo, 'p', state, task.id);
@@ -131,7 +131,7 @@ test('a failure reading the plan lets the dispatch through and records plan.chec
   plans.draftPlanOfTask = () => { throw new Error('disk gone'); };
   let out;
   try { out = require('../lib/hooks/pre-tool-use').run(H.agentPayload(f, task)); } finally { plans.draftPlanOfTask = orig; }
-  assert.ok(!out || out.hookSpecificOutput.permissionDecision !== 'deny');
+  assert.ok(!out || out.hookSpecificOutput.permissionDecision !== 'deny', JSON.stringify(out));
   assert.equal(tasks.load(f.pid, task.id).state, 'dispatched');
   assert.equal(H.evs(f, ['plan.check_failed']).length, 1);
 });
