@@ -59,7 +59,7 @@ const widthOf = (indent) => indent.replace(/\t/g, '    ').length;
 
 // ---------------------------------------------------------------- parsing
 // parse(text, { maxNodes }) -> doc { eol, final, lines, nodes, title, goal, notDoing, doneWhen, clarified, truncated, fileState, stateLine, titleLine }
-// (fileState: the state the line after the title names, or null; stateLine and titleLine: indexes into lines, -1 when absent)
+// (fileState: the state line in the header, before the first step or ## section, names, or null; stateLine and titleLine: indexes into lines, -1 when absent)
 // lines: [{ raw } | { node }] in file order; nodes: item nodes in file order. A node holds
 // { box, boxChar, text, meta, junk, indent, bullet, depth, parent, children, lineNo, dirty, raw }.
 function parse(text, opts = {}) {
@@ -76,14 +76,16 @@ function parse(text, opts = {}) {
   let section = null;
   let seenItem = false;
   let inClarified = false;
+  let headerEnded = false;   // the state line may sit anywhere before the first step or ## section
   parts.forEach((raw, i) => {
     const m = ITEM_RE.exec(raw);
     if (!m) {
-      const st = doc.titleLine >= 0 && doc.stateLine < 0 && doc.lines.length === doc.titleLine + 1 ? STATE_RE.exec(raw) : null;
+      const st = doc.titleLine >= 0 && doc.stateLine < 0 && !headerEnded ? STATE_RE.exec(raw) : null;
       if (st) {
         doc.stateLine = doc.lines.length;
         doc.fileState = STATES.includes(st[1]) ? st[1] : null;
       } else if (/^#{1,6}[ \t]/.test(raw)) {
+        if (/^#{2,6}[ \t]/.test(raw)) headerEnded = true;
         stack.length = 0;
         if (doc.title) seenItem = true;   // the goal is the text right under the title
         inClarified = CLARIFIED_RE.test(raw);
@@ -99,6 +101,7 @@ function parse(text, opts = {}) {
     }
     if (doc.nodes.length >= max) { doc.truncated = true; doc.lines.push({ raw }); return; }
     seenItem = true;
+    headerEnded = true;
     section = null;
     let body = m[4];
     const meta = {};
@@ -452,7 +455,6 @@ function writeFileState(root, slug, state) {
     const doc = parse(text);
     if (doc.stateLine >= 0) doc.lines[doc.stateLine] = { raw: stateLineOf(state) };
     else doc.lines.splice(doc.titleLine + 1, 0, { raw: stateLineOf(state) });
-    doc.final = true;
     json.saveRaw(file, serialize(doc));
   });
 }
@@ -491,7 +493,6 @@ function setPart(root, projectId, slug, which, text) {
       if (prev && (prev.node || prev.raw.trim())) add.unshift({ raw: '' });
       doc.lines.splice(at, 0, ...add);
     }
-    doc.final = true;
   });
   record(projectId, 'plan.part_set', { slug, part: which });
   return { slug, part: which };
@@ -524,6 +525,7 @@ function mustBe(root, projectId, slug, want, errKey) {
 function finalizeAsk(root, projectId, cfg, slug, opts = {}) {
   const info = stateInfo(root, projectId, slug);
   if (!info) throw new CrewError('plan.notFound', { slug });
+  if (!readCapped(root, slug).title) throw new CrewError('plan.noTitleLine', { slug });
   if (info.state === 'legacy') throw new CrewError('plan.isLegacy', { slug });
   if (info.state !== 'draft') throw new CrewError('plan.notDraft', { slug, state: info.state });
   const problems = readyProblems(readCapped(root, slug));
@@ -593,6 +595,7 @@ function reopen(root, projectId, slug) {
 
 function adopt(root, projectId, slug) {
   mustBe(root, projectId, slug, ['legacy'], 'plan.notLegacy');
+  if (!readCapped(root, slug).title) throw new CrewError('plan.noTitleLine', { slug });
   transition(root, projectId, slug, 'draft', { hash: null });
   record(projectId, 'plan.adopted', { slug });
   return { slug, state: 'draft' };

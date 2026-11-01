@@ -72,6 +72,7 @@
   "plan.notDraft": "Plan {slug} is {state}, not a draft. Reopen it first to change it: crew plan reopen {slug}",
   "plan.notFinal": "Plan {slug} is {state}; only a final plan can be closed",
   "plan.notReopenable": "Plan {slug} is {state}; only a final, done or parked plan can be reopened",
+  "plan.noTitleLine": "Plan {slug} has no title line (# Title); add one before it can get a state",
   "plan.notLegacy": "Plan {slug} is {state}; only a legacy plan (no state line) can be adopted",
   "plan.badGate": "Gate {id} is not the pending ask of plan {slug}. Ask again: crew plan finalize {slug}",
   "plan.gateNo": "The user said no. Plan {slug} stays as it is.",

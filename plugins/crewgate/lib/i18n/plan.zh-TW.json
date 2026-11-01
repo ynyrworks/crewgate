@@ -72,6 +72,7 @@
   "plan.notDraft": "計畫 {slug} 是 {state}，不是草稿。要修改請先重開：crew plan reopen {slug}",
   "plan.notFinal": "計畫 {slug} 是 {state}；只有已定案的計畫能結案",
   "plan.notReopenable": "計畫 {slug} 是 {state}；只有 final、done、parked 的計畫能重開",
+  "plan.noTitleLine": "計畫 {slug} 沒有「# 」標題行；請先加上標題，才能有狀態",
   "plan.notLegacy": "計畫 {slug} 是 {state}；只有舊計畫（沒有狀態行）能轉為草稿",
   "plan.badGate": "關卡 {id} 不是計畫 {slug} 等待中的詢問。請重新詢問：crew plan finalize {slug}",
   "plan.gateNo": "使用者說不行。計畫 {slug} 維持原狀。",

@@ -350,3 +350,47 @@ test('settings plan.interview, plan.enforce and plan.review: enum, off accepted,
   H.writeConfig(f.repo, { plan: { enforce: 'maybe' } });
   assert.ok(config.load(f.repo).errors.length > 0);
 });
+
+test('the state line is found anywhere in the header, and is never the goal', () => {
+  const under = plans.parse('# Demo\nThe goal\n<!-- crew-plan state:draft -->\n\n- [ ] s <!-- id:n1 -->\n');
+  assert.equal(under.fileState, 'draft');
+  assert.equal(under.goal, 'The goal');
+  const above = plans.parse('# Demo\n<!-- crew-plan state:final -->\nThe goal\n');
+  assert.equal(above.fileState, 'final');
+  assert.equal(above.goal, 'The goal');
+  assert.equal(plans.parse('# Demo\nGoal\n\n## Notes\n<!-- crew-plan state:final -->\n').fileState, null, 'not in the header');
+  assert.equal(plans.parse('# Demo\nGoal\n- [ ] s\n<!-- crew-plan state:final -->\n').fileState, null, 'not after the first step');
+  const f = fixture();
+  fs.mkdirSync(path.dirname(planPath(f, 'g')), { recursive: true });
+  fs.writeFileSync(planPath(f, 'g'), '# Demo\nThe goal\n<!-- crew-plan state:draft -->\n');
+  assert.equal(stateOf(f, 'g'), 'draft', 'with no record the file decides');
+});
+
+test('a state change and part keep the last byte as it was: no trailing newline stays so', () => {
+  const f = fixture();
+  fs.mkdirSync(path.dirname(planPath(f, 'old')), { recursive: true });
+  fs.writeFileSync(planPath(f, 'old'), '# Old\nGoal\n\n- [ ] step <!-- id:n1 -->');
+  assert.equal(run(f, ['plan', 'adopt', 'old']).code, 0);
+  assert.equal(fs.readFileSync(planPath(f, 'old'), 'utf8'), '# Old\n<!-- crew-plan state:draft -->\nGoal\n\n- [ ] step <!-- id:n1 -->');
+  fs.writeFileSync(planPath(f, 'b'), '# B\nGoal\n\n- [ ] step <!-- id:n1 -->');
+  assert.equal(run(f, ['plan', 'part', 'b', 'done-when', 'Tests pass']).code, 0);
+  assert.equal(fs.readFileSync(planPath(f, 'b'), 'utf8').endsWith('<!-- id:n1 -->'), true);
+});
+
+test('a plan with no title cannot be adopted or finalized', () => {
+  const f = fixture();
+  fs.mkdirSync(path.dirname(planPath(f, 'nt')), { recursive: true });
+  const text = 'Just a goal\n\n- [ ] step <!-- id:n1 -->\n';
+  fs.writeFileSync(planPath(f, 'nt'), text);
+  const a = run(f, ['plan', 'adopt', 'nt']);
+  assert.notEqual(a.code, 0);
+  assert.match(a.err, /title/i);
+  assert.equal(fs.readFileSync(planPath(f, 'nt'), 'utf8'), text);
+  assert.equal(fs.existsSync(recordPath(f, 'nt')), false);
+  // a draft whose title was removed by hand
+  ready(f, 'p');
+  fs.writeFileSync(planPath(f, 'p'), fs.readFileSync(planPath(f, 'p'), 'utf8').replace(/^# .*\n/, ''));
+  const r = run(f, ['plan', 'finalize', 'p']);
+  assert.notEqual(r.code, 0);
+  assert.match(r.err, /title/i);
+});
