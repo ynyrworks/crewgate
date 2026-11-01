@@ -8,6 +8,8 @@ const path = require('path');
 const crypto = require('crypto');
 const json = require('./json');
 const events = require('./events');
+const paths = require('./paths');
+const gates = require('./gates');
 const tasks = require('./tasks');
 const { clean } = require('./redact');
 const { CrewError } = require('./errors');
@@ -35,6 +37,16 @@ const hex = (c) => { const n = c.codePointAt(0); return n > 0xff ? `%u${n.toStri
 const encodeToken = (s) => String(s).replace(/[%<>\s]/gu, hex);
 const decodeToken = (s) => String(s || '').replace(/%u([0-9A-F]{4})|%([0-9A-F]{2})/g, (m, u, b) => String.fromCharCode(parseInt(u || b, 16)));
 
+// A plan has a state: the first line after the title says draft, final, done or parked; no such line is a legacy plan.
+// The project's data folder keeps a record of the state too (plans/<slug>.json) and wins over the file: the model can edit
+// .crew/**, so a hand-edited file must not make a plan final. Only the user's reply (a gate) moves draft to final.
+const STATES = ['draft', 'final', 'done', 'parked'];
+const STATE_RE = /^<!--[ \t]*crew-plan[ \t]+state:([\w-]*)[ \t]*-->[ \t]*$/;
+const stateLineOf = (state) => `<!-- crew-plan state:${state} -->`;
+const NOT_DOING_RE = /^##[ \t]+(?:not doing|不做什麼)[ \t]*$/i;
+const DONE_WHEN_RE = /^##[ \t]+(?:done when|完成條件)[ \t]*$/i;
+const PARTS = { 'not-doing': { head: '## Not doing', re: NOT_DOING_RE, key: 'notDoing' }, 'done-when': { head: '## Done when', re: DONE_WHEN_RE, key: 'doneWhen' } };
+
 const planDir = (root) => path.join(root, '.crew', 'plans');
 const planFile = (root, slug) => path.join(planDir(root), `${slug}.md`);
 
@@ -46,7 +58,8 @@ function checkSlug(slug) {
 const widthOf = (indent) => indent.replace(/\t/g, '    ').length;
 
 // ---------------------------------------------------------------- parsing
-// parse(text, { maxNodes }) -> doc { eol, final, lines, nodes, title, goal, clarified, truncated }
+// parse(text, { maxNodes }) -> doc { eol, final, lines, nodes, title, goal, notDoing, doneWhen, clarified, truncated, fileState, stateLine, titleLine }
+// (fileState: the state the line after the title names, or null; stateLine and titleLine: indexes into lines, -1 when absent)
 // lines: [{ raw } | { node }] in file order; nodes: item nodes in file order. A node holds
 // { box, boxChar, text, meta, junk, indent, bullet, depth, parent, children, lineNo, dirty, raw }.
 function parse(text, opts = {}) {
@@ -56,27 +69,37 @@ function parse(text, opts = {}) {
   const parts = src.split(/\r?\n/);
   const final = parts.length > 1 && parts[parts.length - 1] === '';
   if (final) parts.pop();
-  const doc = { eol, final, lines: [], nodes: [], title: '', goal: '', clarified: [], truncated: false };
+  const doc = { eol, final, lines: [], nodes: [], title: '', goal: '', notDoing: '', doneWhen: '', clarified: [], truncated: false, fileState: null, stateLine: -1, titleLine: -1 };
   const stack = [];
   const goal = [];
+  const part = { notDoing: [], doneWhen: [] };
+  let section = null;
   let seenItem = false;
   let inClarified = false;
   parts.forEach((raw, i) => {
     const m = ITEM_RE.exec(raw);
     if (!m) {
-      if (/^#{1,6}[ \t]/.test(raw)) {
+      const st = doc.titleLine >= 0 && doc.stateLine < 0 && doc.lines.length === doc.titleLine + 1 ? STATE_RE.exec(raw) : null;
+      if (st) {
+        doc.stateLine = doc.lines.length;
+        doc.fileState = STATES.includes(st[1]) ? st[1] : null;
+      } else if (/^#{1,6}[ \t]/.test(raw)) {
         stack.length = 0;
         if (doc.title) seenItem = true;   // the goal is the text right under the title
         inClarified = CLARIFIED_RE.test(raw);
-        if (!doc.title && /^#[ \t]/.test(raw)) doc.title = raw.replace(/^#[ \t]+/, '').replace(/[ \t]+#*[ \t]*$/, '').trim();
+        section = NOT_DOING_RE.test(raw) ? 'notDoing' : DONE_WHEN_RE.test(raw) ? 'doneWhen' : null;
+        if (!doc.title && /^#[ \t]/.test(raw)) { doc.title = raw.replace(/^#[ \t]+/, '').replace(/[ \t]+#*[ \t]*$/, '').trim(); doc.titleLine = doc.lines.length; }
       } else if (inClarified) {
         if (raw.trim()) doc.clarified.push(raw.trim().replace(/^[-*][ \t]+/, ''));
+      } else if (section) {
+        if (raw.trim()) part[section].push(raw.trim().replace(/^[-*][ \t]+/, ''));
       } else if (!seenItem && doc.title && raw.trim()) goal.push(raw.trim());
       doc.lines.push({ raw });
       return;
     }
     if (doc.nodes.length >= max) { doc.truncated = true; doc.lines.push({ raw }); return; }
     seenItem = true;
+    section = null;
     let body = m[4];
     const meta = {};
     const junk = [];
@@ -101,6 +124,8 @@ function parse(text, opts = {}) {
     doc.lines.push({ node });
   });
   doc.goal = goal.join(' ');
+  doc.notDoing = part.notDoing.join(' ');
+  doc.doneWhen = part.doneWhen.join(' ');
   return doc;
 }
 
@@ -292,7 +317,7 @@ function derive(doc, taskState) {
   const total = counted.reduce((s, k) => s + k.total, 0);
   const count = (st) => flat.filter((x) => x.state === st).length;
   return {
-    title: doc.title, goal: doc.goal, clarified: doc.clarified, truncated: doc.truncated, duplicates: duplicateIds(doc),
+    title: doc.title, goal: doc.goal, not_doing: doc.notDoing, done_when: doc.doneWhen, clarified: doc.clarified, truncated: doc.truncated, duplicates: duplicateIds(doc),
     summary: { done, total, pct: total ? Math.round((100 * done) / total) : 0, nodes: flat.length, proposed: count('proposed'), dropped: count('dropped'), blocked: count('blocked') },
     nodes,
   };
@@ -359,7 +384,10 @@ function record(projectId, type, data) {
   if (projectId) events.append(projectId, { type, src: 'cli', data, key: `${type}:${data.slug}:${data.node || ''}:${Date.now()}:${rid()}` });
 }
 
-function create(root, projectId, slug, { title, goal }) {
+// A part (not doing, done when) is one line of text: no comment marks, no line breaks.
+function partText(text) { return clean(String(text || '').replace(/<!--|-->/g, ' ').replace(/\s+/g, ' ').trim(), 500); }
+
+function create(root, projectId, slug, { title, goal, notDoing, doneWhen }) {
   checkSlug(slug);
   const t = clean(String(title || '').replace(/\s+/g, ' ').trim(), 120);
   if (!t) throw new CrewError('plan.noTitle');
@@ -367,10 +395,207 @@ function create(root, projectId, slug, { title, goal }) {
   return json.withLock(file, () => {
     if (fs.existsSync(file)) throw new CrewError('plan.exists', { slug });
     const g = clean(String(goal || '').replace(/\s+/g, ' ').trim(), 500);
-    json.saveRaw(file, `# ${t}\n${g ? `${g}\n` : ''}\n`);
+    const nd = partText(notDoing);
+    const dw = partText(doneWhen);
+    json.saveRaw(file, `# ${t}\n${stateLineOf('draft')}\n${g ? `${g}\n` : ''}\n${nd ? `${PARTS['not-doing'].head}\n${nd}\n\n` : ''}${dw ? `${PARTS['done-when'].head}\n${dw}\n\n` : ''}`);
+    writeRecord(projectId, slug, { state: 'draft', hash: null, pending: null });
     record(projectId, 'plan.created', { slug, title: t });
-    return { slug, title: t, file };
+    return { slug, title: t, file, state: 'draft' };
   });
+}
+
+// ---------------------------------------------------------------- state
+const recordFile = (projectId, slug) => path.join(paths.projectDir(projectId), 'plans', `${checkSlug(slug)}.json`);
+
+function readRecord(projectId, slug) {
+  if (!projectId) return null;
+  const r = json.readJson(recordFile(projectId, slug), {});
+  return r.status === 'ok' && STATES.includes(r.data.state) ? r.data : null;
+}
+
+function writeRecord(projectId, slug, patch) {
+  if (!projectId) return;
+  json.update(recordFile(projectId, slug), {}, (data) => { Object.assign(data, patch, { slug, updated: new Date().toISOString() }); });
+}
+
+// The plan's text without its state line: what a user approves, so a change of state does not change the hash.
+function contentHash(text) {
+  const doc = parse(text);
+  if (doc.stateLine >= 0) doc.lines.splice(doc.stateLine, 1);
+  return crypto.createHash('sha256').update(serialize(doc)).digest('hex');
+}
+function fileHash(root, slug) {
+  try { return contentHash(fs.readFileSync(planFile(root, checkSlug(slug)), 'utf8')); } catch { return null; }
+}
+
+// -> { state, file_state, record_state, conflict } or null when there is neither a file nor a record.
+// file_state: the state line, or 'legacy' for a file without one. The record, where there is one, wins.
+function stateInfo(root, projectId, slug) {
+  const doc = readCapped(root, slug);
+  const rec = readRecord(projectId, slug);
+  if (!doc && !rec) return null;
+  const fileState = doc ? (doc.fileState || 'legacy') : null;
+  const recState = rec ? rec.state : null;
+  return { state: recState || fileState, file_state: fileState, record_state: recState, conflict: !!(rec && doc && recState !== fileState) };
+}
+function stateOf(root, projectId, slug) {
+  const i = stateInfo(root, projectId, slug);
+  return i ? i.state : null;
+}
+
+// Writes the state line into the file (replacing it, or adding it right under the title) and nothing else.
+function writeFileState(root, slug, state) {
+  const file = planFile(root, checkSlug(slug));
+  json.withLock(file, () => {
+    let text;
+    try { text = fs.readFileSync(file, 'utf8'); } catch { throw new CrewError('plan.notFound', { slug }); }
+    const doc = parse(text);
+    if (doc.stateLine >= 0) doc.lines[doc.stateLine] = { raw: stateLineOf(state) };
+    else doc.lines.splice(doc.titleLine + 1, 0, { raw: stateLineOf(state) });
+    doc.final = true;
+    json.saveRaw(file, serialize(doc));
+  });
+}
+
+function transition(root, projectId, slug, state, extra = {}) {
+  writeFileState(root, slug, state);
+  writeRecord(projectId, slug, { state, pending: null, ...extra });
+}
+
+// setPart(root, projectId, slug, 'not-doing' | 'done-when', text): sets the section before the steps, or replaces its text.
+function setPart(root, projectId, slug, which, text) {
+  if (!Object.prototype.hasOwnProperty.call(PARTS, which)) throw new CrewError('plan.badPart', { part: String(which) });
+  const body = partText(text);
+  if (!body) throw new CrewError('plan.partEmpty');
+  const { head, re } = PARTS[which];
+  update(root, slug, (doc) => {
+    const h = doc.lines.findIndex((l) => !l.node && re.test(l.raw));
+    if (h >= 0) {
+      let end = h + 1;
+      while (end < doc.lines.length && !doc.lines[end].node && !/^#{1,6}[ \t]/.test(doc.lines[end].raw)) end++;
+      while (end > h + 1 && !doc.lines[end - 1].raw.trim()) end--;
+      doc.lines.splice(h + 1, end - h - 1, { raw: body });
+    } else {
+      const firstNode = doc.lines.findIndex((l) => l.node);
+      const section = clarifiedLine(doc);
+      let at = firstNode >= 0 ? firstNode : (section >= 0 ? section : doc.lines.length);
+      if (firstNode >= 0) {
+        // keep a heading that sits right above the steps (such as "## Steps") with them
+        let k = at;
+        while (k > 0 && !doc.lines[k - 1].node && !doc.lines[k - 1].raw.trim()) k--;
+        if (k > 0 && !doc.lines[k - 1].node && /^#{2,6}[ \t]/.test(doc.lines[k - 1].raw)) at = k - 1;
+      }
+      const add = [{ raw: head }, { raw: body }];
+      if (at < doc.lines.length) add.push({ raw: '' });
+      const prev = doc.lines[at - 1];
+      if (prev && (prev.node || prev.raw.trim())) add.unshift({ raw: '' });
+      doc.lines.splice(at, 0, ...add);
+    }
+    doc.final = true;
+  });
+  record(projectId, 'plan.part_set', { slug, part: which });
+  return { slug, part: which };
+}
+
+// What stops a plan from being final, as codes: goal, not_doing, done_when, steps, assumed.
+function readyProblems(doc) {
+  const out = [];
+  if (!doc.goal.trim()) out.push('goal');
+  if (!doc.notDoing.trim()) out.push('not_doing');
+  if (!doc.doneWhen.trim()) out.push('done_when');
+  if (!doc.nodes.some((n) => n.box !== '~' && n.box !== '?')) out.push('steps');
+  if (doc.clarified.some((l) => /\(assumed\)\s*$/.test(l))) out.push('assumed');
+  return out;
+}
+
+// Finalizing and closing ask the user through the gate plan_final: the model shows the plan, ends its turn, and answers with
+// --gate after the user's reply. The gate is always asked (never auto or never), whatever the project's `gates` say.
+const askCfg = (cfg) => ({ ...cfg, gates: { ...((cfg && cfg.gates) || {}), plan_final: 'ask' } });
+
+function mustBe(root, projectId, slug, want, errKey) {
+  const info = stateInfo(root, projectId, slug);
+  if (!info) throw new CrewError('plan.notFound', { slug });
+  if (!want.includes(info.state)) throw new CrewError(errKey, { slug, state: info.state });
+  return info;
+}
+
+// finalizeAsk -> { slug, gate_id, hash }; throws plan.notReady (naming each problem), plan.isLegacy or plan.notDraft.
+// opts: session, t (translates the problem names).
+function finalizeAsk(root, projectId, cfg, slug, opts = {}) {
+  const info = stateInfo(root, projectId, slug);
+  if (!info) throw new CrewError('plan.notFound', { slug });
+  if (info.state === 'legacy') throw new CrewError('plan.isLegacy', { slug });
+  if (info.state !== 'draft') throw new CrewError('plan.notDraft', { slug, state: info.state });
+  const problems = readyProblems(readCapped(root, slug));
+  if (problems.length) {
+    const tt = opts.t || ((k, v) => require('./i18n').t('en', k, v));
+    throw new CrewError('plan.notReady', { slug, list: problems.map((p) => `  - ${tt(`plan.problem.${p}`)}`).join('\n') });
+  }
+  const hash = fileHash(root, slug);
+  const g = gates.ask(projectId, askCfg(cfg), { gate: 'plan_final', detail: `finalize plan ${slug}` }, { src: 'cli', session: opts.session });
+  writeRecord(projectId, slug, { state: 'draft', pending: { gate_id: g.id, kind: 'finalize', hash } });
+  return { slug, gate_id: g.id, hash };
+}
+
+// closeAsk -> { slug, gate_id, to }
+function closeAsk(root, projectId, cfg, slug, to, opts = {}) {
+  if (to !== 'done' && to !== 'parked') throw new CrewError('plan.badClose', { to: String(to) });
+  mustBe(root, projectId, slug, ['final'], 'plan.notFinal');
+  const g = gates.ask(projectId, askCfg(cfg), { gate: 'plan_final', detail: `close plan ${slug} as ${to}` }, { src: 'cli', session: opts.session });
+  writeRecord(projectId, slug, { pending: { gate_id: g.id, kind: 'close', to } });
+  return { slug, gate_id: g.id, to };
+}
+
+// The pending ask of this kind, and nothing else: another plan's gate, an old one or a made-up one is refused.
+function pendingOf(projectId, slug, gateId, kind) {
+  const rec = readRecord(projectId, slug);
+  const pend = rec && rec.pending;
+  if (!pend || pend.kind !== kind || pend.gate_id !== String(gateId)) throw new CrewError('plan.badGate', { slug, id: String(gateId) });
+  return pend;
+}
+
+// The user's reply, whatever `gates.require_user_turn` says: the yes is recorded with requireUserTurn: true, and the stored
+// verdict must be true or 'project'. A gate already answered through `crew gate answer` is judged by what is stored.
+// answerOpts are built like commands/gate.js builds them (src, session, prompts, promptsOf, projectPrompts).
+function takeReply(projectId, slug, gateId, answerOpts) {
+  const prior = events.read(projectId, { types: ['gate.answered'] }).find((e) => e.data && e.data.id === gateId);
+  const ans = prior ? prior.data : gates.answer(projectId, gateId, 'yes', '', { ...answerOpts, requireUserTurn: true });
+  if (ans.answer !== 'yes') throw new CrewError('plan.gateNo', { slug });
+  if (ans.user_turn !== true && ans.user_turn !== 'project') throw new CrewError('plan.noUserTurn', { slug, id: gateId });
+}
+
+// finalizeAnswer -> { slug, hash, gate_id }
+function finalizeAnswer(root, projectId, slug, gateId, answerOpts) {
+  const pend = pendingOf(projectId, slug, gateId, 'finalize');
+  if (fileHash(root, slug) !== pend.hash) throw new CrewError('plan.changedSinceAsk', { slug });
+  takeReply(projectId, slug, gateId, answerOpts);
+  transition(root, projectId, slug, 'final', { hash: pend.hash, gate_id: gateId, finalized: new Date().toISOString() });
+  record(projectId, 'plan.finalized', { slug, hash: pend.hash, gate: gateId });
+  return { slug, hash: pend.hash, gate_id: gateId };
+}
+
+// closeAnswer -> { slug, state, gate_id }
+function closeAnswer(root, projectId, slug, gateId, answerOpts) {
+  const pend = pendingOf(projectId, slug, gateId, 'close');
+  mustBe(root, projectId, slug, ['final'], 'plan.notFinal');
+  takeReply(projectId, slug, gateId, answerOpts);
+  transition(root, projectId, slug, pend.to);
+  record(projectId, 'plan.closed', { slug, state: pend.to, gate: gateId });
+  return { slug, state: pend.to, gate_id: gateId };
+}
+
+function reopen(root, projectId, slug) {
+  mustBe(root, projectId, slug, ['final', 'done', 'parked'], 'plan.notReopenable');
+  transition(root, projectId, slug, 'draft', { hash: null });
+  record(projectId, 'plan.reopened', { slug });
+  return { slug, state: 'draft' };
+}
+
+function adopt(root, projectId, slug) {
+  mustBe(root, projectId, slug, ['legacy'], 'plan.notLegacy');
+  transition(root, projectId, slug, 'draft', { hash: null });
+  record(projectId, 'plan.adopted', { slug });
+  return { slug, state: 'draft' };
 }
 
 // clarify(root, projectId, slug, { question, answer, by }): one settled question, as a plain line under ## Clarified at
@@ -472,6 +697,7 @@ function deepNodes(root) {
 
 module.exports = {
   SLUG_RE, ORIGINS, MAX_DEPTH, MAX_BYTES, MAX_NODES, planDir, planFile, checkSlug, parse, serialize, assignIds, find, addNode, removeNode,
+  STATES, PARTS, stateOf, stateInfo, contentHash, fileHash, readRecord, setPart, readyProblems, finalizeAsk, finalizeAnswer, closeAsk, closeAnswer, reopen, adopt,
   KINDS, ACTIONS, encodeToken, decodeToken, proposalMeta, record, setBox, touch, BOX_STATE, cleanText, MAX_TEXT,
   derive, taskStates, slugs, readCapped, update, create, clarify, addTo, linkTo: linkTask, setState, removeFrom, deepNodes, duplicateNodes, duplicateIds, exists, today, refOf,
 };
