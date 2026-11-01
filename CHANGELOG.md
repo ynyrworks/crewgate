@@ -1,10 +1,20 @@
 # Changelog
 
+## 0.21.1 — 2026-11-01
+
+### Fixed
+
+- 0.21.0's new default of `off` for session cleanup did not reach projects set up with 0.20.1. Its `crew init` wrote `limits.session_cleanup: "on"` into `.claude/crew.json`, and `crew init --force` keeps existing values, so those projects still stop processes at session end. `crew doctor` now warns when the value is `on`, and `crew init` prints the same advice. Nothing changes the value by itself, because it may be your choice.
+
+### Upgrade
+
+- If you ran `crew init` on 0.20.1, run `crew doctor` in that project. To turn cleanup off, set `limits.session_cleanup` to `off` in `.claude/crew.json`. It applies from a new session.
+
 ## 0.21.0 — 2026-11-01
 
 ### Fixed
 
-- Session cleanup no longer stops anything by default. `limits.session_cleanup` defaults to `off`: at exit it lists and records what is left (`found`, `kept`, `would_stop`). Only an explicit `on` stops processes. Cleanup is proven with stand-ins only, and every real run so far found nothing to stop.
+- Session cleanup no longer stops anything by default. `limits.session_cleanup` defaults to `off`: at exit it lists and records what is left (`found`, `kept`, `would_stop`). Only an explicit `on` stops processes. Correction: a project set up with 0.20.1 has that explicit `on`; see 0.21.1. Cleanup is proven with stand-ins only, and every real run so far found nothing to stop.
 - `crew gate answer <id> yes` is refused when a session is known and no user message came after the ask, with a `gate.refused` event. Before, the yes was stored and marked as not from a user turn, and the push it was for still ran. A `no` is always accepted.
 - Slot test: it read the slot file before its content was written, and failed once on macOS CI. Only the test changed.
 
