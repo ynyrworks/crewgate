@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.23.0 — 2026-11-02
+
+When work leaves a plan you approved, crewgate stops and asks what you want to do with it. This is released for trying on real plans: whether the questions help or get in the way is still to be judged.
+
+### New
+
+- The drift question: one question with five answers. `add` puts it in this plan, and your answer counts as the approval. `goal` changes the goal. `new` starts a new draft plan. `drop` writes it under "Not doing". `defer` makes it a to-do item. The answer is written into the plan file, and it needs your reply.
+- It asks only where code can tell: a new step on a final plan, a final plan whose text no longer matches what you approved, a task with no plan while a plan is final, and files outside a task's `--allow` and `--deny` at `crew task accept`.
+- The same kind of question is asked once between two of your messages.
+- `crew task create --outside-plan "reason"` is the light way out for a small fix unrelated to the plan. It needs no reply, and each use is counted and shown.
+- `crew task accept --widen "reason"` accepts files outside the scope of a task with no plan, after you agree.
+- `crew plan drift-stats` prints how many questions each plan had, the share of each answer and the `--outside-plan` count. The project page lists the same record.
+- A detailed flow and architecture diagram in [docs/GUIDE.md](docs/GUIDE.md). The README diagram stays short and now shows the drift question.
+
+### Fixed
+
+From a 102-run test of `/crewgate:plan` ([report](docs/research/plan-skill-test-report.md)):
+
+- `crew plan part` keeps line breaks, says what it replaced and takes `--add`.
+- Option values may start with a dash. Global words and `--known=...` are not read as values.
+- `crew plan new` prints the plan settings, and the skill text was corrected.
+- The release record shows answers given with `--by decision`.
+
+### Upgrade
+
+- Run `crew init --force` in each project to refresh the agent copies.
+- `plan.enforce` applies: `off` asks nothing. Legacy, draft, done and parked plans are not asked about.
+
+### Known issues
+
+- Whether the questions help or get in the way is not judged yet. Real use starts with this version. The plan stays open until that is done.
+- Work that stays inside the allowed files but goes in the wrong direction is not caught, on purpose: no model judges meaning, and no hook matches keywords.
+- With no final plan there is nothing to drift from.
+- `--outside-plan` is the model's own judgement. It is recorded, not checked.
+- Under `claude -p --resume` the resumed prompt counts as a user reply. Automation can answer a question that way, so it is not proof that a person replied.
+- A task's scope check reads what the task's branch changed. A git failure never blocks: it is printed and recorded.
+
 ## 0.22.0 — 2026-11-01
 
 Crewgate's purpose is now: delegate work to AI subagents, and be sure it does what you want.

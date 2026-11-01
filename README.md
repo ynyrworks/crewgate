@@ -34,7 +34,13 @@ flowchart TD
     G --> H{"You see what survived.<br/>Good enough?"}
     H -- "No" --> F
     H -- "Yes" --> I["You approve the merge and the push"]
+    F -. "Work leaves the plan" .-> J{"It stops and asks:<br/>what is this?"}
+    J -- "Add it, or change the goal" --> F
+    J -- "A new plan" --> C
+    J -- "Drop it, or do it later" --> F
 ```
+
+The full flow and the parts behind it are in the [guide](docs/GUIDE.md#how-it-works).
 
 ## Get started
 
@@ -65,11 +71,11 @@ The model says how big it thinks the job is, and you can overrule it. To approve
 
 | | |
 |---|---|
-| **Stopped by code** | A worker on a plan you have not approved. A plan made final without your reply. An approval given without your message. More workers than the limit. A new worker while the machine is above 85% CPU. An incomplete brief. |
-| **Recorded for you to see** | Who did what, every merge and push, what a worker left running, changes to the plan settings. |
-| **Asked of the model, not checked** | Whether its questions were good. Whether the plan caught what you meant. Whether it starts a plan at all: plain words usually reach `/crewgate:plan`, but that is the model's call. |
+| **Stopped by code** | A worker on a plan you have not approved. A plan made final without your reply. An approval given without your message. More workers than the limit. A new worker while the machine is above 85% CPU. An incomplete brief. A change to an approved plan until you answer the drift question. A task with no plan while a plan is final, unless it gives a reason. |
+| **Recorded for you to see** | Who did what, every merge and push, what a worker left running, changes to the plan settings, every drift answer and every `--outside-plan`. |
+| **Asked of the model, not checked** | Whether its questions were good. Whether the plan caught what you meant. Whether it starts a plan at all: plain words usually reach `/crewgate:plan`, but that is the model's call. Whether a `--outside-plan` reason is true. Work inside the allowed files that goes in the wrong direction. |
 
-These checks read what the model tries to run. A script that pushes is not seen, so for a hard stop, have your Git server refuse direct pushes (branch protection). In 0.23, work that drifts from an approved plan will stop and ask you; today nothing asks. See the [roadmap](docs/ROADMAP.md).
+These checks read what the model tries to run. A script that pushes is not seen, so for a hard stop, have your Git server refuse direct pushes (branch protection). With no approved plan there is nothing to drift from. See the [roadmap](docs/ROADMAP.md).
 
 ## Settings
 

@@ -8,6 +8,7 @@ the [CHANGELOG](../CHANGELOG.md).
 
 One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.md).
 
+- **0.23** — When work leaves a final plan, it stops and asks: add to this plan, change the goal, new plan, drop or defer. It asks only where code can tell, and `crew plan drift-stats` shows how often. Released for real use; whether it helps is not judged yet.
 - **0.22** — The purpose widens to "be sure it does what you want". `/crewgate:plan` finds that out before work starts, plans have states, a task on a draft plan cannot start, and only your reply makes a plan final.
 - **0.21.2** — The description of session cleanup says only what was measured, and a test setting can no longer push a process listing past the hook budget.
 - **0.21.1** — `crew doctor` and `crew init` warn when a project has session cleanup on. 0.20.1 wrote `on` into each project it set up, so 0.21's new default of `off` did not reach them.
@@ -40,6 +41,7 @@ Open problems in the latest release, and what has not been checked.
 - **The board is sometimes killed outright.** The cause is not established; closing the desktop app did not do it in two measured quits; updating it is the untested suspect. It logs nothing when this happens. Since 0.18 it records when it was last alive, so the next death can be dated. `board.autostart` brings it back at the next session.
 - **Machine load.** Cleanup at the end of a session is off by default, except in projects set up with 0.20.1, where `crew doctor` warns, and proven with stand-in sessions only: on a desktop-app quit everything from the session ended at once, with cleanup off and before the holder could record anything ([PLUGIN-FACTS.md](PLUGIN-FACTS.md)), and under `claude -p` leftovers were gone even with cleanup off. So no case is known yet where cleanup helps, and the survivors from the incident are not explained. At saturation, below-normal priority and the 60% cap kept a normal-priority probe at its idle delay, and other programs filling the machine stalled a session for up to 8.4 s (one run, [PLUGIN-FACTS.md](PLUGIN-FACTS.md)). How that feels in real use is not measured. Processes started before the job is set up, and anything created through WMI, escape it. macOS and Linux have no cap and no cleanup; the probe results and decisions are in [DESIGN.md](DESIGN.md), "POSIX load probe". A Windows Terminal tab opened from a session can count as background and be stopped; not measured. If `wscript.exe` is disabled there is no cap and no cleanup.
 - **Timing-sensitive tests.** `board-autostart` waits up to 60 s and prints what it needs when it fails. The cause of the CI failures is most likely a slow start on a busy machine, not proven, and two runs under heavy load never came up within 60 s. The SessionStart latency check in `hooks-contract` has failed under load and passed alone. On Windows CI, the real holder test failed 2 of 6 jobs at 0.20.0 (most likely the stand-in's start time, not established), and `hooks-stability` "keeps quiet about the merge" failed once with no defect found. Both now print their evidence when they fail. Both passed on all nine jobs in the two candidate runs for 0.21, so the cause is still unknown.
+- **Drift question.** Not judged in real use yet. It sees only what code can tell: work inside the allowed files that goes in the wrong direction is not caught, and with no final plan nothing asks. `--outside-plan` is recorded, not checked. Under `claude -p --resume` the resumed prompt counts as a user reply.
 - **Gates are best effort.** Scripts, configured aliases, variables and other tools are not seen. Use branch protection on the server for a hard stop.
 - **Codex.** Hooks installed through the plugin are not verified, only hooks in `.codex/hooks.json`, and a real run covered only `never`. The Office add-on install through Codex is not verified. Codex versions older than 0.164 were not measured.
 - **Account labels.** Only new sessions in crew projects have one.
@@ -52,8 +54,8 @@ Open problems in the latest release, and what has not been checked.
 
 Decided, not started or not finished.
 
-- **0.23.** One question with four answers when work drifts: add to this plan, change the goal, new plan, drop or defer. It fires only where code can tell: a file outside the task's scope at accept, a new step on a final plan, an unlinked task while a final plan is open, a changed goal.
-- **0.24.** `--help` groups, and whatever the first real plans under 0.23 show. The README and its diagram came ahead, in 0.22.
+- **0.23 in real use.** Try the drift question on 2 real plans and judge whether it helps or gets in the way, using `crew plan drift-stats`. Tighten the triggers if it gets in the way.
+- **0.24.** `--help` groups, and whatever the first real plans under 0.23 show.
 - **HD Office.** The look stays frozen as v0.1.0 for now. Still to do before it can be the default: warm tone, foreground, and performance on integrated graphics.
 - **Machine load in real use.** Measure closing one session while the app stays open, and closing a terminal that runs an interactive `claude`. Then decide whether cleanup should stay at all.
 - **macOS and Linux.** Probe `StartTransientUnit` through `busctl --user` with an existing pid and a real quota, and measure `taskpolicy -b` on a saturated Mac. Build only what those show.

@@ -44,29 +44,74 @@ Privacy and safety; turn it off with `updates.check`).
 
 ## How it works
 
+```mermaid
+flowchart TD
+    U["You ask for something"] --> S{"Size, which you can overrule"}
+    S -- "Small fix" --> T
+    S -- "Medium or large" --> Q["/crewgate:plan asks what the code cannot answer"]
+    Q --> D["Draft plan in .crew/plans:<br/>goal, not doing, done when, steps"]
+    D -. "Large, by plan.review" .-> PR["Plan review: criticism and<br/>refutation become proposed steps"]
+    PR -.-> D
+    D --> F{{"CHECK plan_final:<br/>only your reply makes it final"}}
+    F -- "Not yet" --> Q
+    F -- "Yes" --> T["crew task create:<br/>incomplete briefs are refused"]
+    T --> DC{{"CHECK before a worker starts:<br/>plan not a draft, worker limit, CPU under 85%"}}
+    DC --> W["Worker in its own worktree:<br/>runs the project checks, commits, never pushes"]
+    W --> R1["Reviewer writes findings with evidence"]
+    R1 --> R2["Filter, no model: dismissed, inference-only, low confidence"]
+    R2 --> R3["Refuter tries to disprove what is left"]
+    R3 --> A{"You see what survived"}
+    A -- "Send back" --> W
+    A -- "Accept" --> SC{{"CHECK scope:<br/>changed files against --allow and --deny"}}
+    SC --> GM{{"GATES merge and push: your reply, each time"}}
+    GM --> REC["Merge, release record, push"]
+    X1["New step on a final plan"] -.-> DQ
+    X2["Final plan text no longer matches<br/>what you approved"] -.-> DQ
+    X3["Task with no plan while a plan is final"] -.-> DQ
+    SC -. "Files outside the scope" .-> DQ
+    DQ{{"CHECK plan_drift: what is this?"}}
+    DQ -- "add or goal" --> T
+    DQ -- "new" --> Q
+    DQ -- "drop or defer" --> Z["Written in the plan or the to-do list"]
 ```
-  you: "add feature X, delegate it"
-    |
-    v
-  +--------------------------+   crew task create    +--------------------+
-  | orchestrator             | --------------------> | brief + task       |
-  | main session             |   (six-section       | (state machine)    |
-  | /crewgate:crew           |    brief)             +--------------------+
-  +------------+-------------+                                ^
-               | Agent tool; prompt carries                   | state
-               | "crew-task: <id>"                            |
-               v                                              |
-  +--------------------------+   crew task report   +---------+----------+
-  | worker subagent          | -------------------> | hooks, every event |
-  | own git worktree         |                      | record, remind,    |
-  +------------+-------------+                      | guard              |
-               | returned                           +---------+----------+
-               v                                              |
-  +--------------------------+  find, filter, refute          v
-  | reviewer + refuter       | ---------------------> +--------------+
-  | read-only                |  only survivors        | board        |
-  +--------------------------+  reach you             | 127.0.0.1    |
-                                                      +--------------+
+
+Hexagons are where code stops the work. The dotted arrows are the ways work can leave a plan.
+
+```mermaid
+flowchart LR
+    subgraph session["Claude Code session"]
+        O["Orchestrator: main session,<br/>plans and delegates"]
+        W2["Worker: own worktree"]
+        V["Reviewer and refuter: read-only"]
+        O --> W2
+        O --> V
+    end
+    H["Hooks: one script,<br/>sees every tool call"]
+    C["crew CLI: tasks, plans,<br/>gates, reviews"]
+    subgraph repo["Your repository"]
+        CF[".claude/crew.json"]
+        PL[".crew/plans/*.md"]
+        BR["Branches and worktrees"]
+    end
+    subgraph home["~/.crewgate/projects/&lt;id&gt;"]
+        EV["events.jsonl"]
+        TS["tasks"]
+        PR2["plan records"]
+    end
+    B["Board on 127.0.0.1"]
+    session -- "tool calls" --> H
+    session -- "runs" --> C
+    H -- "deny, remind, record" --> session
+    H --> EV
+    C --> PL
+    C --> TS
+    C --> PR2
+    C --> EV
+    CF --> H
+    CF --> C
+    W2 --> BR
+    home --> B
+    PL --> B
 ```
 
 **Roles.** The orchestrator plans, briefs, dispatches, reviews and merges; it does not implement. A worker
@@ -173,6 +218,8 @@ grow, but visibly: every node records where it came from (`plan`, `user`, `revie
 For a plan of about three steps or more, the orchestrator is told to clarify first: it asks only what would change the
 plan and what the code cannot answer, and keeps the answers in the plan file. It asks again only when the goal, scope, a
 constraint or an earlier answer changes. Since 0.22 this is `/crewgate:plan`, and plain words such as "write a plan for X" reach it, usually: that is the model's call. A new plan is a draft with a goal, what it leaves out, what done means, and steps. Only your reply makes it final, and a worker cannot start on a task linked to a draft (`plan.enforce`: `block`, `remind` or `off`). Plans from before 0.22 are legacy and are left alone. The questions themselves are instructions to the model, not checks.
+
+Since 0.23, when work leaves a final plan it stops and asks one question with five answers: `add`, `goal`, `new`, `drop` or `defer`. It asks at a new step on a final plan, when the plan text no longer matches what you approved, for a task with no plan while a plan is final, and for files outside a task's scope at accept. The same kind is asked once between two of your messages. A small unrelated fix can use `crew task create --outside-plan "reason"`, which needs no reply and is counted. `crew plan drift-stats` shows the numbers. Work inside the allowed files that goes in the wrong direction is not caught, because no model judges meaning.
 
 ```
 crew plan new 0-14 --title "0.14 plan" --goal "What this release must achieve"
