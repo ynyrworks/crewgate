@@ -12,6 +12,7 @@ const store = require('../lib/core/store');
 const gates = require('../lib/core/gates');
 const plans = require('../lib/core/plans');
 const planReview = require('../lib/core/plan-review');
+const planSettings = require('../lib/hooks/plan-settings');
 const hookseen = require('../lib/core/hookseen');
 const accountLib = require('../lib/core/account');
 const { CrewError } = require('../lib/core/errors');
@@ -181,6 +182,18 @@ function lessonsOf(root, promoteAfterDays) {
   return out;
 }
 
+// The three plan controls now, and the latest recorded changes of them (newest first).
+function planSettingsOf(projectId, config) {
+  const now = {};
+  const p = config && config.plan && typeof config.plan === 'object' ? config.plan : {};
+  for (const k of planSettings.KEYS) now[k] = typeof p[k] === 'string' ? p[k] : null;
+  const changes = tailEvents(projectId, 1000)
+    .filter((e) => e.type === 'config.changed' && e.data && typeof e.data.key === 'string' && planSettings.KEYS.some((k) => e.data.key === 'plan.' + k))
+    .slice(-5).reverse()
+    .map((e) => ({ ts: e.ts, key: e.data.key, from: e.data.from, to: e.data.to, src: e.src }));
+  return { ...now, changes };
+}
+
 // Plans from <repo>/.crew/plans/*.md, read on every request (small, capped; see plans.js).
 function plansOf(root, projectId) {
   const states = plans.taskStates(projectId);
@@ -189,7 +202,7 @@ function plansOf(root, projectId) {
     const doc = plans.readCapped(root, slug);
     if (!doc) continue;
     const d = plans.derive(doc, states);
-    out.push({ slug, title: d.title, ...d.summary, pending: d.summary.proposed, updated: doc.mtime, truncated: d.truncated });
+    out.push({ slug, title: d.title, state: plans.stateOf(root, projectId, slug) || 'legacy', ...d.summary, pending: d.summary.proposed, updated: doc.mtime, truncated: d.truncated });
   }
   return out;
 }
@@ -207,7 +220,7 @@ function planOf(root, projectId, slug, opts = {}) {
     ...p, claim: null, evidence: [], refutation: null, better: null,
   }));
   return {
-    slug, ...plans.derive(doc, plans.taskStates(projectId)), updated: doc.mtime, show_text: show,
+    slug, state: plans.stateOf(root, projectId, slug) || 'legacy', ...plans.derive(doc, plans.taskStates(projectId)), updated: doc.mtime, show_text: show,
     proposals, rounds: planReview.roundsOf(projectId, slug),
   };
 }
@@ -470,6 +483,7 @@ function createApi(opts = {}) {
       handoffs: handoffsOf(p.id),
       lessons: lessonsOf(p.path, days),
       plans: plansOf(p.path, p.id),
+      plan_settings: planSettingsOf(p.id, cfg.config),
       gates: gates.history(p.id, 30),
       hook_seen: hookseen.read(p.id),
       show_text: showText(),
@@ -612,7 +626,9 @@ function createApi(opts = {}) {
     ['GET', /^\/api\/project\/([^/]+)\/config$/, (a) => configView(config.load(projectOr404(a[0]).path))],
     ['POST', /^\/api\/project\/([^/]+)\/config$/, (a, q, body, lang) => {
       const p = projectOr404(a[0]);
-      return saveWith(body, lang, (c) => config.save(p.path, c, { src: 'board' }), () => config.load(p.path));
+      // The Settings save already records config.changed; the plan controls are noted per key here and stored, so the next
+      // session start does not see the same edit again as a change.
+      return saveWith(body, lang, (c) => { const o = config.save(p.path, c, { src: 'board' }); planSettings.sync(p.id, config.load(p.path).config, 'board'); return o; }, () => config.load(p.path));
     }],
     // store writes
     ['POST', /^\/api\/project\/([^/]+)\/need$/, (a, q, b) => ({ ok: true, need: store.needAdd(projectOr404(a[0]).id, str(b, 'text'), SRC) })],

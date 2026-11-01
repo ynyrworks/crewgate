@@ -564,6 +564,27 @@
     return bits;
   }
 
+  // The plan's own state (draft, final, done, parked, legacy); a legacy plan gets a quiet label, a draft says it waits.
+  function planStateChip(state) {
+    if (state === 'legacy') return h('span', { class: 'muted', text: t('plan.pstate.legacy') });
+    if (!state) return null;
+    return h('span', null, h('span', { class: 'badge pst pst-' + state, text: t('plan.pstate.' + state) }),
+      state === 'draft' ? h('span', { class: 'muted', text: ' ' + t('plan.pstate.draftWait') }) : null);
+  }
+  // Lines for the plans card: plan.enforce when it is not block, and the recent changes to the three plan controls.
+  function planSettingsNote(ps) {
+    if (!ps) return null;
+    var kids = [];
+    if (ps.enforce && ps.enforce !== 'block') kids.push(h('p', { class: 'err', text: t('plan.enforceNot', { value: ps.enforce }) }));
+    if (ps.changes && ps.changes.length) {
+      kids.push(h('h3', { text: t('plan.changesTitle') }));
+      kids.push(h('ul', { class: 'list' }, ps.changes.map(function (c) {
+        return h('li', null, h('span', { class: 'muted', text: when(c.ts) + ' · ' }), t('plan.changeLine', { key: c.key, from: c.from, to: c.to }));
+      })));
+    }
+    return kids.length ? h('div', null, kids) : null;
+  }
+
   // Project page card: one row per plan with a progress bar.
   function plansCard(d) {
     var list = d.plans || [];
@@ -571,10 +592,12 @@
       var name = PM.planTitle(p, S.mask);
       return h('li', null,
         h('a', { href: '#/p/' + encodeURIComponent(d.project.id) + '/plan/' + encodeURIComponent(p.slug), text: name }),
-        h('div', { class: 'prow' }, planBar(p.pct, name), h('span', { class: 'pct', text: p.pct + '%' }), h('span', { class: 'muted', text: t('plan.steps', { done: p.done, total: p.total }) }), planCounts(p)));
+        h('div', { class: 'prow' }, planStateChip(p.state), planBar(p.pct, name), h('span', { class: 'pct', text: p.pct + '%' }), h('span', { class: 'muted', text: t('plan.steps', { done: p.done, total: p.total }) }), planCounts(p)));
     }))) : h('div', null, empty('plan.none'), h('pre', { class: 'cmd', text: 'crew plan new SLUG --title "..."' }));
     var waiting = PM.pendingTotal(list);
     if (waiting) body = h('div', null, h('p', { class: 'pending' }, h('span', { class: 'badge ps ps-proposed', text: plural('plan.pendingProject', waiting) })), body);
+    var note = planSettingsNote(d.plan_settings);
+    if (note) body = h('div', null, body, note);
     return card(t('project.plans'), body, '', list.length ? list.length : null);
   }
 
@@ -680,6 +703,7 @@
       h('h1', { text: title }));
     if (d.goal && !S.mask) root.appendChild(h('p', { class: 'muted', text: d.goal }));
     if (d.clarified && !S.mask) d.clarified.forEach((line) => root.appendChild(h('p', { class: 'muted', text: line })));
+    root.appendChild(h('p', null, planStateChip(d.state)));
     root.appendChild(h('div', { class: 'prow big' }, planBar(s.pct, title), h('span', { class: 'pct', text: s.pct + '%' }), h('span', { class: 'muted', text: t('plan.steps', { done: s.done, total: s.total }) }), planCounts(s)));
     if (d.truncated) root.appendChild(h('p', { class: 'err', text: t('plan.truncated') }));
     var props = proposalsCard(d);
