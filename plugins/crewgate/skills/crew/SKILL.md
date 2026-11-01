@@ -56,6 +56,9 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
    (`--proposed` for one you are unsure about; `crew plan accept <slug> <node>` once it is agreed).
    If a new step does not serve the goal, do not fold it in: tell the user, and let them drop it, move it to
    its own plan, or change the goal.
+   When a command stops for drift (a refused task or step), follow "When work drifts" in the plan skill
+   (`/crewgate:plan`); never edit the plan file to get past it. For files outside a task that has no plan,
+   `crew task accept <id> --widen "reason"` after the user agrees.
    **Medium or large work goes through `/crewgate:plan`** (the plan skill): it sizes the job, asks only what the
    code cannot answer, keeps each answer with `crew plan clarify <slug> --question "..." --answer "..."`, and gets
    the user's approval (`crew plan finalize`) before you dispatch. A task on a draft plan cannot start (`plan.enforce`).

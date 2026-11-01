@@ -427,13 +427,13 @@ function createApi(opts = {}) {
   // the latest steps of the task flow (15), newest first. Only a few named fields of each event, through publicData.
   // The scan is kept per project while the events file keeps its size and mtime, so the 4 s poll does not redo it.
   const activityCache = new Map();
-  function scanCached(projectId, q) {
+  function scanCached(projectId, q, slot = '') {
     let key = '';
     try { const st = fs.statSync(paths.eventsFile(projectId)); key = st.size + ':' + st.mtimeMs; } catch { /* no events yet */ }
-    const hit = activityCache.get(projectId);
+    const hit = activityCache.get(projectId + slot);
     if (hit && hit.key === key) return hit.all;
     const all = scanBack(projectId, q, ACTIVITY_SCAN_BYTES);
-    activityCache.set(projectId, { key, all });
+    activityCache.set(projectId + slot, { key, all });
     return all;
   }
 
@@ -456,6 +456,25 @@ function createApi(opts = {}) {
     const byTime = (a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0);
     const pick = (types, n) => all.filter((e) => types.includes(e.type)).sort(byTime).slice(0, n).map(shape);
     return [...pick(merges, 10), ...pick(steps, 15)].sort(byTime);
+  }
+
+  // Drift on the project page: the last 10 drift events and how often --outside-plan was used (counted up to 1000).
+  const DRIFT_TYPES = ['plan.drift_asked', 'plan.drift_answered', 'plan.drift_unasked', 'plan.drift_denied', 'task.outside_plan', 'task.scope_widened', 'task.scope_warned'];
+  function driftOf(projectId) {
+    const q = {};
+    for (const ty of DRIFT_TYPES) q[ty] = 10;
+    q['task.outside_plan'] = 1000;
+    const all = scanCached(projectId, q, ':drift');
+    const byTime = (a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0);
+    const pickStr = (v, n) => (typeof v === 'string' && v ? v.slice(0, n) : undefined);
+    const recent = all.slice().sort(byTime).slice(0, 10).map((e) => {
+      const d = e.data && typeof e.data === 'object' ? e.data : {};
+      const row = { ts: e.ts, type: e.type, task: e.task || null, slug: pickStr(d.slug, 60), kind: pickStr(d.kind, 40), answer: pickStr(d.answer, 20), reason: pickStr(d.reason, 300) };
+      if (Number.isInteger(d.count)) row.count = d.count;
+      for (const k of Object.keys(row)) if (row[k] === undefined) delete row[k];
+      return row;
+    });
+    return { recent, outside_plan: all.filter((e) => e.type === 'task.outside_plan').length };
   }
 
   function projectDetail({ id }) {
@@ -484,6 +503,7 @@ function createApi(opts = {}) {
       lessons: lessonsOf(p.path, days),
       plans: plansOf(p.path, p.id),
       plan_settings: planSettingsOf(p.id, cfg.config),
+      plan_drift: driftOf(p.id),
       gates: gates.history(p.id, 30),
       hook_seen: hookseen.read(p.id),
       show_text: showText(),
