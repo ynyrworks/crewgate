@@ -59,8 +59,9 @@ const stamp = (out, key) => Number(new RegExp(`${key} (\\d+)`).exec(out)[1]);
 test('two callers run one after the other, and the waiter says who holds the slot', async () => {
   reset();
   const a = startSlot(['--', ...SLEEP_CMD(1200, 'A')]);
-  assert.ok(await until(() => fs.existsSync(SLOT0)), 'A took the slot');
-  const held = JSON.parse(fs.readFileSync(SLOT0, 'utf8'));
+  // the file exists a moment before its content is written, so wait until it parses
+  let held;
+  assert.ok(await until(() => { try { held = JSON.parse(fs.readFileSync(SLOT0, 'utf8')); return true; } catch { return false; } }), 'A took the slot');
   assert.deepEqual(Object.keys(held).sort(), ['pid', 'started']);   // no command line
   assert.equal(held.pid, a.pid);
   const b = startSlot(['--', ...SLEEP_CMD(100, 'B')]);
