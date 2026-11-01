@@ -53,7 +53,7 @@ Open problems in the latest release, and what has not been checked.
 Decided, not started or not finished.
 
 - **0.23.** One question with four answers when work drifts: add to this plan, change the goal, new plan, drop or defer. It fires only where code can tell: a file outside the task's scope at accept, a new step on a final plan, an unlinked task while a final plan is open, a changed goal.
-- **0.24.** A shorter README, a diagram from the user's side, and `--help` groups.
+- **0.24.** `--help` groups, and whatever the first real plans under 0.23 show. The README and its diagram came ahead, in 0.22.
 - **HD Office.** The look stays frozen as v0.1.0 for now. Still to do before it can be the default: warm tone, foreground, and performance on integrated graphics.
 - **Machine load in real use.** Measure closing one session while the app stays open, and closing a terminal that runs an interactive `claude`. Then decide whether cleanup should stay at all.
 - **macOS and Linux.** Probe `StartTransientUnit` through `busctl --user` with an existing pid and a real quota, and measure `taskpolicy -b` on a saturated Mac. Build only what those show.

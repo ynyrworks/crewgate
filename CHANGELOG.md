@@ -11,6 +11,10 @@ Crewgate's purpose is now: delegate work to AI subagents, and be sure it does wh
 - A worker cannot start on a task linked to a draft plan: `crew task run`, an Agent dispatch and a `SendMessage` that wakes a worker are all denied.
 - Three settings, also on the board's Settings page: `plan.interview`, `plan.enforce`, `plan.review`. The project page shows each plan's state, and a change to these settings is recorded and shown, even when made by hand.
 
+### Changed
+
+- A new README: short, from the user's side, with a new Mermaid diagram. The detail moved to [docs/GUIDE.md](docs/GUIDE.md). The purpose in [docs/DESIGN.md](docs/DESIGN.md) widened, and the 3D non-goal now allows optional add-ons only.
+
 ### Upgrade
 
 - Plans you already have become legacy. They keep working, nothing blocks them and their files do not change. `crew plan adopt <slug>` brings one under the new flow.
