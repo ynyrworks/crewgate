@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.21.0 — 2026-11-01
+
+### Fixed
+
+- Session cleanup no longer stops anything by default. `limits.session_cleanup` defaults to `off`: at exit it lists and records what is left (`found`, `kept`, `would_stop`). Only an explicit `on` stops processes. Cleanup is proven with stand-ins only, and every real run so far found nothing to stop.
+- `crew gate answer <id> yes` is refused when a session is known and no user message came after the ask, with a `gate.refused` event. Before, the yes was stored and marked as not from a user turn, and the push it was for still ran. A `no` is always accepted.
+- Slot test: it read the slot file before its content was written, and failed once on macOS CI. Only the test changed.
+
+### New
+
+- Briefs have a sixth section, Machine impact: what runs, how many processes, for how long. Review has a `machine-impact` category.
+- A worker dispatch, or a `SendMessage` that wakes a stopped worker, is denied when the whole machine is above `limits.dispatch_max_cpu` (default 85, 100 turns it off). It takes a 200 ms sample, and a second one when the first is over, and records `dispatch.load`.
+- A worker's leftovers are found when it stops, recorded as `task.leftovers` and shown as a warning in `crew task show`. It reports only and stops nothing.
+- `crew slot run`: one machine-wide slot for full test runs and other heavy commands, shared across worktrees and projects. A dead holder frees its slot, and after a maximum wait (600 s by default) the command runs anyway. This repository's `npm test` uses it.
+- `crew release check` reads CI through `gh` and exits 0 only when every job of the commit succeeded. It blocks nothing.
+- `crew review filter` prints the findings it dropped, and `crew review show` lists the reasons.
+- Windows CI watches for windows opened by a session start, with a deliberate window as a control.
+- `posix-load.test.js` reports what macOS and Linux can do about load in the CI log. Results and a decision per option are in [docs/DESIGN.md](docs/DESIGN.md). Nothing new is built for those platforms in this version.
+- A postmortem of the machine-load incident ([docs/postmortems/2026-10-31-machine-load.md](docs/postmortems/2026-10-31-machine-load.md)) and an evaluation of running workers off the machine ([docs/research/worker-isolation.md](docs/research/worker-isolation.md)).
+
+### Changed
+
+- Agent templates, `REVIEW.md` and `crew.json` changed. `crew doctor` flags old project copies; run `crew init --force` in each project to update them.
+
+### Known issues
+
+- Why six processes survived the desktop-app quit in the incident is not known. It has not been reproduced.
+- macOS and Linux have no CPU cap and no cleanup. The probe measured no loaded machine and no user's desktop.
+- The causes of two earlier Windows CI failures are still not established: the holder test and `hooks-stability` "keeps quiet about the merge". Both passed on every job of this version's candidate runs.
+
 ## 0.20.1 — 2026-11-01
 
 ### Fixed
