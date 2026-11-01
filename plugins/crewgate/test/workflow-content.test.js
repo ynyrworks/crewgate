@@ -71,3 +71,27 @@ test('every CLI sub-command named in the skill references exists in the command 
     }
   }
 });
+
+test('plan skill: exists, under its limit, trigger phrases and commands', () => {
+  const text = read('skills', 'plan', 'SKILL.md');
+  const fm = frontmatter(text);
+  assert.equal(fm.name, 'plan');
+  assert.ok(text.split('\n').length < 120);
+  const trig = `${fm.description} ${fm.when_to_use}`;
+  for (const p of ['write a plan', 'plan this feature', 'help me think through', '寫一個 X 的計劃', '規劃這個功能', '幫我想清楚']) {
+    assert.ok(trig.includes(p), p);
+  }
+  assert.ok(text.includes('node "${CLAUDE_PLUGIN_ROOT}/bin/crew.js"'));
+  for (const c of ['plan new', 'plan part', 'plan add', 'plan clarify', 'plan finalize', '--gate', 'plan adopt', '--by assumed', 'plan.interview', 'plan.review', 'plan.enforce', 'Not doing'.toLowerCase()]) {
+    assert.ok(text.toLowerCase().includes(c.toLowerCase()), c);
+  }
+  for (const c of ['(assumed)', '(user)', 'Never change it without their answer', 'No CLI command does this', '`ask`', '`off`', 'ask the user']) {
+    assert.ok(text.replace(/\s+/g, ' ').toLowerCase().includes(c.toLowerCase()), c);
+  }
+});
+
+test('crew skill points at the plan skill and commands.md lists the plan state commands', () => {
+  assert.ok(read('skills', 'crew', 'SKILL.md').includes('/crewgate:plan'));
+  const cmds = read('skills', 'crew', 'references', 'commands.md');
+  for (const c of ['plan finalize', 'plan part', 'plan close', 'plan reopen', 'plan adopt']) assert.ok(cmds.includes(`crew ${c}`), c);
+});

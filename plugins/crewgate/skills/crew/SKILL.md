@@ -56,15 +56,12 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
    (`--proposed` for one you are unsure about; `crew plan accept <slug> <node>` once it is agreed).
    If a new step does not serve the goal, do not fold it in: tell the user, and let them drop it, move it to
    its own plan, or change the goal.
-   **Clarify before a non-trivial plan** (about 3 steps or more), and skip this for a smaller one or a plan
-   the user dictated step by step. Ask only what would change the plan and what the code cannot answer: read
-   the code first. Ask one question at a time and give your recommended answer. Once the plan file exists, keep each
-   answer with `crew plan clarify <slug> --question "..." --answer "..."`. It goes under a `## Clarified` heading
-   at the end of the file, where `crew plan show`, the plan reviewer and a later session can read it.
-   Clarify again only when the goal, scope, a constraint or an earlier answer changes (the `plan.large_growth`
-   notice is one such signal), and only about what that change affects. If nobody can answer, such as in an
-   unattended run, do not wait: record your assumption with `--by assumed` and carry on; the next time the
-   user is present, confirm those lines.
+   **Medium or large work goes through `/crewgate:plan`** (the plan skill): it sizes the job, asks only what the
+   code cannot answer, keeps each answer with `crew plan clarify <slug> --question "..." --answer "..."`, and gets
+   the user's approval (`crew plan finalize`) before you dispatch. A task on a draft plan cannot start (`plan.enforce`).
+   A small fix needs no plan. Clarify again only when the goal, scope, a constraint or an earlier answer changes
+   (the `plan.large_growth` notice is one signal). If nobody can answer (an unattended run), record the assumption
+   with `--by assumed`, carry on, and confirm those lines when the user is back.
    For a non-trivial plan (about 3 steps or more) run a **plan review** before you dispatch anything:
    `crew plan review run <slug>`, then the reviewer, filter, refuter and finalize steps in
    `references/review-pipeline.md` ("Plan review"). What survives is proposed as `[?]` nodes; accept or reject each
@@ -241,6 +238,7 @@ The same plugin works when the orchestrator is a Codex session. What differs:
 
 ## References (load on demand)
 
+- `/crewgate:plan` (the plan skill, `skills/plan/SKILL.md`): interview, plan and approval for medium and large work.
 - `references/brief-template.md`: the six-section brief, with an example and the dispatch prompt.
 - `references/review-pipeline.md`: the three stages, finding schema, filter rules, how to dismiss.
 - `references/commands.md`: every `crew` command in one page, task states and the files they touch.
