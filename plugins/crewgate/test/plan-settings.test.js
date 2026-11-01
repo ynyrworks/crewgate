@@ -10,7 +10,7 @@ const H = require('./hooks-helpers');
 const { crew } = require('./helpers');
 const paths = require('../lib/core/paths');
 const events = require('../lib/core/events');
-const { plansOf, planOf } = require('../board/api');
+const { plansOf, planOf, createApi } =require('../board/api');
 const ps = require('../lib/hooks/plan-settings');
 
 const storedFile = (f) => path.join(paths.projectDir(f.pid), 'plan-settings.json');
@@ -63,6 +63,41 @@ test('plan settings: a save from the board is recorded per key by the board and 
   const ev = changes(f);
   assert.equal(ev.length, 1);
   assert.equal(ev[0].src, 'board');
+});
+
+test('plan settings: a failed append keeps the old stored value, so the change is recorded at the next start', () => {
+  const f = H.fixture();
+  H.start(f);
+  setPlan(f, { enforce: 'off', review: 'large' });
+  const real = events.append;
+  events.append = () => { throw new Error('disk full'); };
+  try {
+    assert.deepEqual(ps.sync(f.pid, { plan: { interview: 'on', enforce: 'off', review: 'large' } }, 'session-start'), []);
+  } finally { events.append = real; }
+  assert.equal(JSON.parse(fs.readFileSync(storedFile(f), 'utf8')).enforce, 'block');
+  assert.equal(changes(f).length, 0);
+  H.start(f);
+  const ev = changes(f);
+  assert.equal(ev.length, 1);
+  assert.deepEqual({ key: ev[0].data.key, from: ev[0].data.from, to: ev[0].data.to }, { key: 'plan.enforce', from: 'block', to: 'off' });
+});
+
+test('plan settings: the project config POST route records the plan change once with src board; the next start adds nothing', () => {
+  const f = H.fixture();
+  H.start(f);
+  const api = createApi({});
+  const r = api.handle({ method: 'POST', path: `/api/project/${f.pid}/config`, body: { config: { plan: { interview: 'on', enforce: 'off', review: 'large' } } } });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  H.start(f);
+  const ev = changes(f);
+  assert.equal(ev.length, 1);
+  assert.equal(ev[0].src, 'board');
+  assert.equal(ev[0].data.key, 'plan.enforce');
+  const d = api.handle({ method: 'GET', path: `/api/project/${f.pid}` });
+  assert.equal(d.status, 200);
+  const ch = d.data.plan_settings.changes;
+  assert.equal(ch.length, 1);
+  assert.deepEqual({ key: ch[0].key, from: ch[0].from, to: ch[0].to, src: ch[0].src }, { key: 'plan.enforce', from: 'block', to: 'off', src: 'board' });
 });
 
 test('plan states: the API returns draft, final, done, parked and legacy for each plan and for the plan page', () => {

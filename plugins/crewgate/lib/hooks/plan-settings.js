@@ -38,16 +38,16 @@ function sync(pid, cfg, src) {
     const old = stored(pid);
     const changed = old ? KEYS.filter((k) => old[k] !== now[k]) : [];
     if (old && !changed.length) return [];
+    // Append first and store only when every append worked: a failed append is seen again at the next start (a rare
+    // duplicate is better than a lost record).
+    for (const k of changed) {
+      events.append(pid, {
+        type: 'config.changed', src, data: { file: '.claude/crew.json', key: `plan.${k}`, from: old[k], to: now[k] },
+        key: `plan-settings:${k}:${Date.now()}:${Math.random()}`,
+      });
+    }
     fs.mkdirSync(paths.projectDir(pid), { recursive: true });
     json.save(file(pid), now);
-    for (const k of changed) {
-      try {
-        events.append(pid, {
-          type: 'config.changed', src, data: { file: '.claude/crew.json', key: `plan.${k}`, from: old[k], to: now[k] },
-          key: `plan-settings:${k}:${Date.now()}:${Math.random()}`,
-        });
-      } catch { /* the stored value is already updated; the record is best effort */ }
-    }
     return changed;
   } catch { return []; }
 }
