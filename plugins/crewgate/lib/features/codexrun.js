@@ -18,6 +18,7 @@ const execx = require('../core/exec');
 const { CrewError } = require('../core/errors');
 const { clean } = require('../core/redact');
 const common = require('./common');
+const plans = require('../core/plans');
 const init = require('./init');
 
 const DEFAULT_TIMEOUT_S = 1800;
@@ -177,6 +178,19 @@ async function runCodex(ctx, proj, cfg, task, a) {
   const file = execx.resolveCommand(eng.command, { cwd: root });
   if (!file) throw new CrewError('wf.review.engineNotFound', { name, command: eng.command });
   if (!['created', 'dispatched'].includes(task.state)) throw new CrewError('wf.task.run.badState', { id: task.id, state: task.state });
+  // A task linked to a draft plan does not start (plan.enforce). A read failure lets it through and is recorded.
+  try {
+    const mode = cfg.plan.enforce;
+    const slug = mode === 'off' ? null : plans.draftPlanOfTask(a.workTree || root, proj.id, task.id);
+    if (slug) {
+      const type = mode === 'remind' ? 'plan.dispatch_unfinalized' : 'plan.dispatch_denied';
+      events.append(proj.id, { type, src: 'cli', task: task.id, data: { slug, task: task.id }, key: `${task.id}:${type}:${Date.now()}` });
+      if (mode !== 'remind') { ctx.err(ctx.t('wf.task.run.planDraft', { id: task.id, slug })); return 1; }
+      ctx.err(ctx.t('wf.task.run.planDraftWarn', { id: task.id, slug }));
+    }
+  } catch (e) {
+    try { events.append(proj.id, { type: 'plan.check_failed', src: 'cli', task: task.id, data: { task: task.id, reason: clean(e && e.message, 120) }, key: `${task.id}:plan.check_failed:${Date.now()}` }); } catch { /* ignore */ }
+  }
   const lang = cfg.language === 'zh-TW' ? 'zh-TW' : 'en';
   const dir = paths.taskDir(proj.id, task.id);
   const model = a.model || '';

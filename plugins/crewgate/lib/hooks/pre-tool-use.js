@@ -18,6 +18,7 @@ const { SHELL_TOOLS, LIMIT_WORDS } = require('./prefilter');
 const limits = require('./agentlimits');
 const leftovers = require('./leftovers');
 const load = require('./machineload');
+const plans = require('../core/plans');
 
 const MAX_READ_BYTES = 20 * 1024 * 1024;
 
@@ -32,6 +33,25 @@ function denyLoad(h, id, lim) {
     });
   } catch { /* ignore */ }
   return C.deny(h.t('deny.load', { id, pct: hit.pct, max: lim.dispatch_max_cpu }));
+}
+
+// A worker run for a task linked to a draft plan (plan.enforce). -> { deny } | { line } | null. A failure to read the plan
+// or its state lets the dispatch through and records plan.check_failed.
+function draftPlan(h, id) {
+  try {
+    const mode = h.cfg().plan.enforce;
+    if (mode === 'off') return null;
+    const slug = plans.draftPlanOfTask(h.workTree, h.pid, id);
+    if (!slug) return null;
+    const vars = { id, slug, cmd: C.crewCmd() };
+    const rec = (type) => { try { events.append(h.pid, { type, src: 'hook', session: h.sid, task: id, data: { slug, task: id }, key: `${id}:${type}:${Date.now()}` }); } catch { /* ignore */ } };
+    if (mode === 'remind') { rec('plan.dispatch_unfinalized'); return { line: h.t('warn.planDraft', vars) }; }
+    rec('plan.dispatch_denied');
+    return { deny: C.deny(h.t('deny.planDraft', vars)) };
+  } catch (e) {
+    try { events.append(h.pid, { type: 'plan.check_failed', src: 'hook', session: h.sid, task: id, data: { task: id, reason: C.snippet(e && e.message, 120) }, key: `${id}:plan.check_failed:${Date.now()}` }); } catch { /* ignore */ }
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------- Agent / Task
@@ -59,6 +79,7 @@ function onAgent(payload) {
   // Over the limit: deny before anything is recorded, so the task stays as it was and can be dispatched later.
   // Counted: workers that are really running (sess.running), this task excluded so a re-dispatch is not counted twice.
   let over = null;
+  let draft = null;
   if (worker) {
     const lim = h.cfg().limits;
     const others = sess.running(h.pid, id);
@@ -68,6 +89,8 @@ function onAgent(payload) {
     }
     const busy = denyLoad(h, id, lim);
     if (busy) return busy;
+    draft = draftPlan(h, id);
+    if (draft && draft.deny) return draft.deny;
   }
 
   try {
@@ -90,7 +113,8 @@ function onAgent(payload) {
   sess.remember(h.pid, key, { task: id, type, bg, worker, ts: Date.now(), agent: null, stopped: false, session: h.sid || null, ...(snap ? { snap } : {}), ...(eng.engine ? { codex: true } : {}) });
   sess.touch(h, (s) => sess.addTask(s, id));
 
-  if (over) return C.withContext('PreToolUse', h.t('warn.parallel', over));
+  const lines = [over ? h.t('warn.parallel', over) : '', draft && draft.line ? draft.line : ''].filter(Boolean);
+  if (lines.length) return C.withContext('PreToolUse', lines.join(' '));
   return null;
 }
 
@@ -115,9 +139,11 @@ function onSend(payload) {
   }
   const busy = denyLoad(h, rec.task, lim);
   if (busy) return busy;
+  const draft = draftPlan(h, rec.task);
+  if (draft && draft.deny) return draft.deny;
   const snap = leftovers.snapshot({}, leftovers.budgetLeft('pre-tool-use'));
   sess.remember(h.pid, rec.id, { ...rec, id: undefined, stopped: false, stopped_at: undefined, resumed: true, ts: Date.now(), session: h.sid || null, snap: snap || undefined });
-  return null;
+  return draft && draft.line ? C.withContext('PreToolUse', draft.line) : null;
 }
 
 // ---------------------------------------------------------------- Edit / Write

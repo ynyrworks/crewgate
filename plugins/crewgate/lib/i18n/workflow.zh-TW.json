@@ -57,6 +57,8 @@
   "wf.task.cancelled": "任務 {id} 已取消。",
   "wf.task.run.claude": "task run 用來啟動外部引擎（例如 codex）；Claude worker 請用 Agent 工具派出",
   "wf.task.run.badState": "任務 {id} 目前是 {state}；只有 created 或 dispatched 的任務可以執行",
+  "wf.task.run.planDraft": "任務 {id} 屬於計畫 {slug}，而該計畫仍是草稿（plan.enforce=block），所以沒有啟動 worker。必須先由使用者核准計畫：執行 crew plan finalize {slug}，使用者在對話中回覆後再執行 crew plan finalize {slug} --gate <gate id>。",
+  "wf.task.run.planDraftWarn": "警告：任務 {id} 屬於計畫 {slug}，而該計畫仍是草稿（plan.enforce=remind）。請讓使用者核准：crew plan finalize {slug}。",
   "wf.task.run.insideRepo": "worktree {path} 位於儲存庫內部；請改用同層的資料夾",
   "wf.task.run.worktreeBusy": "資料夾 {path} 已存在、不是空的，也不是 git worktree",
   "wf.task.run.worktreeFailed": "無法建立 worktree：{detail}",
