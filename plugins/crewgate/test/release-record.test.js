@@ -115,7 +115,8 @@ function fixture() {
     `- [?] fix the thing later <!-- id:n2 from_task:${TID.a} finding:f1 review_round:1 action:add origin:review -->`, '',
     '## Clarified',
     '- Q: Which port? A: 8080 (user)',
-    '- Q: Which db? A: sqlite (assumed)', '',
+    '- Q: Which db? A: sqlite (assumed)',
+    '- Q: Which cache? A: none (decision)', '',
   ].join('\n'));
   u.writeFile(repo, '.crew/plans/other.md', '# Other plan\nNot linked.\n\n- [ ] nothing\n');
   return { repo, pid, mergeA, mergeG };
@@ -196,6 +197,7 @@ test('plans: linked plans only, with completion, clarified answers and (assumed)
   assert.match(md, /- Completion: 1\/1 \(100%\)/);
   assert.match(md, /Q: Which port\? A: 8080\n/);
   assert.match(md, /Q: Which db\? A: sqlite \*\*\(assumed\)\*\* - not confirmed by the user/);
+  assert.match(md, /Q: Which cache\? A: none \*\*\(decision\)\*\* - chosen by the model, not confirmed by the user/);
   assert.ok(!md.includes('Other plan'));
   assert.match(md, /Follow-up in plan demo, node n2 \[proposed\]: fix the thing later/);
   record(repo, '1.1.0', '--plan', 'other');

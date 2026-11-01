@@ -160,7 +160,7 @@ function describeTask(projectId, entry, evs, allPlans) {
 
 // ---------------------------------------------------------------- plans
 function parseClarified(line) {
-  const m = /^Q:\s*([\s\S]*?)\s+A:\s*([\s\S]*?)\s*\((user|assumed)\)\s*$/.exec(line);
+  const m = /^Q:\s*([\s\S]*?)\s+A:\s*([\s\S]*?)\s*\((user|assumed|decision)\)\s*$/.exec(line);
   return m ? { question: m[1], answer: m[2], by: m[3] } : { question: '', answer: line, by: '' };
 }
 
@@ -255,7 +255,7 @@ function renderPlan(L, tr, p) {
   if (p.clarified.length) L.push(`- ${tr('release.clarified')}:`);
   for (const c of p.clarified) {
     const text = c.question ? `Q: ${one(c.question, 400)} A: ${one(c.answer, 400)}` : one(c.answer, 800);
-    L.push(`  - ${text}${c.by === 'assumed' ? ` **(assumed)** - ${tr('release.assumed')}` : ''}`);
+    L.push(`  - ${text}${c.by === 'assumed' || c.by === 'decision' ? ` **(${c.by})** - ${tr('release.' + c.by)}` : ''}`);
   }
 }
 

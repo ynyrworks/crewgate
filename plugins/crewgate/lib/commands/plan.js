@@ -24,11 +24,11 @@ const SPECS = {
   },
   clarify: {
     positionals: [{ name: 'slug' }],
-    options: { '--question': { dest: 'question' }, '--answer': { dest: 'answer' }, '--by': { dest: 'by', choices: ['user', 'assumed'], default: 'user' } },
+    options: { '--question': { dest: 'question' }, '--answer': { dest: 'answer' }, '--by': { dest: 'by', choices: ['user', 'assumed', 'decision'], default: 'user' } },
   },
   link: { positionals: [{ name: 'slug' }, { name: 'node' }, { name: 'task' }], options: {} },
   set: { positionals: [{ name: 'slug' }, { name: 'node' }, { name: 'action', choices: ['open', 'done', 'dropped', 'accept'] }], options: {} },
-  part: { positionals: [{ name: 'slug' }, { name: 'part', choices: ['not-doing', 'done-when'] }, { name: 'text' }], options: {} },
+  part: { positionals: [{ name: 'slug' }, { name: 'part', choices: ['not-doing', 'done-when'] }, { name: 'text' }], options: { '--add': { dest: 'add', flag: true } } },
   finalize: { positionals: [{ name: 'slug' }], options: { '--gate': { dest: 'gate' } } },
   close: { positionals: [{ name: 'slug' }, { name: 'to', choices: ['done', 'parked'] }], options: { '--gate': { dest: 'gate' } } },
   reopen: { positionals: [{ name: 'slug' }], options: {} },
@@ -229,7 +229,10 @@ function run(argv, ctx) {
   } else if (sub === 'new') {
     if (!a.title) throw new UsageError('args.missing', { name: '--title' });
     const r = plans.create(root, proj.id, a.slug, { title: a.title, goal: a.goal, notDoing: a.notDoing, doneWhen: a.doneWhen });
-    ctx.emit(r, ctx.t('plan.created', { slug: r.slug, file: r.file }));
+    const cfg = ctx.config().config.plan || {};
+    const L = [ctx.t('plan.created', { slug: r.slug, file: r.file }), ctx.t('plan.settingsNow', { interview: cfg.interview, review: cfg.review, enforce: cfg.enforce })];
+    if (cfg.review === 'ask') L.push(ctx.t('plan.reviewAsk'));
+    ctx.emit(r, L);
     if (!a.goal || !a.goal.trim()) ctx.err(ctx.t('plan.noGoal'));
   } else if (sub === 'list') {
     const rows = [];
@@ -270,8 +273,8 @@ function run(argv, ctx) {
     const r = plans.clarify(root, proj.id, a.slug, { question: a.question, answer: a.answer, by: a.by });
     ctx.emit(r, ctx.t('plan.clarified', { slug: a.slug }));
   } else if (sub === 'part') {
-    const r = plans.setPart(root, proj.id, a.slug, a.part, a.text);
-    ctx.emit(r, ctx.t('plan.partSet', { slug: a.slug, part: a.part }));
+    const r = plans.setPart(root, proj.id, a.slug, a.part, a.text, { add: !!a.add });
+    ctx.emit(r, [ctx.t(a.add ? 'plan.partAdded' : 'plan.partSet', { slug: a.slug, part: a.part }), ...(r.replaced.length ? [ctx.t('plan.partReplaced', { text: r.replaced.join(' | ') })] : [])]);
   } else if (sub === 'finalize' || sub === 'close') {
     askOrAnswer(sub, a, proj, root, ctx);
   } else if (sub === 'reopen') {
@@ -317,11 +320,11 @@ module.exports = {
       '  crew plan new SLUG --title "..." [--goal "..."] [--not-doing "..."] [--done-when "..."]   (starts as a draft)',
       '  crew plan list [--json]',
       '  crew plan show SLUG [--json]',
-      '  crew plan part SLUG not-doing|done-when "text"   (sets the ## Not doing or ## Done when section before the steps)',
+      '  crew plan part SLUG not-doing|done-when "text" [--add]   (sets the ## Not doing or ## Done when section before the steps; line breaks stay as lines; --add appends)',
       '  crew plan finalize SLUG   (asks the user; show them the plan, end your turn)   |   crew plan finalize SLUG --gate ID   (after their reply)',
       '  crew plan close SLUG done|parked [--gate ID]   |   crew plan reopen SLUG   |   crew plan adopt SLUG   (a legacy plan becomes a draft)',
       '  crew plan add SLUG "text" [--under NODE] [--task TASK] [--origin plan|user|review|refute|implementation|send-back] [--proposed]',
-      '  crew plan clarify SLUG --question "..." --answer "..." [--by user|assumed]   (keeps a settled question under ## Clarified)',
+      '  crew plan clarify SLUG --question "..." --answer "..." [--by user|assumed|decision]   (keeps a settled question under ## Clarified)',
       '  crew plan drift SLUG --kind new-step|changed-text|unlinked-task|out-of-scope [--detail "..."]   (asks the user how to treat work that left a final plan; end your turn)',
       '  crew plan drift SLUG --gate ID --answer add|goal|new|drop|defer --text "..."   (after their reply)   |   crew plan drift-stats [SLUG] [--json]',
       '  crew plan link SLUG NODE TASK',
@@ -339,11 +342,11 @@ module.exports = {
       '  crew plan new SLUG --title "..." [--goal "..."] [--not-doing "..."] [--done-when "..."]   （一開始是草稿）',
       '  crew plan list [--json]',
       '  crew plan show SLUG [--json]',
-      '  crew plan part SLUG not-doing|done-when "文字"   （設定步驟之前的 ## Not doing 或 ## Done when 區段）',
+      '  crew plan part SLUG not-doing|done-when "文字" [--add]   （設定步驟之前的 ## Not doing 或 ## Done when 區段；換行保留成多行；--add 是附加）',
       '  crew plan finalize SLUG   （詢問使用者；把計畫給他看，結束這一輪）   |   crew plan finalize SLUG --gate ID   （他回覆之後）',
       '  crew plan close SLUG done|parked [--gate ID]   |   crew plan reopen SLUG   |   crew plan adopt SLUG   （舊計畫變成草稿）',
       '  crew plan add SLUG "文字" [--under NODE] [--task TASK] [--origin plan|user|review|refute|implementation|send-back] [--proposed]',
-      '  crew plan clarify SLUG --question "..." --answer "..." [--by user|assumed]   （把釐清的問題記在 ## Clarified 下）',
+      '  crew plan clarify SLUG --question "..." --answer "..." [--by user|assumed|decision]   （把釐清的問題記在 ## Clarified 下）',
       '  crew plan drift SLUG --kind new-step|changed-text|unlinked-task|out-of-scope [--detail "..."]   （工作偏離已定案的計畫時詢問使用者；結束這一輪）',
       '  crew plan drift SLUG --gate ID --answer add|goal|new|drop|defer --text "..."   （他回覆之後）   |   crew plan drift-stats [SLUG] [--json]',
       '  crew plan link SLUG NODE TASK',
