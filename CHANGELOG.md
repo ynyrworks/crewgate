@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.22.0 — 2026-11-01
+
+Crewgate's purpose is now: delegate work to AI subagents, and be sure it does what you want.
+
+### New
+
+- `/crewgate:plan`: finds out what you want before work starts. It sizes the job first: a small fix gets no questions and no plan, medium work gets at most 5 questions, large work gets as many rounds as the decisions need. Each question comes with a recommended answer. Plain words reach it, such as "write a plan for X" or 「幫我寫一個 X 的計劃」, though that is the model's call and not a guarantee.
+- Plans have states: draft, final, done, parked. A new plan is a draft and needs a goal, what it leaves out, what done means, and steps. Only your reply can make it final, and an edit after you were asked needs a new reply.
+- A worker cannot start on a task linked to a draft plan: `crew task run`, an Agent dispatch and a `SendMessage` that wakes a worker are all denied.
+- Three settings, also on the board's Settings page: `plan.interview`, `plan.enforce`, `plan.review`. The project page shows each plan's state, and a change to these settings is recorded and shown, even when made by hand.
+
+### Upgrade
+
+- Plans you already have become legacy. They keep working, nothing blocks them and their files do not change. `crew plan adopt <slug>` brings one under the new flow.
+- For automation with no one to reply, set `plan.enforce` to `remind`, because a draft cannot become final there.
+- Run `crew init --force` in each project to refresh the agent copies. It keeps your values, and it writes the new settings into `.claude/crew.json` at their defaults, so a later change of default will not reach that project.
+
+### Known issues
+
+- If the model never creates a plan and dispatches directly, the draft check does not apply. Drift questions arrive in 0.23.
+- Nothing checks whether the questions were good, or whether the plan caught what you wanted.
+- The model can edit the plan file and config file. A hand-made `final` is overruled by a record kept outside the repo, on the machine that made the plan. On another machine the file decides.
+
 ## 0.21.2 — 2026-11-01
 
 ### Fixed

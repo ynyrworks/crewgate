@@ -193,7 +193,7 @@ grow, but visibly: every node records where it came from (`plan`, `user`, `revie
 
 For a plan of about three steps or more, the orchestrator is told to clarify first: it asks only what would change the
 plan and what the code cannot answer, and keeps the answers in the plan file. It asks again only when the goal, scope, a
-constraint or an earlier answer changes. These are instructions to the model, not checks that crewgate enforces.
+constraint or an earlier answer changes. Since 0.22 this is `/crewgate:plan`, and plain words such as "write a plan for X" reach it, usually: that is the model's call. A new plan is a draft with a goal, what it leaves out, what done means, and steps. Only your reply makes it final, and a worker cannot start on a task linked to a draft (`plan.enforce`: `block`, `remind` or `off`). Plans from before 0.22 are legacy and are left alone. The questions themselves are instructions to the model, not checks.
 
 ```
 crew plan new 0-14 --title "0.14 plan" --goal "What this release must achieve"

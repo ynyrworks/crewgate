@@ -11,6 +11,8 @@ This document is the source of truth for the first release. Every contributor
 
 ## 1. Goals and non-goals
 
+Purpose: **delegate work to AI subagents, and be sure it does what you want.** Delegation is still the core. In 2026-11 the purpose widened on purpose. The first release fixed the failures of free-text delegation rules, listed below, and never asked whether the work was what the user wanted. Plans recorded work but did not catch drift: in real use, 33 of 38 steps came from the original plan, and no drift event existed. So crewgate now finds out what the user wants before work starts, and asks when work drifts. It still does not serve work without delegation, and the reader is not assumed to know multi-agent work. Not harming the user's machine is a floor, not a selling point.
+
 Goals
 - A reusable, public template: nothing project- or company-specific ships in the repo.
   Everything a project needs to change lives in its own config and markdown files.
@@ -28,7 +30,7 @@ Goals
 Non-goals (first release)
 - No LLM calls from hooks or the board. No network access, with one exception: the board's update check
   (section 10), which is on by default and can be turned off.
-- No 3D or game-like board. The live-session list is the default and the only view that must work everywhere; the pixel-art Office page (section 14) is an experimental, separately installed add-on.
+- No 3D or game-like board in the main product. Only an optional add-on may do this. The live-session list is the default and the only view that must work everywhere; the pixel-art and HD Office pages (section 14) are an experimental, separately installed add-on, frozen except for bug fixes.
 - Gemini. Codex as orchestrator, worker and reviewer is supported experimentally (section 16).
 
 ## 2. Clean-room rule

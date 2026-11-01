@@ -8,6 +8,7 @@ the [CHANGELOG](../CHANGELOG.md).
 
 One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.md).
 
+- **0.22** — The purpose widens to "be sure it does what you want". `/crewgate:plan` finds that out before work starts, plans have states, a task on a draft plan cannot start, and only your reply makes a plan final.
 - **0.21.2** — The description of session cleanup says only what was measured, and a test setting can no longer push a process listing past the hook budget.
 - **0.21.1** — `crew doctor` and `crew init` warn when a project has session cleanup on. 0.20.1 wrote `on` into each project it set up, so 0.21's new default of `off` did not reach them.
 - **0.21** — Machine safety on evidence: session cleanup only records by default, dispatch looks at real CPU load, a worker's leftovers are found by the system, test slots are shared across worktrees, briefs state machine impact, `gate answer` refuses outside a user turn, and `crew release check` reads CI. macOS and Linux were probed; nothing new is built for them.
@@ -51,6 +52,8 @@ Open problems in the latest release, and what has not been checked.
 
 Decided, not started or not finished.
 
+- **0.23.** One question with four answers when work drifts: add to this plan, change the goal, new plan, drop or defer. It fires only where code can tell: a file outside the task's scope at accept, a new step on a final plan, an unlinked task while a final plan is open, a changed goal.
+- **0.24.** A shorter README, a diagram from the user's side, and `--help` groups.
 - **HD Office.** The look stays frozen as v0.1.0 for now. Still to do before it can be the default: warm tone, foreground, and performance on integrated graphics.
 - **Machine load in real use.** Measure closing one session while the app stays open, and closing a terminal that runs an interactive `claude`. Then decide whether cleanup should stay at all.
 - **macOS and Linux.** Probe `StartTransientUnit` through `busctl --user` with an existing pid and a real quota, and measure `taskpolicy -b` on a saturated Mac. Build only what those show.
