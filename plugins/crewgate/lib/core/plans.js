@@ -529,19 +529,39 @@ function transition(root, projectId, slug, state, extra = {}) {
   writeRecord(projectId, slug, { state, pending: null, ...extra });
 }
 
-// setPart(root, projectId, slug, 'not-doing' | 'done-when', text): sets the section before the steps, or replaces its text.
-function setPart(root, projectId, slug, which, text) {
+// partLines(text): the lines of a part, one entry per line break. A line that would start a heading or a step is refused,
+// because it would break the plan file; a plain "- item" line is allowed.
+function partLines(text) {
+  const out = [];
+  for (const raw of String(text || '').split(/\r\n|\r|\n/)) {
+    const line = partText(raw);
+    if (!line) continue;
+    if (/^#{1,6}(?:[ \t]|$)/.test(line) || ITEM_RE.test(line)) throw new CrewError('plan.partBadLine', { line: line.slice(0, 60) });
+    out.push(line);
+  }
+  return out;
+}
+
+// setPart(root, projectId, slug, 'not-doing' | 'done-when', text, { add }): sets the section before the steps, or replaces its text
+// (-> replaced: the old lines, when there were any). add: appends the lines to what is there instead.
+function setPart(root, projectId, slug, which, text, opts = {}) {
   if (!Object.prototype.hasOwnProperty.call(PARTS, which)) throw new CrewError('plan.badPart', { part: String(which) });
-  const body = partText(text);
-  if (!body) throw new CrewError('plan.partEmpty');
+  const body = partLines(text);
+  if (!body.length) throw new CrewError('plan.partEmpty');
   const { head, re } = PARTS[which];
+  let replaced = [];
   update(root, slug, (doc) => {
     const h = doc.lines.findIndex((l) => !l.node && re.test(l.raw));
     if (h >= 0) {
       let end = h + 1;
       while (end < doc.lines.length && !doc.lines[end].node && !/^#{1,6}[ \t]/.test(doc.lines[end].raw)) end++;
       while (end > h + 1 && !doc.lines[end - 1].raw.trim()) end--;
-      doc.lines.splice(h + 1, end - h - 1, { raw: body });
+      const old = doc.lines.slice(h + 1, end).map((l) => l.raw).filter((r) => r.trim());
+      if (opts.add) doc.lines.splice(end, 0, ...body.map((raw) => ({ raw })));
+      else {
+        replaced = old.map((r) => r.trim());
+        doc.lines.splice(h + 1, end - h - 1, ...body.map((raw) => ({ raw })));
+      }
     } else {
       const firstNode = doc.lines.findIndex((l) => l.node);
       const section = clarifiedLine(doc);
@@ -552,7 +572,7 @@ function setPart(root, projectId, slug, which, text) {
         while (k > 0 && !doc.lines[k - 1].node && !doc.lines[k - 1].raw.trim()) k--;
         if (k > 0 && !doc.lines[k - 1].node && /^#{2,6}[ \t]/.test(doc.lines[k - 1].raw)) at = k - 1;
       }
-      const add = [{ raw: head }, { raw: body }];
+      const add = [{ raw: head }, ...body.map((raw) => ({ raw }))];
       if (at < doc.lines.length) add.push({ raw: '' });
       const prev = doc.lines[at - 1];
       if (prev && (prev.node || prev.raw.trim())) add.unshift({ raw: '' });
@@ -560,7 +580,7 @@ function setPart(root, projectId, slug, which, text) {
     }
   });
   record(projectId, 'plan.part_set', { slug, part: which });
-  return { slug, part: which };
+  return { slug, part: which, replaced };
 }
 
 // What stops a plan from being final, as codes: goal, not_doing, done_when, steps, assumed.

@@ -88,6 +88,11 @@ test('plan skill: exists, under its limit, trigger phrases and commands', () => 
   for (const c of ['(assumed)', '(user)', 'Never change it without their answer', 'No CLI command does this', '`ask`', '`off`', 'ask the user']) {
     assert.ok(text.replace(/\s+/g, ' ').toLowerCase().includes(c.toLowerCase()), c);
   }
+  // fixes from the plan skill test report
+  for (const c of ['--add', '--by decision', 'two replies are needed', 'In every case', 'Only when the user or the task says', 'if unsure, ask', 'One decision per question', 'If they asked only for a plan', 'start it', 'outside one, just do it', 'ask the user about a plan review']) {
+    assert.ok(text.replace(/\s+/g, ' ').includes(c), c);
+  }
+  assert.ok(read('skills', 'crew', 'references', 'commands.md').includes('[--add]'));
 });
 
 test('crew skill points at the plan skill and commands.md lists the plan state commands', () => {

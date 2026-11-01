@@ -306,7 +306,8 @@ test('text that looks like a heading, a list marker or a checkbox: goal is refus
   H.prompt(f);
   for (const t of ['# New heading', '## Sub', '- [ ] a step', '* item', '+ item', '1. item', '[ ] box', '[x] box']) {
     for (const ans of ['goal', 'drop']) {
-      if (ans === 'drop' && !/^(#|\[)/.test(t) && !/^[-*+] \[/.test(t)) continue;
+      // "- [ ] x" under Not doing is written as "- - [ ] x": no step, so drop takes it now that a value may start with "-"
+      if (ans === 'drop' && !/^(#|\[)/.test(t)) continue;
       const r = run(f, answerArgs(slug, a.gate_id, ans, t));
       assert.notEqual(r.code, 0, `${ans} ${t}`);
     }

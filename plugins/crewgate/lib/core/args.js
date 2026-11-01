@@ -12,8 +12,11 @@ function toInt(v, what) {
   return parseInt(v, 10);
 }
 
+// A word with whitespace in it (before an "=" of a --name=value) is text, never an option.
 function looksLikeOption(a) {
-  return a.startsWith('-') && a.length > 1 && !NEG.test(a);
+  if (!a.startsWith('-') || a.length < 2 || NEG.test(a)) return false;
+  const eq = a.indexOf('=');
+  return !/\s/.test(a.startsWith('--') && eq > 0 ? a.slice(0, eq) : a);
 }
 
 // spec: {
@@ -45,7 +48,8 @@ function parse(argv, spec) {
       }
       if (value === undefined) {
         const next = argv[i + 1];
-        if (next === undefined || looksLikeOption(next)) throw new UsageError('args.needsValue', { name });
+        // a value may start with "-" unless it exactly names an option of this command (or is "--")
+        if (next === undefined || next === '--' || Object.prototype.hasOwnProperty.call(options, next)) throw new UsageError('args.needsValue', { name });
         value = next;
         i++;
       }
