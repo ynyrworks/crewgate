@@ -209,6 +209,8 @@
   "wf.doctor.name.shim": "CLI shim",
   "wf.doctor.name.plans": "Plans",
   "wf.doctor.plansOk": "{n} plan file(s)",
+  "wf.doctor.name.cleanup": "Session cleanup",
+  "wf.cleanupOn": "Session cleanup is on in this project: it stops background processes when a session ends. It may have been written by crewgate 0.20 rather than chosen by you. The setting acts on Windows only, but the file can travel with the project, so this is shown on every platform. To turn it off, set limits.session_cleanup to \"off\" in .claude/crew.json; it applies from a new session.",
   "wf.doctor.plansDeep": "nested deeper than {max} levels: {where}",
   "wf.doctor.plansDup": "ids used more than once: {where}",
   "wf.doctor.name.autostart": "Board autostart",

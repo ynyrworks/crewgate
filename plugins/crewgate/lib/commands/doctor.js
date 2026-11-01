@@ -92,6 +92,7 @@ async function run(argv, ctx) {
       }).map((n) => `.claude/agents/${n}.md`);
       if (stale.length) add('agents', 'warn', ctx.t('wf.doctor.agentsStale', { files: stale.join(', ') }));
     }
+    if (loaded.exists && !loaded.errors.length && loaded.config.limits && loaded.config.limits.session_cleanup === 'on') add('cleanup', 'warn', ctx.t('wf.cleanupOn'));
     const nPlans = plans.slugs(dir).length;
     if (nPlans) {
       const deep = plans.deepNodes(dir);
