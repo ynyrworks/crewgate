@@ -115,7 +115,7 @@ function onSend(payload) {
   }
   const busy = denyLoad(h, rec.task, lim);
   if (busy) return busy;
-  const snap = rec.worker ? leftovers.snapshot({}, leftovers.budgetLeft('pre-tool-use')) : null;
+  const snap = leftovers.snapshot({}, leftovers.budgetLeft('pre-tool-use'));
   sess.remember(h.pid, rec.id, { ...rec, id: undefined, stopped: false, stopped_at: undefined, resumed: true, ts: Date.now(), session: h.sid || null, snap: snap || undefined });
   return null;
 }
