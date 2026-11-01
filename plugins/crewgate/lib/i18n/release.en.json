@@ -32,6 +32,7 @@
   "release.completion": "Completion",
   "release.clarified": "Clarified",
   "release.assumed": "not confirmed by the user",
+  "release.decision": "chosen by the model, not confirmed by the user",
   "release.gates": "Gates",
   "release.noGates": "No gate was recorded.",
   "release.answer": "answer",

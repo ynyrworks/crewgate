@@ -32,6 +32,10 @@ test('args: a value may start with "-" unless it exactly names an option; text w
   assert.throws(() => parse(['--a', '--a', 'x'], spec), (e) => e.key === 'args.needsValue');
   assert.throws(() => parse(['--a', '--'], spec), (e) => e.key === 'args.needsValue');
   assert.throws(() => parse(['--a'], spec), (e) => e.key === 'args.needsValue');
+  assert.throws(() => parse(['--a', '--json'], spec), (e) => e.key === 'args.needsValue');
+  assert.throws(() => parse(['--a', '--lang=en'], spec), (e) => e.key === 'args.needsValue');
+  assert.throws(() => parse(['--a', '--f=x'], spec), (e) => e.key === 'args.needsValue');
+  assert.equal(parse(['--a', '--other=x'], spec).a, '--other=x');
   assert.throws(() => parse(['--bogus', 'x'], spec), (e) => e.key === 'args.unknownOption');
   assert.throws(() => parse(['-x'], spec), (e) => e.key === 'args.unknownOption');
 });

@@ -19,6 +19,13 @@ function looksLikeOption(a) {
   return !/\s/.test(a.startsWith('--') && eq > 0 ? a.slice(0, eq) : a);
 }
 
+const GLOBALS = ['--json', '--project', '--lang', '--help', '--version'];
+function namesOption(w, options) {
+  const eq = w.startsWith('--') ? w.indexOf('=') : -1;
+  const n = eq > 0 ? w.slice(0, eq) : w;
+  return GLOBALS.includes(n) || Object.prototype.hasOwnProperty.call(options, n);
+}
+
 // spec: {
 //   positionals: [{ name, optional?, int?, choices? }],
 //   options: { '--name': { dest, int?, choices?, default?, flag?, multi? } }   (multi: repeatable, collects an array)
@@ -48,8 +55,9 @@ function parse(argv, spec) {
       }
       if (value === undefined) {
         const next = argv[i + 1];
-        // a value may start with "-" unless it exactly names an option of this command (or is "--")
-        if (next === undefined || next === '--' || Object.prototype.hasOwnProperty.call(options, next)) throw new UsageError('args.needsValue', { name });
+        // a value may start with "-" unless it names an option of this command or a global option (or is "--"),
+        // also as --known=...
+        if (next === undefined || next === '--' || namesOption(next, options)) throw new UsageError('args.needsValue', { name });
         value = next;
         i++;
       }

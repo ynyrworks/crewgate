@@ -32,6 +32,7 @@
   "release.completion": "完成度",
   "release.clarified": "已釐清",
   "release.assumed": "未經使用者確認",
+  "release.decision": "由模型自行決定，未經使用者確認",
   "release.gates": "關卡",
   "release.noGates": "沒有記錄任何關卡。",
   "release.answer": "回答",
