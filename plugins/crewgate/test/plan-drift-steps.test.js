@@ -17,7 +17,7 @@ const sess = require('../lib/hooks/session');
 
 const MODES = ['block', 'remind', 'off'];
 function fixture(enforce = 'block') {
-  const f = H.fixture({ config: { gates: { enforce: 'confirm' }, plan: { enforce } } });
+  const f = H.fixture({ config: { gates: { enforce: 'confirm' }, plan: { enforce }, limits: { dispatch_max_cpu: 100 } } });
   H.start(f);
   f.env = { CLAUDE_CODE_SESSION_ID: f.sid };
   return f;
@@ -320,7 +320,7 @@ test('a failure of the check lets the dispatch through and records plan.check_fa
   plans.changedPlanOfTask = () => { throw new Error('disk gone'); };
   let out;
   try { out = require('../lib/hooks/pre-tool-use').run(H.agentPayload(f, task)); } finally { plans.changedPlanOfTask = orig; }
-  assert.ok(!out || out.hookSpecificOutput.permissionDecision !== 'deny');
+  assert.ok(!out || out.hookSpecificOutput.permissionDecision !== 'deny', JSON.stringify(out));
   assert.equal(tasks.load(f.pid, task.id).state, 'dispatched');
   assert.equal(H.evs(f, ['plan.check_failed']).length, 1);
 });
