@@ -63,7 +63,8 @@ A plan is a draft until the user approves it.
 1. Finalize requires: a title, a goal, not doing, done when, at least one step, and no `(assumed)`
    line. Put each assumed answer to the user first, and say that two replies are needed: one for the
    assumptions, one for the plan. After they answer, edit that line in the plan file so it ends in
-   `(user)`. Never change it without their answer. No CLI command does this. To reword a step, use `crew plan edit <slug> <node> "text"`, not a hand edit.
+   `(user)`. Never change it without their answer. No CLI command does this. (Under `plan.interview: off`
+   an `(assumed)` line does not block: see section 5.) To reword a step, use `crew plan edit <slug> <node> "text"`, not a hand edit.
 2. Show the **whole plan** in the chat (`crew plan show <slug>`), not a summary.
 3. Run `crew plan finalize <slug>`: it prints a gate id. **End your turn**, ask for approval, and wait.
 4. Only after the user's reply, in a new turn: if it is a yes, run `crew plan finalize <slug> --gate <id>`.
@@ -80,7 +81,10 @@ ends a plan; `crew plan reopen <slug>` takes it up again.
 - `plan.interview`: `on` (default) asks the questions of section 2. `off` skips them: still write the plan
   from your own reading of the goal. Record each choice you make yourself with
   `crew plan clarify <slug> --question "..." --answer "..." --by decision` (finalize does not block it, unlike
-  `assumed`) and name those choices to the user when you show the plan.
+  `assumed`) and name those choices to the user when you show the plan. Under `off` you may also record
+  them with `--by assumed`: `crew plan finalize <slug>` then lists each assumed line, show them with the
+  plan and say that the user's one yes confirms them too; on that yes each becomes `(user)`. No second reply,
+  no hand edit.
 - `plan.review`: `large` (default) reviews large plans. `ask` asks the user first (medium and large).
   `off` runs none unless the user asks. `plan.enforce`: see section 4.
 

@@ -86,6 +86,7 @@
   "plan.partEmpty": "The text of the part is empty",
   "plan.badClose": "Close takes done or parked, not \"{to}\"",
   "plan.finalizeAsked": "Gate {id} asked for plan {slug}. Show the whole plan to the user in chat and end your turn. After they reply yes, run: crew plan finalize {slug} --gate {id}. If they say no, run: crew gate answer {id} no. Do not edit the plan meanwhile: an edit needs a new approval.",
+  "plan.finalizeAssumed": "Your own assumptions are not confirmed yet. Show these lines with the plan and say that the user's yes confirms them too (each becomes (user)):\n{list}",
   "plan.finalizedOk": "Plan {slug} is final.",
   "plan.closeAsked": "Gate {id} asked to close plan {slug} as {to}. Ask the user in chat and end your turn. After they reply yes, run: crew plan close {slug} {to} --gate {id}",
   "plan.closedOk": "Plan {slug} is now {state}.",

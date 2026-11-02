@@ -86,6 +86,7 @@
   "plan.partEmpty": "這個部分的文字是空的",
   "plan.badClose": "close 只接受 done 或 parked，不是「{to}」",
   "plan.finalizeAsked": "已為計畫 {slug} 開了關卡 {id}。請在聊天裡把整份計畫給使用者看，然後結束這一輪。他回覆同意後執行：crew plan finalize {slug} --gate {id}。他說不行就執行：crew gate answer {id} no。期間不要改計畫：改了就要重新核准。",
+  "plan.finalizeAssumed": "以下是你自己的假設，使用者還沒確認。請連同計畫一起給他看，並說明他的同意也等於確認這些假設（每行會變成 (user)）：\n{list}",
   "plan.finalizedOk": "計畫 {slug} 已定案。",
   "plan.closeAsked": "已開關卡 {id}，詢問是否把計畫 {slug} 結為 {to}。請在聊天裡問使用者並結束這一輪。他回覆同意後執行：crew plan close {slug} {to} --gate {id}",
   "plan.closedOk": "計畫 {slug} 現在是 {state}。",

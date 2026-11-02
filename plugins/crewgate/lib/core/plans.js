@@ -583,6 +583,8 @@ function setPart(root, projectId, slug, which, text, opts = {}) {
   return { slug, part: which, replaced };
 }
 
+const isAssumed = (l) => /\(assumed\)\s*$/.test(l);
+
 // What stops a plan from being final, as codes: goal, not_doing, done_when, steps, assumed.
 function readyProblems(doc) {
   const out = [];
@@ -590,7 +592,7 @@ function readyProblems(doc) {
   if (!doc.notDoing.trim()) out.push('not_doing');
   if (!doc.doneWhen.trim()) out.push('done_when');
   if (!doc.nodes.some((n) => n.box !== '~' && n.box !== '?')) out.push('steps');
-  if (doc.clarified.some((l) => /\(assumed\)\s*$/.test(l))) out.push('assumed');
+  if (doc.clarified.some(isAssumed)) out.push('assumed');
   return out;
 }
 
@@ -605,7 +607,7 @@ function mustBe(root, projectId, slug, want, errKey) {
   return info;
 }
 
-// finalizeAsk -> { slug, gate_id, hash }; throws plan.notReady (naming each problem), plan.isLegacy or plan.notDraft.
+// finalizeAsk -> { slug, gate_id, hash, assumed? }; throws plan.notReady (naming each problem), plan.isLegacy or plan.notDraft.
 // opts: session, t (translates the problem names).
 function finalizeAsk(root, projectId, cfg, slug, opts = {}) {
   const info = stateInfo(root, projectId, slug);
@@ -613,15 +615,19 @@ function finalizeAsk(root, projectId, cfg, slug, opts = {}) {
   if (!readCapped(root, slug).title) throw new CrewError('plan.noTitleLine', { slug });
   if (info.state === 'legacy') throw new CrewError('plan.isLegacy', { slug });
   if (info.state !== 'draft') throw new CrewError('plan.notDraft', { slug, state: info.state });
-  const problems = readyProblems(readCapped(root, slug));
+  const doc = readCapped(root, slug);
+  // plan.interview off: the model's own (assumed) lines do not block; the user's yes confirms them with the plan.
+  const off = !!(cfg && cfg.plan && cfg.plan.interview === 'off');
+  const assumed = doc.clarified.filter(isAssumed);
+  const problems = readyProblems(doc).filter((p) => !(off && p === 'assumed'));
   if (problems.length) {
     const tt = opts.t || ((k, v) => require('./i18n').t('en', k, v));
     throw new CrewError('plan.notReady', { slug, list: problems.map((p) => `  - ${tt(`plan.problem.${p}`)}`).join('\n') });
   }
   const hash = fileHash(root, slug);
   const g = gates.ask(projectId, askCfg(cfg), { gate: 'plan_final', detail: `finalize plan ${slug}` }, { src: 'cli', session: opts.session });
-  writeRecord(projectId, slug, { state: 'draft', pending: { gate_id: g.id, kind: 'finalize', hash } });
-  return { slug, gate_id: g.id, hash };
+  writeRecord(projectId, slug, { state: 'draft', pending: { gate_id: g.id, kind: 'finalize', hash, ...(off ? { confirm_assumed: true } : {}) } });
+  return { slug, gate_id: g.id, hash, ...(off && assumed.length ? { assumed } : {}) };
 }
 
 // closeAsk -> { slug, gate_id, to }
@@ -656,9 +662,26 @@ function finalizeAnswer(root, projectId, slug, gateId, answerOpts) {
   const pend = pendingOf(projectId, slug, gateId, 'finalize');
   if (fileHash(root, slug) !== pend.hash) throw new CrewError('plan.changedSinceAsk', { slug });
   takeReply(projectId, slug, gateId, answerOpts);
-  transition(root, projectId, slug, 'final', { hash: pend.hash, approved: fileApprovedHash(root, slug), gate_id: gateId, finalized: new Date().toISOString() });
-  record(projectId, 'plan.finalized', { slug, hash: pend.hash, gate: gateId });
-  return { slug, hash: pend.hash, gate_id: gateId };
+  let hash = pend.hash;
+  if (pend.confirm_assumed) {
+    // asked under plan.interview off: the yes also confirms the model's assumptions, so each (assumed) line becomes (user)
+    let n = 0;
+    update(root, slug, (doc) => {
+      const at = clarifiedLine(doc);
+      if (at < 0) return;
+      for (let i = at + 1; i < doc.lines.length && !/^#{1,6}[ 	]/.test(doc.lines[i].raw); i++) {
+        const l = doc.lines[i];
+        if (l.node || !isAssumed(l.raw.trim())) continue;
+        l.raw = l.raw.replace(/\(assumed\)(\s*)$/, '(user)$1');
+        n++;
+      }
+    });
+    hash = fileHash(root, slug);
+    if (n) record(projectId, 'plan.assumptions_confirmed', { slug, count: n, gate: gateId });
+  }
+  transition(root, projectId, slug, 'final', { hash, approved: fileApprovedHash(root, slug), gate_id: gateId, finalized: new Date().toISOString() });
+  record(projectId, 'plan.finalized', { slug, hash, gate: gateId });
+  return { slug, hash, gate_id: gateId };
 }
 
 // closeAnswer -> { slug, state, gate_id }

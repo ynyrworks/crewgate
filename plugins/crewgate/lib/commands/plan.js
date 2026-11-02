@@ -169,7 +169,7 @@ function askOrAnswer(sub, a, proj, root, ctx) {
       return ctx.emit(r, ctx.t('plan.finalizedOk', { slug: a.slug }));
     }
     const r = plans.finalizeAsk(root, proj.id, cfg, a.slug, { session, t: ctx.t });
-    const msg = ctx.t('plan.finalizeAsked', { slug: a.slug, id: r.gate_id });
+    const msg = ctx.t('plan.finalizeAsked', { slug: a.slug, id: r.gate_id }) + (r.assumed ? '\n' + ctx.t('plan.finalizeAssumed', { list: r.assumed.map((l) => `  - ${l}`).join('\n') }) : '');
     return ctx.emit({ ...r, next: msg }, msg);
   }
   if (a.gate) {
