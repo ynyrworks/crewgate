@@ -76,7 +76,7 @@ test('plan skill: exists, under its limit, trigger phrases and commands', () => 
   const text = read('skills', 'plan', 'SKILL.md');
   const fm = frontmatter(text);
   assert.equal(fm.name, 'plan');
-  assert.ok(text.split('\n').length < 120);
+  assert.ok(text.split('\n').length < 133);
   const trig = `${fm.description} ${fm.when_to_use}`;
   for (const p of ['write a plan', 'plan this feature', 'help me think through', '寫一個 X 的計劃', '規劃這個功能', '幫我想清楚']) {
     assert.ok(trig.includes(p), p);
@@ -89,10 +89,27 @@ test('plan skill: exists, under its limit, trigger phrases and commands', () => 
     assert.ok(text.replace(/\s+/g, ' ').toLowerCase().includes(c.toLowerCase()), c);
   }
   // fixes from the plan skill test report
-  for (const c of ['--add', '--by decision', 'two replies are needed', 'In every case', 'Only when the user or the task says', 'if unsure, ask', 'One decision per question', 'If they asked only for a plan', 'start it', 'outside one, just do it', 'ask the user about a plan review']) {
+  for (const c of ['--add', '--by decision', 'two replies are needed', 'In every case', 'Only when the user or the task says', 'if unsure, ask', 'One decision per question', 'If they asked only for a plan', 'start it', 'Without Crewgate, just do it', 'ask the user about a plan review']) {
     assert.ok(text.replace(/\s+/g, ' ').includes(c), c);
   }
   assert.ok(read('skills', 'crew', 'references', 'commands.md').includes('[--add]'));
+});
+
+test('skills: small fix via crew, one decision per question, plan.review ask is followed', () => {
+  const flat = (...p) => read(...p).replace(/\s+/g, ' ');
+  const plan = flat('skills', 'plan', 'SKILL.md');
+  const crew = flat('skills', 'crew', 'SKILL.md');
+  for (const [name, s] of [['plan', plan], ['crew', crew]]) {
+    assert.ok(s.includes('`crew task create`') && s.includes('--outside-plan'), `${name}: small fix goes through crew`);
+  }
+  assert.ok(!plan.includes('outside one, just do it'));
+  const sec4 = plan.slice(plan.indexOf('## 4. Finalizing'), plan.indexOf('## 5. Settings'));
+  assert.ok(sec4.includes('if `plan.review` is `ask` and the size is medium or large, ask the user about a plan review'));
+  assert.ok(sec4.includes('one decision per question'), 'section 4');
+  const drift = plan.slice(plan.indexOf('## When work drifts'), plan.indexOf('## 6.'));
+  assert.ok(drift.includes('one decision per question'), 'drift');
+  assert.ok(!crew.includes('(about 3 steps or more) run a **plan review**'));
+  assert.ok(crew.includes('Follow `plan.review`'));
 });
 
 test('crew skill points at the plan skill and commands.md lists the plan state commands', () => {

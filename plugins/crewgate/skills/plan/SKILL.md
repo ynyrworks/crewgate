@@ -12,8 +12,7 @@ down with the `crew plan` commands, and wait for a real yes.
 
 CLI: `node "${CLAUDE_PLUGIN_ROOT}/bin/crew.js" plan <action>`; below, `crew` means that command. Use the
 `language` in `.claude/crew.json` for questions and plan text. `$ARGUMENTS` is the thing to plan (if empty,
-ask). Read the settings first (section 5): if `plan.review` is `ask`, ask the user about a plan review
-before finalizing (`crew plan new` prints the settings too).
+ask). Read the settings first (section 5; `crew plan new` prints them too).
 
 ## 1. Size first
 
@@ -21,8 +20,10 @@ In every case, even a small fix, your first words say in one sentence which size
 and that the user can change it ("I read this as medium: two modules, one open choice"), before any
 question or work. If the user names a size, use theirs.
 
-- **Small fix** (one place, no real choice): no questions, no plan. In a crew session do it as one task;
-  outside one, just do it.
+- **Small fix** (one place, no real choice): no questions, no plan. Where Crewgate is set up
+  (`.claude/crew.json` exists) it is always one crew task (`crew task create` and a worker), never your own
+  edit, even for a file you may edit: `--plan <slug>:<node>` if it belongs to a step of an open final plan,
+  else `--outside-plan "<the real reason>"`. Without Crewgate, just do it.
 - **Medium** (a few steps, some open choices): at most **5 questions in total**, then a short plan.
 - **Large** (many parts, dependent decisions): rounds of questions, the plan, a review per `plan.review`.
 
@@ -59,9 +60,11 @@ When `plan.review` calls for it, run `crew plan review run <slug>` and the steps
 
 ## 4. Finalizing
 
-A plan is a draft until the user approves it.
+A plan is a draft until the user approves it. **First**, if `plan.review` is `ask` and the size is medium or
+large, ask the user about a plan review (one question, with a recommended answer), end the turn, and run
+it (section 3) on a yes.
 1. Finalize requires: a title, a goal, not doing, done when, at least one step, and no `(assumed)`
-   line. Put each assumed answer to the user first, and say that two replies are needed: one for the
+   line. Put each assumed answer to the user first (one decision per question, never two tied together), and say that two replies are needed: one for the
    assumptions, one for the plan. After they answer, edit that line in the plan file so it ends in
    `(user)`. Never change it without their answer. No CLI command does this. (Under `plan.interview: off`
    an `(assumed)` line does not block: see section 5.) To reword a step, use `crew plan edit <slug> <node> "text"`, not a hand edit.
@@ -95,7 +98,7 @@ one by hand, say the old and new value.
 
 A refused command (a new step, changed text, a task with no plan step, files outside the task's scope) is
 not an error to work around. Tell the user in one sentence what happened. Run the `crew plan drift` command
-it printed, offer the answers below, end the turn; after their reply, run it with `--gate <id> --answer <answer> --text "..."`.
+it printed, offer the answers below (one decision per question, never two tied together), end the turn; after their reply, run it with `--gate <id> --answer <answer> --text "..."`.
 With no plan, files outside the scope print `task accept --widen`; follow that.
 
 - `add`: a step of this plan. Recommend it for a small piece of the same goal.
