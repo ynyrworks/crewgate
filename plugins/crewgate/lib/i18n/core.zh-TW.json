@@ -1,5 +1,6 @@
 {
   "cli.usage": "用法：crew <群組> <動作> [選項]\n\n命令群組：",
+  "cli.moreGroups": "其他群組：{groups}。用 `crew --help --all` 顯示全部。",
   "cli.globals": "全域選項：--project <id|路徑|名稱>  --json  --lang en|zh-TW  --help  --version",
   "cli.unknownGroup": "不認得的命令群組：{group}",
   "cli.errorPrefix": "錯誤：",

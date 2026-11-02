@@ -141,12 +141,22 @@ function summaryOf(mod, lang) {
   return s[lang] || s.en || '';
 }
 
-function printHelp(ctx) {
+// The groups listed first by `crew --help`; every other group found on disk is "advanced".
+const COMMON_GROUPS = ['init', 'doctor', 'plan', 'task', 'review', 'gate', 'board'];
+
+function printHelp(ctx, all = false) {
   ctx.out(ctx.t('cli.usage'));
   ctx.out('');
   const groups = listGroups();
-  const w = Math.max(0, ...groups.map((x) => x.name.length));
-  for (const x of groups) ctx.out(`  ${x.name.padEnd(w)}  ${summaryOf(x.mod, ctx.lang)}`);
+  const common = COMMON_GROUPS.map((n) => groups.find((x) => x.name === n)).filter(Boolean);
+  const advanced = groups.filter((x) => !common.includes(x));
+  const shown = all ? common.concat(advanced) : common;
+  const w = Math.max(0, ...shown.map((x) => x.name.length));
+  for (const x of shown) ctx.out(`  ${x.name.padEnd(w)}  ${summaryOf(x.mod, ctx.lang)}`);
+  if (!all && advanced.length) {
+    ctx.out('');
+    ctx.out(ctx.t('cli.moreGroups', { groups: advanced.map((x) => x.name).join(', ') }));
+  }
   ctx.out('');
   ctx.out(ctx.t('cli.globals'));
 }
@@ -185,6 +195,10 @@ async function main(argv, io = { stdout: process.stdout, stderr: process.stderr 
     if (!group) {
       printHelp(ctx);
       return g.help ? 0 : 2;
+    }
+    if (g.help && g.rest.length === 1 && group === '--all') {
+      printHelp(ctx, true);
+      return 0;
     }
     mod = loadGroup(group);
     if (!mod) throw new UsageError('cli.unknownGroup', { group });

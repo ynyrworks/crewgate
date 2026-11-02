@@ -2,6 +2,7 @@
 
 Call as `node "${CLAUDE_PLUGIN_ROOT}/bin/crew.js" ...`. Global options: `--json`, `--project <id|path|name>`,
 `--lang en|zh-TW`. Exit codes: 0 ok, 1 runtime error, 2 usage error.
+`crew --help` lists the common groups; `crew --help --all` lists every group.
 
 ## Setup
 - `crew init [--lang en|zh-TW] [--force] [--reset-review-files] [--engine claude|codex]`: (`--engine codex`, or an existing `.codex/` folder, also writes `.codex/agents/crew-reviewer.toml`, `crew-refuter.toml` and a marked crewgate block in `AGENTS.md`) config (an empty `checks` is filled from the detected stack and printed; existing checks are never overwritten), three agent copies (project copies in `.claude/agents/` take precedence over the plugin agents, so both `crew-worker` and `crewgate:crew-worker` may appear), `.crew/` files, registers the
