@@ -110,6 +110,9 @@ test('skills: small fix via crew, one decision per question, plan.review ask is 
   assert.ok(drift.includes('one decision per question'), 'drift');
   assert.ok(!crew.includes('(about 3 steps or more) run a **plan review**'));
   assert.ok(crew.includes('Follow `plan.review`'));
+  assert.ok(crew.includes('a small fix the user asks for is still a crew task, even in those files'));
+  assert.ok(crew.includes('your own records (plans, briefs, notes, docs you write as orchestrator)'));
+  assert.ok(sec4.includes('In an unattended run (section 6) skip the question and say in the final message that the review was not asked'));
 });
 
 test('crew skill points at the plan skill and commands.md lists the plan state commands', () => {

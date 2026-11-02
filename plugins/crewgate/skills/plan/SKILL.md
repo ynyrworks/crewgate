@@ -62,7 +62,8 @@ When `plan.review` calls for it, run `crew plan review run <slug>` and the steps
 
 A plan is a draft until the user approves it. **First**, if `plan.review` is `ask` and the size is medium or
 large, ask the user about a plan review (one question, with a recommended answer), end the turn, and run
-it (section 3) on a yes.
+it (section 3) on a yes. In an unattended run (section 6) skip the question and say in the final message
+that the review was not asked.
 1. Finalize requires: a title, a goal, not doing, done when, at least one step, and no `(assumed)`
    line. Put each assumed answer to the user first (one decision per question, never two tied together), and say that two replies are needed: one for the
    assumptions, one for the plan. After they answer, edit that line in the plan file so it ends in

@@ -34,8 +34,9 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
 ## Role contract
 
 - You may edit files matching `limits.orchestrator_edit_allow` in the config (default: `**/*.md`,
-  `docs/**`, `.claude/**`, `.crew/**`). Everything else is delegated, even a one-line fix. If a hook
-  warns that you edited code, stop and delegate.
+  `docs/**`, `.claude/**`, `.crew/**`). Those edits are your own records (plans, briefs, notes, docs you
+  write as orchestrator); a small fix the user asks for is still a crew task, even in those files.
+  Everything else is delegated, even a one-line fix. If a hook warns that you edited code, stop and delegate.
 - Keep your own context small: read the worker report and the diff stat first
   (`crew task show`), open source files only for flagged hunks and only with line ranges. Never
   read the packet in full unless the report says the detail you need is there.
