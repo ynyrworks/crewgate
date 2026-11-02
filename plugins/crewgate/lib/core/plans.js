@@ -723,6 +723,22 @@ function addTo(root, projectId, slug, input) {
   return { id: n.meta.id, depth: n.depth, origin: n.meta.origin, added: n.meta.added, state: BOX_STATE[n.box], task: n.meta.task || null };
 }
 
+// Changes the text of one step; id, box, task, origin and date stay. `before` runs once the step is known to be editable and
+// before anything is written (the drift check; it throws to refuse).
+function editText(root, projectId, slug, ref, text, before) {
+  const out = update(root, slug, (doc) => {
+    const n = find(doc, ref);
+    if (n.box === '?') throw new CrewError('plan.editProposed', { node: refOf(n) });
+    const body = cleanText(text);
+    const chk = before ? before() : null;
+    n.text = body;
+    touch(n);
+    return { node: n, chk };
+  });
+  record(projectId, 'plan.node_changed', { slug, node: out.node.meta.id, change: 'text' });
+  return { id: refOf(out.node), chk: out.chk };
+}
+
 function linkTask(root, projectId, slug, ref, taskId) {
   const out = update(root, slug, (doc) => {
     const n = find(doc, ref);
@@ -787,5 +803,5 @@ module.exports = {
   SLUG_RE, ORIGINS, MAX_DEPTH, MAX_BYTES, MAX_NODES, planDir, planFile, checkSlug, parse, serialize, assignIds, find, addNode, removeNode,
   STATES, PARTS, planOfTask, draftPlanOfTask, finalSlugs, finalPlanOfTask, stateOf, stateInfo, contentHash, fileHash, approvedHash, fileApprovedHash, changedSinceApproved, approveNow, changedPlanOfTask, readRecord, setPart, readyProblems, finalizeAsk, finalizeAnswer, closeAsk, closeAnswer, reopen, adopt, takeReply, writeRecord,
   KINDS, ACTIONS, encodeToken, decodeToken, proposalMeta, record, setBox, touch, BOX_STATE, cleanText, MAX_TEXT,
-  derive, taskStates, slugs, readCapped, update, create, clarify, addTo, linkTo: linkTask, setState, removeFrom, deepNodes, duplicateNodes, duplicateIds, exists, today, refOf,
+  derive, taskStates, slugs, readCapped, update, create, clarify, addTo, editText, linkTo: linkTask, setState, removeFrom, deepNodes, duplicateNodes, duplicateIds, exists, today, refOf,
 };

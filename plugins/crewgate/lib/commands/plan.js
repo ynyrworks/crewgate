@@ -22,6 +22,7 @@ const SPECS = {
       '--origin': { dest: 'origin', choices: plans.ORIGINS, default: 'plan' }, '--proposed': { dest: 'proposed', flag: true },
     },
   },
+  edit: { positionals: [{ name: 'slug' }, { name: 'node' }, { name: 'text' }], options: {} },
   clarify: {
     positionals: [{ name: 'slug' }],
     options: { '--question': { dest: 'question' }, '--answer': { dest: 'answer' }, '--by': { dest: 'by', choices: ['user', 'assumed', 'decision'], default: 'user' } },
@@ -197,8 +198,8 @@ function driftRun(a, proj, root, ctx) {
 }
 
 // A step added to a final plan raises the drift question first (plan.enforce); see drift.stepCheck.
-function stepCheck(a, proj, root, ctx) {
-  return drift.stepCheck(root, proj.id, ctx.config().config, a.slug, { session: gates.currentSession() });
+function stepCheck(a, proj, root, ctx, kind) {
+  return drift.stepCheck(root, proj.id, ctx.config().config, a.slug, { session: gates.currentSession(), kind });
 }
 
 function driftStats(a, proj, ctx) {
@@ -269,6 +270,10 @@ function run(argv, ctx) {
     const r = plans.addTo(root, proj.id, a.slug, { text: a.text, under: a.under, task: a.task, origin: a.origin, proposed: !!a.proposed });
     drift.approveStep(root, proj.id, a.slug, chk);
     ctx.emit({ slug: a.slug, ...r }, [ctx.t('plan.added', { id: r.id, slug: a.slug }), ...(chk && chk.warn ? [ctx.t('plan.driftUnasked', { slug: a.slug })] : [])]);
+  } else if (sub === 'edit') {
+    const r = plans.editText(root, proj.id, a.slug, a.node, a.text, () => stepCheck(a, proj, root, ctx, 'changed-text'));
+    drift.approveStep(root, proj.id, a.slug, r.chk);
+    ctx.emit({ slug: a.slug, id: r.id }, [ctx.t('plan.edited', { id: r.id, slug: a.slug }), ...(r.chk && r.chk.warn ? [ctx.t('plan.driftEditUnasked', { slug: a.slug })] : [])]);
   } else if (sub === 'clarify') {
     const r = plans.clarify(root, proj.id, a.slug, { question: a.question, answer: a.answer, by: a.by });
     ctx.emit(r, ctx.t('plan.clarified', { slug: a.slug }));
@@ -324,6 +329,7 @@ module.exports = {
       '  crew plan finalize SLUG   (asks the user; show them the plan, end your turn)   |   crew plan finalize SLUG --gate ID   (after their reply)',
       '  crew plan close SLUG done|parked [--gate ID]   |   crew plan reopen SLUG   |   crew plan adopt SLUG   (a legacy plan becomes a draft)',
       '  crew plan add SLUG "text" [--under NODE] [--task TASK] [--origin plan|user|review|refute|implementation|send-back] [--proposed]',
+      '  crew plan edit SLUG NODE "new text"   (changes the text of one step; on a final plan it asks first, see plan drift --kind changed-text)',
       '  crew plan clarify SLUG --question "..." --answer "..." [--by user|assumed|decision]   (keeps a settled question under ## Clarified)',
       '  crew plan drift SLUG --kind new-step|changed-text|unlinked-task|out-of-scope [--detail "..."]   (asks the user how to treat work that left a final plan; end your turn)',
       '  crew plan drift SLUG --gate ID --answer add|goal|new|drop|defer --text "..."   (after their reply)   |   crew plan drift-stats [SLUG] [--json]',
@@ -346,6 +352,7 @@ module.exports = {
       '  crew plan finalize SLUG   （詢問使用者；把計畫給他看，結束這一輪）   |   crew plan finalize SLUG --gate ID   （他回覆之後）',
       '  crew plan close SLUG done|parked [--gate ID]   |   crew plan reopen SLUG   |   crew plan adopt SLUG   （舊計畫變成草稿）',
       '  crew plan add SLUG "文字" [--under NODE] [--task TASK] [--origin plan|user|review|refute|implementation|send-back] [--proposed]',
+      '  crew plan edit SLUG NODE "新文字"   （改一個步驟的文字；已定案的計畫會先詢問，見 plan drift --kind changed-text）',
       '  crew plan clarify SLUG --question "..." --answer "..." [--by user|assumed|decision]   （把釐清的問題記在 ## Clarified 下）',
       '  crew plan drift SLUG --kind new-step|changed-text|unlinked-task|out-of-scope [--detail "..."]   （工作偏離已定案的計畫時詢問使用者；結束這一輪）',
       '  crew plan drift SLUG --gate ID --answer add|goal|new|drop|defer --text "..."   （他回覆之後）   |   crew plan drift-stats [SLUG] [--json]',

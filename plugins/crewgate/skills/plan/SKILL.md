@@ -63,7 +63,7 @@ A plan is a draft until the user approves it.
 1. Finalize requires: a title, a goal, not doing, done when, at least one step, and no `(assumed)`
    line. Put each assumed answer to the user first, and say that two replies are needed: one for the
    assumptions, one for the plan. After they answer, edit that line in the plan file so it ends in
-   `(user)`. Never change it without their answer. No CLI command does this.
+   `(user)`. Never change it without their answer. No CLI command does this. To reword a step, use `crew plan edit <slug> <node> "text"`, not a hand edit.
 2. Show the **whole plan** in the chat (`crew plan show <slug>`), not a summary.
 3. Run `crew plan finalize <slug>`: it prints a gate id. **End your turn**, ask for approval, and wait.
 4. Only after the user's reply, in a new turn: if it is a yes, run `crew plan finalize <slug> --gate <id>`.
