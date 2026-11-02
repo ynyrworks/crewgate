@@ -56,6 +56,7 @@ Decided, not started or not finished.
 
 - **0.23 in real use.** Try the drift question on 2 real plans and judge whether it helps or gets in the way, using `crew plan drift-stats`. Tighten the triggers if it gets in the way.
 - **0.24.** `--help` groups, and whatever the first real plans under 0.23 show.
+- **One-click update without git.** When Git is installed but not on the PATH the board was started with, the update fails with Claude Code's "git not found or unsafe location". Seen and reproduced on Windows. The board should check first, say so, and show the commands to run by hand.
 - **HD Office.** The look stays frozen as v0.1.0 for now. Still to do before it can be the default: warm tone, foreground, and performance on integrated graphics.
 - **Machine load in real use.** Measure closing one session while the app stays open, and closing a terminal that runs an interactive `claude`. Then decide whether cleanup should stay at all.
 - **macOS and Linux.** Probe `StartTransientUnit` through `busctl --user` with an existing pid and a real quota, and measure `taskpolicy -b` on a saturated Mac. Build only what those show.
