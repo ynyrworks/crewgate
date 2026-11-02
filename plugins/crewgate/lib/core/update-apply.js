@@ -110,13 +110,13 @@ async function findCli(tool, env, platform, o = {}) {
 }
 
 // Runs one fixed command. -> { code, timedOut, output, error }. stdin is closed.
-function runCommand(file, args, { env, timeoutMs, platform, outMax = OUT_MAX }) {
+function runCommand(file, args, { env, timeoutMs, platform, outMax = OUT_MAX, cwd = os.homedir() }) {
   return new Promise((resolve) => {
     let plan;
     try { plan = execx.spawnPlan(file, args, { platform }); } catch (e) { resolve({ code: null, timedOut: false, output: '', error: e.message }); return; }
     let child;
     try {
-      child = spawn(plan.file, plan.args, { ...plan.options, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, env });
+      child = spawn(plan.file, plan.args, { ...plan.options, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, env, cwd });
     } catch (e) { resolve({ code: null, timedOut: false, output: '', error: e.message }); return; }
     let out = '';
     let settled = false;
@@ -162,7 +162,7 @@ function claudeInstalledOnDisk(pluginRoot, env) {
   try { return fs.statSync(cleanup.cacheDir({ claude: dir }, 'claude')).isDirectory(); } catch { return false; }
 }
 
-// reason: why the commands are only shown (cliNotFound, devCheckout, notInstalled).
+// reason: why the commands are only shown (cliNotFound, gitNotFound, devCheckout, notInstalled).
 function manualList(reason, tools = Object.keys(COMMANDS)) {
   return tools.map((tool) => ({ tool, reason, commands: COMMANDS[tool].map((a) => display(tool, a)) }));
 }
@@ -178,7 +178,11 @@ async function plan(o) {
   const steps = [];
   const tools = [];
   const claude = await findCli('claude', o.env, o.platform, o);
-  if (claude) {
+  if (claude && !execx.resolveCommand('git', { env: o.env, platform: o.platform })) {
+    // `claude plugin ...` runs git; without it on this PATH Claude Code only prints "Command 'git' not found"
+    if (claudeInstalledOnDisk(o.pluginRoot, o.env)) tools.push({ tool: 'claude', status: 'manual', reason: 'gitNotFound' });
+    else tools.push({ tool: 'claude', status: 'skipped', reason: 'notInstalled' });
+  } else if (claude) {
     const listing = await claudeListing(claude, o);
     if (listing.includes(ID)) {
       for (const a of COMMANDS.claude) steps.push({ tool: 'claude', file: claude, args: a, cmd: display('claude', a) });
@@ -294,7 +298,7 @@ function createRunner(opts = {}) {
     let held = release;
     const drop = () => { held(); held = () => {}; };
     try {
-      const p = await plan({ pluginRoot, env, platform });
+      const p = await plan({ pluginRoot, env, platform, cwd: opts.cwd });
       st.manual = p.manual;
       // updated | skipped (not installed) | manual (CLI not found) | failed
       const result = (tool) => { let x = st.results.find((y) => y.tool === tool); if (!x) { x = { tool, status: 'skipped', reason: null }; st.results.push(x); } return x; };
@@ -303,7 +307,7 @@ function createRunner(opts = {}) {
       let allOk = true;
       for (const s of p.steps) {
         st.current = s.cmd;
-        const r = await runCommand(s.file, s.args, { env, platform, timeoutMs: opts.stepTimeoutMs || STEP_TIMEOUT_MS });
+        const r = await runCommand(s.file, s.args, { env, platform, cwd: opts.cwd, timeoutMs: opts.stepTimeoutMs || STEP_TIMEOUT_MS });
         const ok = r.code === 0 && !r.timedOut && !r.error;
         st.steps.push({ tool: s.tool, cmd: s.cmd, ok, code: r.code, timed_out: r.timedOut, output: r.output || r.error || '' });
         if (s.optional) continue;   // a failed add-on update does not stop the plugin; its page then says it needs updating

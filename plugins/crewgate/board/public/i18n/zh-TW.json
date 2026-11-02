@@ -269,6 +269,7 @@
   "update.reason.cliNotFound": "在 PATH 找不到 {tool} CLI",
   "update.reason.notInstalled": "未安裝",
   "update.reason.devCheckout": "開發用的 checkout，不會自動執行",
+  "update.reason.gitNotFound": "這個看板啟動時的 PATH 找不到 git，無法自動更新。請把 Git 的資料夾加進 PATH，或在 `git --version` 可用的終端機執行下列指令",
   "update.reason.notReached": "前一個指令失敗",
   "update.result.updated": "{tool}：已更新",
   "update.result.skipped": "{tool}：已略過",

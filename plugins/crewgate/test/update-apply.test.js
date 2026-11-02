@@ -13,7 +13,7 @@ const CODEX_TOML = '[plugins."crewgate@crewgate"]\nenabled = true\n';
 
 // A fake machine: a bin folder with fake CLIs, a Claude config dir (the plugin is "installed" in it)
 // and a Codex home. Returns what a runner needs.
-function machine({ claude = true, codex = true, claudeListed = true, codexConfigured = true, claudeCfg = {}, codexCfg = {} } = {}) {
+function machine({ claude = true, codex = true, claudeListed = true, codexConfigured = true, claudeCfg = {}, codexCfg = {}, git = true } = {}) {
   const root = u.tmpDir('crew-machine-');
   const bin = path.join(root, 'bin');
   const claudeDir = path.join(root, '.claude');
@@ -26,7 +26,7 @@ function machine({ claude = true, codex = true, claudeListed = true, codexConfig
   if (claude) u.fakeCli(bin, 'claude', { log, list: claudeListed ? LIST_OK : '[]', ...claudeCfg }, u.CLAUDE_BODY);
   if (codex) u.fakeCli(bin, 'codex', { log, ...codexCfg }, u.CODEX_BODY);
   if (codexConfigured) fs.writeFileSync(path.join(codexDir, 'config.toml'), `model = "x"\n${CODEX_TOML}`);
-  const env = u.fakeEnv({ bin, claudeDir, codexDir });
+  const env = u.fakeEnv({ bin, claudeDir, codexDir, git });
   const calls = () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n').filter(Boolean) : []);
   return { root, bin, claudeDir, codexDir, pluginRoot, env, calls };
 }
@@ -211,4 +211,48 @@ test('locateNewRoot: a version-named cache folder moves to the newest sibling, a
   const clone = path.join(cache, 'plugins', 'marketplaces', 'crewgate', 'plugins', 'crewgate');
   fs.mkdirSync(clone, { recursive: true });
   assert.equal(ua.locateNewRoot(clone), fs.realpathSync(clone));
+});
+
+test('git is not on PATH: no claude command runs, claude is manual with gitNotFound, codex is unchanged', async () => {
+  const m = machine({ git: false });
+  const s = (await runIt(m)).status();
+  assert.deepEqual(s.steps.map((x) => x.cmd), ['codex plugin marketplace upgrade crewgate']);
+  assert.deepEqual(s.results.map((x) => [x.tool, x.status, x.reason]), [['claude', 'manual', 'gitNotFound'], ['codex', 'updated', null]]);
+  assert.deepEqual(s.manual, [{ tool: 'claude', reason: 'gitNotFound', commands: ['claude plugin marketplace update crewgate', 'claude plugin update crewgate@crewgate'] }]);
+  assert.equal(m.calls().some((c) => c.startsWith('claude')), false, 'claude must not be started at all');
+});
+
+test('git is not on PATH and only claude is installed: state manual, nothing runs', async () => {
+  const m = machine({ git: false, codex: false, codexConfigured: false });
+  const s = (await runIt(m)).status();
+  assert.equal(s.state, 'manual');
+  assert.deepEqual(s.steps, []);
+  assert.equal(s.manual[0].reason, 'gitNotFound');
+  assert.deepEqual(m.calls(), []);
+});
+
+test('a stub git on PATH: the claude steps run as before', async () => {
+  const m = machine({ codex: false, codexConfigured: false });
+  assert.ok(fs.existsSync(path.join(m.bin, process.platform === 'win32' ? 'git.cmd' : 'git')));
+  const s = (await runIt(m)).status();
+  assert.equal(s.state, 'done', JSON.stringify(s));
+  assert.deepEqual(s.steps.map((x) => x.tool), ['claude', 'claude']);
+});
+
+test('gitNotFound has text in both languages, for the CLI and the board', () => {
+  for (const f of ['lib/i18n/update.en.json', 'lib/i18n/update.zh-TW.json', 'board/public/i18n/en.json', 'board/public/i18n/zh-TW.json']) {
+    const tbl = JSON.parse(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'));
+    assert.match(tbl['update.reason.gitNotFound'] || '', /git --version/, f);
+  }
+});
+
+test('each step runs in the home folder, not in the folder the board started from', async () => {
+  const m = machine({ codex: false, codexConfigured: false, claudeCfg: { onUpdate: "log('cwd ' + process.cwd());" } });
+  const home = fs.realpathSync(require('node:os').homedir());
+  const s = (await runIt(m)).status();
+  assert.equal(s.state, 'done', JSON.stringify(s));
+  const cwds = m.calls().filter((c) => c.startsWith('cwd '));
+  assert.ok(cwds.length >= 1);
+  for (const c of cwds) assert.equal(fs.realpathSync(c.slice(4)).toLowerCase(), home.toLowerCase());
+  assert.notEqual(fs.realpathSync(process.cwd()).toLowerCase(), home.toLowerCase(), 'test must start from a different folder');
 });
