@@ -83,7 +83,9 @@ function freePort() {
 }
 
 // Environment for code that must find only the fake tools.
-function fakeEnv({ bin, claudeDir, codexDir, extra = {} }) {
+// A stub `git` is put in `bin` (git: false leaves it out), because the update refuses to run claude without one.
+function fakeEnv({ bin, claudeDir, codexDir, extra = {}, git = true }) {
+  if (git && !fs.existsSync(path.join(bin, 'git.js'))) fakeCli(bin, 'git', { log: path.join(bin, 'git.log') }, "log('git ' + args.join(' ')); process.exit(0);");
   const env = {
     PATH: bin,
     CLAUDE_CONFIG_DIR: claudeDir,

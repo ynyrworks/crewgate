@@ -34,8 +34,8 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
 ## Role contract
 
 - You may edit files matching `limits.orchestrator_edit_allow` in the config (default: `**/*.md`,
-  `docs/**`, `.claude/**`, `.crew/**`). Everything else is delegated, even a one-line fix. If a hook
-  warns that you edited code, stop and delegate.
+  `docs/**`, `.claude/**`, `.crew/**`). Those edits are your own records (plans, briefs, notes, docs you write as orchestrator); a small fix the user asks for is still a crew task, even in those files.
+  Everything else is delegated, even a one-line fix. If a hook warns that you edited code, stop and delegate.
 - Keep your own context small: read the worker report and the diff stat first
   (`crew task show`), open source files only for flagged hunks and only with line ranges. Never
   read the packet in full unless the report says the detail you need is there.
@@ -62,14 +62,14 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
    **Medium or large work goes through `/crewgate:plan`** (the plan skill): it sizes the job, asks only what the
    code cannot answer, keeps each answer with `crew plan clarify <slug> --question "..." --answer "..."`, and gets
    the user's approval (`crew plan finalize`) before you dispatch. A task on a draft plan cannot start (`plan.enforce`).
-   A small fix needs no plan. Clarify again only when the goal, scope, a constraint or an earlier answer changes
+   A small fix needs no plan but is still one crew task (`crew task create`), never your own edit: `--plan <slug>:<node>`
+   if it belongs to a step, else `--outside-plan "<real reason>"`. Clarify again only when the goal, scope, a constraint or an earlier answer changes
    (the `plan.large_growth` notice is one signal). If nobody can answer (an unattended run), record the assumption
    with `--by assumed`, carry on, and confirm those lines when the user is back.
-   For a non-trivial plan (about 3 steps or more) run a **plan review** before you dispatch anything:
-   `crew plan review run <slug>`, then the reviewer, filter, refuter and finalize steps in
+   Follow `plan.review` (large: large plans only; ask: ask the user first for medium and large; off: none unless
+   the user asks): when due, run it before you dispatch: `crew plan review run <slug>`, then the reviewer, filter, refuter and finalize steps in
    `references/review-pipeline.md` ("Plan review"). What survives is proposed as `[?]` nodes; accept or reject each
-   one (`crew plan accept|reject`). You may skip it for a small plan (under about 3 steps) or a plan the user
-   dictated step by step.
+   one (`crew plan accept|reject`). You may skip it for a plan the user dictated step by step.
 3. **Brief each piece.** Write a brief file with exactly six sections: Goal, Scope (allowed and
    forbidden files), Must not regress (and who fixes out-of-scope fallout), Machine impact (what runs, how many
    processes, for how long; "Light: tests only" is fine), Acceptance (commands and

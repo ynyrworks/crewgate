@@ -162,22 +162,23 @@ function covered(root, projectId, slug, kind, session) {
 // mode block with the kind not covered throws plan.driftNewStep (nothing has changed yet); remind returns warn (approveStep records plan.drift_unasked once the step is written).
 // `clean` says the file matched what was approved before the step: only then is the new step approved along with it (approveStep).
 function stepCheck(root, projectId, cfg, slug, opts = {}) {
+  const kind = opts.kind || 'new-step'; // plan edit asks with changed-text
   const mode = cfg && cfg.plan && cfg.plan.enforce;
   if (mode === 'off' || plans.stateOf(root, projectId, slug) !== 'final') return null;
-  const isCovered = covered(root, projectId, slug, 'new-step', opts.session);
+  const isCovered = covered(root, projectId, slug, kind, opts.session);
   const clean0 = !plans.changedSinceApproved(root, projectId, slug);
   if (!isCovered) {
     if (mode === 'remind') {
-      return { mode, covered: false, clean: clean0, warn: true, session: opts.session };
+      return { mode, covered: false, clean: clean0, warn: true, session: opts.session, kind };
     }
-    throw new CrewError('plan.driftNewStep', { slug });
+    throw new CrewError(kind === 'changed-text' ? 'plan.driftEditStep' : 'plan.driftNewStep', { slug });
   }
-  return { mode, covered: true, clean: clean0 };
+  return { mode, covered: true, clean: clean0, kind };
 }
 // Called after the step was written: under remind, the step went in without the question, so that is recorded now (never for a failed add).
 function approveStep(root, projectId, slug, chk) {
   if (chk && chk.warn) {
-    try { events.append(projectId, { type: 'plan.drift_unasked', src: 'cli', session: chk.session, data: { slug, kind: 'new-step' }, key: `${slug}:drift_unasked:${Date.now()}` }); } catch { /* ignore */ }
+    try { events.append(projectId, { type: 'plan.drift_unasked', src: 'cli', session: chk.session, data: { slug, kind: chk.kind || 'new-step' }, key: `${slug}:drift_unasked:${Date.now()}` }); } catch { /* ignore */ }
   }
   if (chk && chk.covered && chk.clean) plans.approveNow(root, projectId, slug);
 }

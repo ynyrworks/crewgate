@@ -34,6 +34,35 @@ test('no arguments prints the group list; unknown group exits 2; --help exits 0'
   assert.equal(crew(['../etc/passwd']).code, 2);
 });
 
+const COMMON = ['init', 'doctor', 'plan', 'task', 'review', 'gate', 'board'];
+// group lines of a help text: "  name  summary"
+const groupLines = (out) => out.split('\n').map((l) => l.trimEnd()).filter((l) => /^ {2}[a-z][a-z0-9-]* +\S/.test(l)).map((l) => l.trim().split(/\s/)[0]);
+
+for (const lang of ['en', 'zh-TW']) {
+  test(`help (${lang}) lists the common groups first, names the others in one line, --all shows every group`, () => {
+    const all = cli.listGroups();
+    const advanced = all.map((x) => x.name).filter((n) => !COMMON.includes(n));
+    assert.ok(advanced.length > 0);
+    const r = h.crew(['--help', '--lang', lang], work, env);
+    assert.equal(r.code, 0);
+    assert.deepEqual(groupLines(r.out), COMMON);
+    for (const n of advanced) {
+      const mod = all.find((x) => x.name === n).mod;
+      assert.ok(!r.out.includes(mod.summary[lang]), `advanced summary shown: ${n}`);
+    }
+    const more = r.out.split('\n').find((l) => l.includes('--help --all'));
+    assert.ok(more, 'no --all line');
+    for (const n of advanced) assert.ok(more.includes(n), `advanced line misses ${n}`);
+    assert.equal(h.crew(['--lang', lang], work, env).out, r.out);
+    assert.equal(h.crew(['--lang', lang], work, env).code, 2);
+
+    const a = h.crew(['--help', '--all', '--lang', lang], work, env);
+    assert.equal(a.code, 0);
+    assert.deepEqual(groupLines(a.out), COMMON.concat(advanced));
+    assert.ok(!a.out.includes('--help --all'));
+  });
+}
+
 test('data commands outside a registered project exit 1 with a hint', () => {
   const bare = h.tmpDir('crew-bare-');
   const r = crew(['need', 'list'], bare);

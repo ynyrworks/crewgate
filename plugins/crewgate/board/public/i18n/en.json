@@ -269,6 +269,7 @@
   "update.reason.cliNotFound": "{tool} CLI not found on PATH",
   "update.reason.notInstalled": "not installed",
   "update.reason.devCheckout": "development checkout, nothing is run automatically",
+  "update.reason.gitNotFound": "git is not on the PATH this board was started with, so the update cannot run. Put Git's folder on PATH, or run these commands in a terminal where `git --version` works",
   "update.reason.notReached": "an earlier command failed",
   "update.result.updated": "{tool}: updated",
   "update.result.skipped": "{tool}: skipped",

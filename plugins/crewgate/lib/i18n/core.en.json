@@ -1,5 +1,6 @@
 {
   "cli.usage": "Usage: crew <group> <action> [options]\n\nCommand groups:",
+  "cli.moreGroups": "Other groups: {groups}. Run `crew --help --all` to show them all.",
   "cli.globals": "Global options: --project <id|path|name>  --json  --lang en|zh-TW  --help  --version",
   "cli.unknownGroup": "Unknown command group: {group}",
   "cli.errorPrefix": "Error: ",
