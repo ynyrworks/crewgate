@@ -46,6 +46,7 @@
   "plan.review.dispatch": "用下面的提示派出 {agent} 子代理（模型 {model}），審查計畫 {slug} 第 {round} 輪（Agent 工具，唯讀）。",
   "plan.review.rawAt": "發現會存到 {path}",
   "plan.review.thenFilter": "它存好發現後執行：crew plan review filter {slug}",
+  "plan.review.thenFinalize": "下一步：crew plan review finalize {slug}",
   "plan.review.filtered": "計畫審查第 {round} 輪：{total} 筆發現，留下 {kept}，濾掉 {dropped}",
   "plan.review.droppedEntry": "  濾掉 {id}：{reason}（{detail}）",
   "plan.review.nothingToRefute": "沒有需要反駁的發現。用這個結束本輪：crew plan review finalize {slug}",

@@ -424,11 +424,14 @@ test('review run with an external engine: prompt on stdin, JSON extracted into t
 });
 
 test('external engine: explicit --engine on a claude-default project, failures and non-JSON output', () => {
+  // a failing engine stops the review only with fallback "none" (the default falls back to the Claude subagent)
   const failing = engineSetup('fail');
+  u.patchCfg(failing.repo, (c) => { c.roles.reviewer.fallback = 'none'; });
   const r = h.crew(['review', 'run', failing.t.id], failing.repo);
   assert.equal(r.code, 1);
   assert.match(r.err, /fake failed: .*boom/);
   const prose = engineSetup('prose');
+  u.patchCfg(prose.repo, (c) => { c.roles.reviewer.fallback = 'none'; });
   const p = h.crew(['review', 'run', prose.t.id], prose.repo);
   assert.equal(p.code, 1);
   assert.match(p.err, /no JSON array/);

@@ -396,6 +396,13 @@ an engine (`roles.*.engine`): an `engines` block in a project file is ignored wi
 repository must not choose which program `crew review run` starts. `crew doctor` shows whether each engine
 resolves. Codex as a worker and as an orchestrator is described in the next section.
 
+The refuter and the plan review use engines the same way: `roles.refuter.engine` makes `crew review filter` run the
+engine itself and save the verdicts (then run `crew review finalize`); `roles.reviewer.engine` and `roles.refuter.engine`
+also apply to `crew plan review run` and `crew plan review filter` (`plan review run` takes `--engine` too). If an
+engine fails (error, usage limit, timeout, no JSON in its output), crewgate prints one line with the reason and the
+Claude subagent dispatch instead, and records a `review.engine_fallback` event. Set `roles.<role>.fallback` to `none`
+to stop with the error instead (the default is `claude`).
+
 ## Using with Codex (experimental)
 
 crewgate also runs with the Codex CLI. This is experimental: it was measured with Codex CLI 0.160 and has not seen long real use.
