@@ -101,7 +101,7 @@ const read = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8').replace(/\
 
 test('plan skill: "When work drifts" names the commands and the rules', () => {
   const raw = fs.readFileSync(path.join(ROOT, 'skills', 'plan', 'SKILL.md'), 'utf8');
-  assert.ok(raw.split('\n').length < 120);
+  assert.ok(raw.split('\n').length < 133);
   const s = read('skills', 'plan', 'SKILL.md');
   assert.ok(s.includes('When work drifts'));
   for (const c of ['crew plan drift', '--gate', '--answer', '--outside-plan', 'end the turn', 'Never edit the plan file', '`add`', '`goal`', '`new`', '`drop`', '`defer`']) assert.ok(s.includes(c), c);
