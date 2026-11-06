@@ -372,6 +372,11 @@ crewgate 會組出提示詞（任務書、審查規則、diff），從標準輸�
 `crew doctor` 會顯示每個引擎是否找得到。
 Codex 當實作者與當統籌的做法見下一節。
 
+反駁員與計畫審查也能用引擎：`roles.refuter.engine` 會讓 `crew review filter` 自己執行引擎並存下判定（接著執行 `crew review finalize`）；
+`roles.reviewer.engine` 與 `roles.refuter.engine` 同樣適用於 `crew plan review run` 與 `crew plan review filter`（`plan review run` 也有 `--engine`）。
+引擎失敗（錯誤、用量上限、逾時、輸出裡沒有 JSON）時，crewgate 會印一行原因，改印 Claude 子代理的派工內容，並記錄 `review.engine_fallback` 事件。
+把 `roles.<角色>.fallback` 設成 `none` 則改為直接報錯停止（預設是 `claude`）。
+
 ## 搭配 Codex 使用（實驗性）
 
 crewgate 也能搭配 Codex CLI。這部分是實驗性的：只用 Codex CLI 0.160 量測過，尚未長期實際使用。

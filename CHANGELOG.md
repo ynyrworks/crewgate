@@ -1,20 +1,52 @@
 # Changelog
 
-## 0.24.0 — 2026-11-06
+## 0.25.0 — 2026-11-06
 
-Reviews follow the intended split again: Claude (sonnet) implements, Codex reviews and refutes.
+Reviews follow the intended split by default: Claude (sonnet) implements, Codex reviews and refutes.
 
 ### Fixed
 
-- The reviewer and refuter roles default to the `codex` engine when the global config file (`~/.crewgate/config.json`) itself defines `engines.codex` and its command is found. Otherwise they stay on `claude` (sonnet). Before, they were always `claude` unless each project named an engine, and a project without `.claude/crew.json` could not review with Codex at all. The built-in `codex` entry alone does not count, so a machine without Codex set up behaves as before. The worker stays on `claude` / sonnet.
+- The reviewer and refuter roles default to the `codex` engine when the global config file (`~/.crewgate/config.json`) itself defines `engines.codex` and its command is found. Otherwise they stay on `claude` (sonnet), and `crew doctor` says why. Before, Codex was used only where a project set both `roles.*.engine` keys, so a project without `.claude/crew.json` could not review with Codex at all. The built-in `codex` entry alone does not count, so a machine without Codex set up behaves as before. The worker stays on `claude` / sonnet. Plan review follows the same two roles.
 - An engine a project names in `roles.reviewer.engine` or `roles.refuter.engine` always wins, `claude` included. An unknown engine name is still an error and falls back to the default.
 - `crew init` no longer writes `engine` for the reviewer and refuter, so new projects follow the global default.
-- With an external reviewer, `crew review run` now runs the whole round: review, filter, refute and finalize. It prints no subagent prompt. The refuter can be an external engine too: its prompt carries the kept findings, the brief, the rules and the diff, and its verdicts are saved as `<round>.refutations.json`. `crew review filter` runs an external refuter the same way, then `finalize` applies the verdicts. A `claude` refuter still gets the printed prompt. `--refuter-engine claude|<name>` on `run` and `filter` overrides it for one round.
+- When an external reviewer answers, `crew review run` runs the whole round: review, filter, refute and finalize, with no subagent prompt. With a `claude` refuter, or when the refuter engine fails and falls back, it stops at the refuter prompt. `--refuter-engine claude|<name>` on `run` and `filter` overrides the refuter for one round.
 - `crew doctor` has a **Review roles** line: the engine of each role, whether the project or the default chose it, and a hint when Codex is not set up or its command is not found.
 
 ### Upgrade
 
-- A project made by an older `crew init` has `"engine": "claude"` written for the reviewer and refuter, which now counts as an explicit choice. Remove those two keys to follow the Codex default; `crew doctor` shows which one applies.
+- A project made by an older `crew init` has `"engine": "claude"` written for the reviewer and refuter, which counts as an explicit choice. Remove those two keys to follow the Codex default; `crew doctor` shows which one applies.
+
+### Known issues
+
+- Checked with the real Codex CLI on one throwaway task (review and refute both ran, the round was finalized). The fallback after a real usage limit is still untested.
+
+## 0.24.0 — 2026-11-06
+
+Commands and the plan flow are easier to start with, and Codex can now review and refute with Claude as the fallback.
+
+### New
+
+- `crew --help` lists the 7 everyday groups first (init, doctor, plan, task, review, gate, board). The rest are named on one "Other groups" line, and `crew --help --all` shows them all. No command was removed.
+- `crew plan edit SLUG NODE "new text"` changes one step's text. On a draft it just edits. On a final plan it is refused until you answer the drift question (`plan drift --kind changed-text`), and then the approved text is updated.
+- Codex can run the refuter as well as the reviewer, for task review and plan review: set `roles.reviewer.engine` and `roles.refuter.engine` to an engine from the global config, such as `codex`.
+- When an engine fails (a usage limit, out of tokens, a timeout, or no JSON in its output), the review goes on with the Claude subagent on sonnet. The reason is printed on one line and recorded as `review.engine_fallback`. `roles.*.fallback: "none"` keeps the old error.
+
+### Changed
+
+- `plan.interview: off`: the model's own assumptions no longer block `crew plan finalize`. They are listed, and your one approval confirms them all.
+- The board's one-click update first checks that git can be found. When it cannot, it says why and shows the commands to run by hand.
+- Skill text: a small fix you ask for is always one crew task, with `--outside-plan "<reason>"` when a final plan exists. Each question asks one thing. `plan.review: ask` is followed, and an unattended run skips the question and says so.
+
+### Upgrade
+
+- Nothing to run. Projects that want Codex reviews set the two `roles.*.engine` keys in `.claude/crew.json`; the default stays Claude on sonnet.
+- An external review engine that fails no longer stops `crew review run`; it falls back to Claude. Set `roles.reviewer.fallback` or `roles.refuter.fallback` to `none` for the old behaviour.
+
+### Known issues
+
+- Codex review and the fallback were tested with a stand-in engine only, not with the real Codex CLI or a real usage limit.
+- With `fallback: "none"` and a failing engine, a plan review round is still used up.
+- The issues from real use of 0.23 are not in this release; they move to the next one.
 
 ## 0.23.0 — 2026-11-02
 

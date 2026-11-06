@@ -8,6 +8,7 @@ the [CHANGELOG](../CHANGELOG.md).
 
 One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.md).
 
+- **0.24** — `crew --help` lists the everyday groups first, `crew plan edit` changes a step's text through the drift question, the board checks for git before an update, and Codex can review and refute with Claude as the fallback.
 - **0.23** — When work leaves a final plan, it stops and asks: add to this plan, change the goal, new plan, drop or defer. It asks only where code can tell, and `crew plan drift-stats` shows how often. Released for real use; whether it helps is not judged yet.
 - **0.22** — The purpose widens to "be sure it does what you want". `/crewgate:plan` finds that out before work starts, plans have states, a task on a draft plan cannot start, and only your reply makes a plan final.
 - **0.21.2** — The description of session cleanup says only what was measured, and a test setting can no longer push a process listing past the hook budget.
@@ -55,7 +56,7 @@ Open problems in the latest release, and what has not been checked.
 Decided, not started or not finished.
 
 - **0.23 in real use.** Try the drift question on 2 real plans and judge whether it helps or gets in the way, using `crew plan drift-stats`. Tighten the triggers if it gets in the way.
-- **0.24.** `--help` groups, and whatever the first real plans under 0.23 show.
+- **0.25.** Whatever the first real plans under 0.23 and 0.24 show, and Codex review checked with the real Codex CLI.
 - **HD Office.** The look stays frozen as v0.1.0 for now. Still to do before it can be the default: warm tone, foreground, and performance on integrated graphics.
 - **Machine load in real use.** Measure closing one session while the app stays open, and closing a terminal that runs an interactive `claude`. Then decide whether cleanup should stay at all.
 - **macOS and Linux.** Probe `StartTransientUnit` through `busctl --user` with an existing pid and a real quota, and measure `taskpolicy -b` on a saturated Mac. Build only what those show.

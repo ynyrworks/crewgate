@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('fs');
 const { parse } = require('../core/args');
 const { UsageError, CrewError } = require('../core/errors');
 const { clean } = require('../core/redact');
@@ -7,6 +8,7 @@ const plans = require('../core/plans');
 const pr = require('../core/plan-review');
 const tasks = require('../core/tasks');
 const common = require('../features/common');
+const eng = require('../features/engine');
 const gates = require('../core/gates');
 const drift = require('../core/drift');
 const sess = require('../hooks/session');
@@ -22,6 +24,7 @@ const SPECS = {
       '--origin': { dest: 'origin', choices: plans.ORIGINS, default: 'plan' }, '--proposed': { dest: 'proposed', flag: true },
     },
   },
+  edit: { positionals: [{ name: 'slug' }, { name: 'node' }, { name: 'text' }], options: {} },
   clarify: {
     positionals: [{ name: 'slug' }],
     options: { '--question': { dest: 'question' }, '--answer': { dest: 'answer' }, '--by': { dest: 'by', choices: ['user', 'assumed', 'decision'], default: 'user' } },
@@ -47,7 +50,7 @@ const SPECS = {
 };
 const ROUND = { '--round': { dest: 'round', int: true } };
 const REVIEW_SPECS = {
-  run: { positionals: [{ name: 'slug' }], options: { '--node': { dest: 'node' }, '--force': { dest: 'force', flag: true } } },
+  run: { positionals: [{ name: 'slug' }], options: { '--node': { dest: 'node' }, '--force': { dest: 'force', flag: true }, '--engine': { dest: 'engine' } } },
   submit: {
     positionals: [{ name: 'slug' }],
     options: { '--kind': { dest: 'kind', choices: ['findings', 'refutations'], default: 'findings' }, '--file': { dest: 'file' }, ...ROUND },
@@ -101,8 +104,30 @@ function reviewRun(argv, ctx) {
   plans.checkSlug(a.slug);
   const cfg = ctx.config().config;
   if (sub === 'run') {
+    const engine = a.engine || ((cfg.roles || {}).reviewer || {}).engine || 'claude';
+    if (engine !== 'claude') eng.check(engine);
     const r = pr.start(root, proj.id, cfg, a.slug, { node: a.node, force: !!a.force });
-    ctx.emit(r, [
+    let fallback = null;
+    if (engine !== 'claude') {
+      const dir = pr.dirOf(proj.id, a.slug);
+      const packet = fs.readFileSync(r.packet_path, 'utf8');
+      const max = pr.limits(cfg).max_proposals_per_round * 2;
+      const res = eng.run({
+        cwd: proj.path, name: engine, input: pr.engineReviewerPrompt({ slug: a.slug, round: r.round, packet, scope: r.scope, max }),
+        engineTxt: pr.roundFile(dir, r.round, 'engine.txt'),
+      });
+      if (!res.fail) {
+        const saved = pr.submit(proj.id, a.slug, { kind: 'findings', round: r.round, list: res.list });
+        ctx.emit({ ...r, engine, count: saved.count, raw_path: saved.file, prompt: undefined }, [
+          ctx.t('wf.review.engineDone', { name: engine, n: saved.count, path: saved.file }),
+          ctx.t('plan.review.thenFilter', { slug: a.slug }),
+        ]);
+        return 0;
+      }
+      fallback = eng.onFail(proj.id, cfg, { role: 'reviewer', name: engine, fail: res.fail, round: r.round, scope: 'plan' });
+    }
+    ctx.emit(fallback ? { ...r, engine, fallback } : r, [
+      ...(fallback ? [ctx.t('wf.review.engineFallback', { name: fallback.engine, reason: fallback.reason })] : []),
       ctx.t('plan.review.dispatch', { agent: r.subagent_type, model: r.model, round: r.round, slug: a.slug }),
       ctx.t('plan.review.rawAt', { path: r.raw_path }),
       '--- prompt ---', r.prompt, '--- end ---',
@@ -122,9 +147,27 @@ function reviewRun(argv, ctx) {
     if (r.dropped.length) L.push(ctx.t('wf.review.droppedBy', { reasons: Object.entries(r.reasons).map(([k, v]) => `${k} ${v}`).join(', ') }));
     for (const d of r.dropped.filter((x) => x.reason !== 'duplicate')) L.push(ctx.t('plan.review.droppedEntry', { id: (d.finding && d.finding.id) || '?', reason: d.reason, detail: d.detail }));
     for (const f of r.kept) L.push(`  ${brief(f)}`);
+    let fallback = null;
+    const engine = ((cfg.roles || {}).refuter || {}).engine || 'claude';
+    if (r.refuter && engine !== 'claude') {
+      const dir = pr.dirOf(proj.id, a.slug);
+      const packet = fs.readFileSync(pr.roundFile(dir, r.round, 'packet.md'), 'utf8');
+      const res = eng.run({
+        cwd: proj.path, name: engine, input: pr.engineRefuterPrompt({ slug: a.slug, round: r.round, packet, kept: r.kept }),
+        engineTxt: pr.roundFile(dir, r.round, 'engine.txt'),
+      });
+      if (!res.fail) {
+        const saved = pr.submit(proj.id, a.slug, { kind: 'refutations', round: r.round, list: res.list });
+        L.push(ctx.t('wf.review.engineRefDone', { name: engine, n: saved.count, path: saved.file }), ctx.t('plan.review.thenFinalize', { slug: a.slug }));
+        ctx.emit({ round: r.round, total: r.total, kept: r.kept, dropped: r.dropped, refuter: { engine, count: saved.count, refutations_path: saved.file } }, L);
+        return 0;
+      }
+      fallback = eng.onFail(proj.id, cfg, { role: 'refuter', name: engine, fail: res.fail, round: r.round, scope: 'plan' });
+      L.push(ctx.t('wf.review.engineFallback', { name: fallback.engine, reason: fallback.reason }));
+    }
     if (r.refuter) L.push(ctx.t('wf.review.refuteNext', { agent: r.refuter.subagent_type, model: r.refuter.model }), '--- prompt ---', r.refuter.prompt, '--- end ---');
     else L.push(ctx.t('plan.review.nothingToRefute', { slug: a.slug }));
-    ctx.emit({ round: r.round, total: r.total, kept: r.kept, dropped: r.dropped, refuter: r.refuter }, L);
+    ctx.emit({ round: r.round, total: r.total, kept: r.kept, dropped: r.dropped, refuter: r.refuter && fallback ? { ...r.refuter, fallback } : r.refuter, ...(fallback ? { fallback } : {}) }, L);
   } else if (sub === 'finalize') {
     let refutations;
     if (a.refFile) {
@@ -168,7 +211,7 @@ function askOrAnswer(sub, a, proj, root, ctx) {
       return ctx.emit(r, ctx.t('plan.finalizedOk', { slug: a.slug }));
     }
     const r = plans.finalizeAsk(root, proj.id, cfg, a.slug, { session, t: ctx.t });
-    const msg = ctx.t('plan.finalizeAsked', { slug: a.slug, id: r.gate_id });
+    const msg = ctx.t('plan.finalizeAsked', { slug: a.slug, id: r.gate_id }) + (r.assumed ? '\n' + ctx.t('plan.finalizeAssumed', { list: r.assumed.map((l) => `  - ${l}`).join('\n') }) : '');
     return ctx.emit({ ...r, next: msg }, msg);
   }
   if (a.gate) {
@@ -197,8 +240,8 @@ function driftRun(a, proj, root, ctx) {
 }
 
 // A step added to a final plan raises the drift question first (plan.enforce); see drift.stepCheck.
-function stepCheck(a, proj, root, ctx) {
-  return drift.stepCheck(root, proj.id, ctx.config().config, a.slug, { session: gates.currentSession() });
+function stepCheck(a, proj, root, ctx, kind) {
+  return drift.stepCheck(root, proj.id, ctx.config().config, a.slug, { session: gates.currentSession(), kind });
 }
 
 function driftStats(a, proj, ctx) {
@@ -269,6 +312,10 @@ function run(argv, ctx) {
     const r = plans.addTo(root, proj.id, a.slug, { text: a.text, under: a.under, task: a.task, origin: a.origin, proposed: !!a.proposed });
     drift.approveStep(root, proj.id, a.slug, chk);
     ctx.emit({ slug: a.slug, ...r }, [ctx.t('plan.added', { id: r.id, slug: a.slug }), ...(chk && chk.warn ? [ctx.t('plan.driftUnasked', { slug: a.slug })] : [])]);
+  } else if (sub === 'edit') {
+    const r = plans.editText(root, proj.id, a.slug, a.node, a.text, () => stepCheck(a, proj, root, ctx, 'changed-text'));
+    drift.approveStep(root, proj.id, a.slug, r.chk);
+    ctx.emit({ slug: a.slug, id: r.id }, [ctx.t('plan.edited', { id: r.id, slug: a.slug }), ...(r.chk && r.chk.warn ? [ctx.t('plan.driftEditUnasked', { slug: a.slug })] : [])]);
   } else if (sub === 'clarify') {
     const r = plans.clarify(root, proj.id, a.slug, { question: a.question, answer: a.answer, by: a.by });
     ctx.emit(r, ctx.t('plan.clarified', { slug: a.slug }));
@@ -324,13 +371,14 @@ module.exports = {
       '  crew plan finalize SLUG   (asks the user; show them the plan, end your turn)   |   crew plan finalize SLUG --gate ID   (after their reply)',
       '  crew plan close SLUG done|parked [--gate ID]   |   crew plan reopen SLUG   |   crew plan adopt SLUG   (a legacy plan becomes a draft)',
       '  crew plan add SLUG "text" [--under NODE] [--task TASK] [--origin plan|user|review|refute|implementation|send-back] [--proposed]',
+      '  crew plan edit SLUG NODE "new text"   (changes the text of one step; on a final plan it asks first, see plan drift --kind changed-text)',
       '  crew plan clarify SLUG --question "..." --answer "..." [--by user|assumed|decision]   (keeps a settled question under ## Clarified)',
       '  crew plan drift SLUG --kind new-step|changed-text|unlinked-task|out-of-scope [--detail "..."]   (asks the user how to treat work that left a final plan; end your turn)',
       '  crew plan drift SLUG --gate ID --answer add|goal|new|drop|defer --text "..."   (after their reply)   |   crew plan drift-stats [SLUG] [--json]',
       '  crew plan link SLUG NODE TASK',
       '  crew plan set SLUG NODE open|done|dropped|accept',
       '  crew plan rm SLUG NODE   (a leaf only)',
-      '  crew plan review run SLUG [--node NODE] [--force]   (a reviewer criticises the plan; prints the reviewer prompt)',
+      '  crew plan review run SLUG [--node NODE] [--force] [--engine claude|<name>]   (a reviewer criticises the plan; prints the reviewer prompt)',
       '  crew plan review submit SLUG [--kind findings|refutations] [--round N] [--file F]   (JSON on stdin without --file)',
       '  crew plan review filter SLUG [--round N]   (drops bad, unknown and repeated findings; prints the refuter prompt)',
       '  crew plan review finalize SLUG [--refutations-file F] [--round N]   (survivors become proposed [?] nodes)',
@@ -346,13 +394,14 @@ module.exports = {
       '  crew plan finalize SLUG   （詢問使用者；把計畫給他看，結束這一輪）   |   crew plan finalize SLUG --gate ID   （他回覆之後）',
       '  crew plan close SLUG done|parked [--gate ID]   |   crew plan reopen SLUG   |   crew plan adopt SLUG   （舊計畫變成草稿）',
       '  crew plan add SLUG "文字" [--under NODE] [--task TASK] [--origin plan|user|review|refute|implementation|send-back] [--proposed]',
+      '  crew plan edit SLUG NODE "新文字"   （改一個步驟的文字；已定案的計畫會先詢問，見 plan drift --kind changed-text）',
       '  crew plan clarify SLUG --question "..." --answer "..." [--by user|assumed|decision]   （把釐清的問題記在 ## Clarified 下）',
       '  crew plan drift SLUG --kind new-step|changed-text|unlinked-task|out-of-scope [--detail "..."]   （工作偏離已定案的計畫時詢問使用者；結束這一輪）',
       '  crew plan drift SLUG --gate ID --answer add|goal|new|drop|defer --text "..."   （他回覆之後）   |   crew plan drift-stats [SLUG] [--json]',
       '  crew plan link SLUG NODE TASK',
       '  crew plan set SLUG NODE open|done|dropped|accept',
       '  crew plan rm SLUG NODE   （只能刪葉節點）',
-      '  crew plan review run SLUG [--node NODE] [--force]   （審查者批評計畫；印出審查者提示）',
+      '  crew plan review run SLUG [--node NODE] [--force] [--engine claude|<名稱>]   （審查者批評計畫；印出審查者提示）',
       '  crew plan review submit SLUG [--kind findings|refutations] [--round N] [--file F]   （沒給 --file 就從標準輸入讀 JSON）',
       '  crew plan review filter SLUG [--round N]   （濾掉格式不對、找不到節點、重複的發現；印出反駁者提示）',
       '  crew plan review finalize SLUG [--refutations-file F] [--round N]   （留下的發現變成提議中 [?] 節點）',

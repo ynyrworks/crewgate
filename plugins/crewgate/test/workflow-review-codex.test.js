@@ -23,8 +23,9 @@ const FAKE_CODEX = [
   "let input = '';",
   "process.stdin.on('data', (d) => { input += d; });",
   "process.stdin.on('end', () => {",
-  "  const refuter = input.includes('refuter of code review findings');",
+  "  const refuter = input.includes('You are the crew refuter for task');",
   "  fs.writeFileSync(process.argv[2] + (refuter ? '.refuter' : '.reviewer'), input);",
+  "  if (refuter && process.argv[3] === 'refuter-fail') { process.stderr.write('usage limit reached'); process.exit(2); }",
   '  if (refuter) {',
   "    const verdict = process.argv[3] === 'refute' ? 'refuted' : 'upheld';",
   "    console.log(JSON.stringify([{ id: 'e1', verdict, evidence: 'src/x.js:1 checked' }]));",
@@ -132,7 +133,8 @@ test('review run with the default codex roles: Codex reviews and refutes, then t
     assert.equal(r.code, 0, r.err);
     assert.equal(r.data.engine, 'codex');
     assert.equal(r.data.prompt, undefined, 'no subagent prompt is printed');
-    assert.deepEqual(r.data.refuter, { engine: 'codex', count: 1 });
+    assert.equal(r.data.refuter.engine, 'codex');
+    assert.equal(r.data.refuter.count, 1);
     assert.deepEqual(r.data.findings.map((f) => [f.id, f.verdict]), [['e1', 'upheld']]);
     const sent = fs.readFileSync(`${copy}.refuter`, 'utf8');
     assert.ok(sent.includes('codex claim') && sent.includes('## Diff') && sent.includes('compute(1)'));
@@ -180,5 +182,20 @@ test('external reviewer with a claude refuter: review run stops at the refuter p
     assert.equal(r.data.engine, 'codex');
     assert.equal(r.data.refuter.subagent_type, 'crew-refuter');
     assert.equal(r.data.findings, undefined, 'not finalized before the refuter answers');
+  } finally { resetGlobal(); }
+});
+
+test('review run: a refuter engine that fails falls back to the Claude refuter prompt and does not finalize', () => {
+  try {
+    const { repo, t } = codexSetup('refuter-fail');
+    const r = u.crewJson(['review', 'run', t.id], repo);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(r.data.engine, 'codex');
+    assert.equal(r.data.refuter.subagent_type, 'crew-refuter');
+    assert.match(r.data.fallback.reason, /usage limit/);
+    assert.equal(r.data.findings, undefined);
+    const dir = paths.taskDir(project.findByCwd(repo).id, t.id);
+    assert.equal(fs.existsSync(rv.roundFile(dir, 1, 'refutations.json')), false);
+    assert.equal(fs.existsSync(rv.roundFile(dir, 1, 'json')), false);
   } finally { resetGlobal(); }
 });

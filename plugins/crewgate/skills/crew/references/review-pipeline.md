@@ -20,9 +20,16 @@ Codex is not set up. The worker stays on `claude` / sonnet.
   report. It saves its findings by piping JSON to `crew review submit <task> --round N`.
 - External engine (for example Codex CLI): the command runs it itself, sends the prompt on stdin,
   extracts the JSON array from its output and writes `findings/<round>.raw.json`. A failure or
-  output without a JSON array is reported; nothing is guessed. The same command then runs the
-  filter, the refuter (stage 3) and finalize, so you only read `crew review show <task>` afterwards;
-  with a `claude` refuter it stops after the filter and prints the refuter prompt.
+  output without a JSON array is never guessed: with `roles.reviewer.fallback` `claude` (default) the
+  command prints one line with the reason and the Claude reviewer dispatch (JSON field `fallback`) and
+  records a `review.engine_fallback` event; with `none` it stops with the error. When the engine answers,
+  the same command then runs the filter, the refuter (stage 3) and finalize, so you only read
+  `crew review show <task>` afterwards; with a `claude` refuter (or a refuter engine that fails) it stops
+  after the filter and prints the refuter prompt.
+- `roles.refuter.engine` set to an engine: `crew review filter` runs it itself, writes
+  `<round>.refutations.json` and says to run `crew review finalize <task>`; on failure it falls back
+  to the refuter dispatch the same way (`roles.refuter.fallback`). `crew plan review run|filter` do the
+  same for plan review (`plan review run` also takes `--engine`).
 
 Finding schema (an element of the array):
 
