@@ -12,12 +12,10 @@
       "agent": "crew-worker"
     },
     "reviewer": {
-      "engine": "claude",
       "model": "sonnet",
       "agent": "crew-reviewer"
     },
     "refuter": {
-      "engine": "claude",
       "model": "sonnet",
       "agent": "crew-refuter"
     }

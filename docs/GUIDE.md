@@ -380,16 +380,27 @@ Step by step, limits and recommended settings: [docs/DESIGN.md §8.1](DESIGN.md)
 
 ## Using Codex or another CLI as the reviewer
 
-The reviewer role can run outside Claude. The global config (`~/.crewgate/config.json`) ships an engine named
-`codex` (`codex exec -s read-only --skip-git-repo-check -`). Set `roles.reviewer.engine` to `codex` in the project,
-or run it once:
+The intended split is: Claude (sonnet) implements, Codex reviews and refutes. The reviewer and refuter roles
+default to an engine named `codex` when your global config file (`~/.crewgate/config.json`) defines
+`engines.codex` and its command is found; otherwise they fall back to `claude` (sonnet) and `crew doctor` says
+so. For example:
+
+```json
+{ "engines": { "codex": { "command": "codex", "args": ["exec", "-s", "read-only", "--skip-git-repo-check", "-"] } } }
+```
+
+`crew init` leaves `engine` out for these two roles so they follow that default; a project that sets
+`roles.reviewer.engine` or `roles.refuter.engine` itself (for example to `claude`) keeps its choice. The worker
+stays on `claude` / sonnet. To use an engine once:
 
 ```
 crew review run <task> --engine codex
 ```
 
 crewgate builds a prompt (brief, review rules, diff), passes it on stdin, extracts the JSON array of findings
-from stdout and continues with the same filter and refute stages. Add your own engine under `engines` in the
+from stdout and continues with the same filter and refute stages: with an external reviewer, `crew review run`
+also filters, sends the surviving findings to the refuter engine and finalizes the round in one command
+(`--refuter-engine claude` keeps a Claude refuter, which stops at its prompt). Add your own engine under `engines` in the
 **global** config with a `command` and `args`; the prompt is always sent on stdin. The command is looked up on
 `PATH` (on Windows also `.cmd`/`.bat`, started without a shell). A project's `.claude/crew.json` can only *name*
 an engine (`roles.*.engine`): an `engines` block in a project file is ignored with a warning, because a cloned

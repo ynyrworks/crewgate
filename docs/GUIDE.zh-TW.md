@@ -349,15 +349,24 @@ crew plan show 0-14
 
 ## 用 Codex 或其他 CLI 當審查員
 
-審查員這個角色可以不用 Claude。全域設定（`~/.crewgate/config.json`）預設就有名為 `codex` 的引擎（`codex exec -s read-only --skip-git-repo-check -`）。
-在專案把 `roles.reviewer.engine` 設成 `codex`，或單次執行：
+預定的分工是：Claude（sonnet）實作，Codex 審查與反駁。只要全域設定檔（`~/.crewgate/config.json`）本身有定義
+`engines.codex` 且找得到它的指令，審查員（reviewer）與反駁者（refuter）預設就用名為 `codex` 的引擎；否則退回 `claude`（sonnet），
+`crew doctor` 會提示。例如：
+
+```json
+{ "engines": { "codex": { "command": "codex", "args": ["exec", "-s", "read-only", "--skip-git-repo-check", "-"] } } }
+```
+
+`crew init` 產生的設定不寫這兩個角色的 `engine`，讓它們跟著預設走；專案自己寫了 `roles.reviewer.engine` 或
+`roles.refuter.engine`（例如 `claude`）就照專案的設定。實作者維持 `claude`／sonnet。單次指定引擎：
 
 ```
 crew review run <任務> --engine codex
 ```
 
 crewgate 會組出提示詞（任務書、審查規則、diff），從標準輸入餵進去，從標準輸出取出 JSON 陣列的發現，
-再接著走同樣的過濾與反駁階段。你也可以在**全域**設定的 `engines` 底下加自己的引擎，指定 `command` 與 `args`；提示詞一律從標準輸入傳入。
+再接著走同樣的過濾與反駁階段：審查員是外部引擎時，`crew review run` 會一次做完過濾、把留下的發現交給反駁引擎、
+並定案這一輪（加 `--refuter-engine claude` 則改由 Claude 反駁，停在印出反駁提示）。你也可以在**全域**設定的 `engines` 底下加自己的引擎，指定 `command` 與 `args`；提示詞一律從標準輸入傳入。
 指令依 `PATH` 尋找（Windows 也支援 `.cmd`/`.bat`，不經 shell 啟動）。專案的 `.claude/crew.json` 只能用名稱引用引擎
 （`roles.*.engine`）；專案檔裡的 `engines` 會被忽略並顯示警告，因為複製來的儲存庫不該決定 `crew review run` 要執行哪個程式。
 `crew doctor` 會顯示每個引擎是否找得到。

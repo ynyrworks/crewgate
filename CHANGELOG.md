@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.24.0 — 2026-11-06
+
+Reviews follow the intended split again: Claude (sonnet) implements, Codex reviews and refutes.
+
+### Fixed
+
+- The reviewer and refuter roles default to the `codex` engine when the global config file (`~/.crewgate/config.json`) itself defines `engines.codex` and its command is found. Otherwise they stay on `claude` (sonnet). Before, they were always `claude` unless each project named an engine, and a project without `.claude/crew.json` could not review with Codex at all. The built-in `codex` entry alone does not count, so a machine without Codex set up behaves as before. The worker stays on `claude` / sonnet.
+- An engine a project names in `roles.reviewer.engine` or `roles.refuter.engine` always wins, `claude` included. An unknown engine name is still an error and falls back to the default.
+- `crew init` no longer writes `engine` for the reviewer and refuter, so new projects follow the global default.
+- With an external reviewer, `crew review run` now runs the whole round: review, filter, refute and finalize. It prints no subagent prompt. The refuter can be an external engine too: its prompt carries the kept findings, the brief, the rules and the diff, and its verdicts are saved as `<round>.refutations.json`. `crew review filter` runs an external refuter the same way, then `finalize` applies the verdicts. A `claude` refuter still gets the printed prompt. `--refuter-engine claude|<name>` on `run` and `filter` overrides it for one round.
+- `crew doctor` has a **Review roles** line: the engine of each role, whether the project or the default chose it, and a hint when Codex is not set up or its command is not found.
+
+### Upgrade
+
+- A project made by an older `crew init` has `"engine": "claude"` written for the reviewer and refuter, which now counts as an explicit choice. Remove those two keys to follow the Codex default; `crew doctor` shows which one applies.
+
 ## 0.23.0 — 2026-11-02
 
 When work leaves a plan you approved, crewgate stops and asks what you want to do with it. This is released for trying on real plans: whether the questions help or get in the way is still to be judged.

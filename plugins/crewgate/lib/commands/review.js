@@ -20,12 +20,12 @@ const pr = require('../core/plan-review');
 
 const ROUND = { '--round': { dest: 'round', int: true } };
 const SPECS = {
-  run: { positionals: [{ name: 'task' }], options: { '--engine': { dest: 'engine' }, ...ROUND } },
+  run: { positionals: [{ name: 'task' }], options: { '--engine': { dest: 'engine' }, '--refuter-engine': { dest: 'refuterEngine' }, ...ROUND } },
   submit: {
     positionals: [{ name: 'task' }],
     options: { '--kind': { dest: 'kind', choices: ['findings', 'refutations'], default: 'findings' }, '--file': { dest: 'file' }, ...ROUND },
   },
-  filter: { positionals: [{ name: 'task' }], options: ROUND },
+  filter: { positionals: [{ name: 'task' }], options: { '--refuter-engine': { dest: 'refuterEngine' }, ...ROUND } },
   finalize: { positionals: [{ name: 'task' }], options: { '--refutations-file': { dest: 'refFile' }, ...ROUND } },
   show: { positionals: [{ name: 'task' }], options: ROUND },
   dismiss: {
@@ -76,7 +76,8 @@ function currentRound(c, opts, suffix) {
 }
 
 // ---------------------------------------------------------------- run
-function externalPrompt(c, round) {
+// Brief, review rules and diff of the task, fenced, for a prompt sent to an external engine.
+function contextSections(c) {
   const range = common.branchRange(c.proj.path, c.task.branch);
   if (!range) throw new CrewError('wf.review.noDiff', { id: c.task.id });
   let diff = common.git(['diff', range.base, range.branch], c.proj.path, 60000) || '';
@@ -90,22 +91,48 @@ function externalPrompt(c, round) {
   try { rules = fs.readFileSync(path.join(c.wt, '.crew', 'REVIEW.md'), 'utf8'); } catch { /* optional */ }
   const f = common.fence(diff + brief + rules);
   return [
+    '', '## Brief', f, brief.trim(), f,
+    '', '## Review rules', f, rules.trim(), f,
+    '', '## Diff', f, diff.trimEnd(), f, note,
+  ];
+}
+
+function externalPrompt(c, round) {
+  return [
     `You are a code reviewer (round ${round}). You cannot edit files. Review the diff against the brief and the review rules.`,
     `Allowed categories: ${c.cfg.review.categories.join(', ')}.`,
     rv.SCHEMA_TEXT,
     'Reply with the JSON array only.',
-    '', '## Brief', f, brief.trim(), f,
-    '', '## Review rules', f, rules.trim(), f,
-    '', '## Diff', f, diff.trimEnd(), f, note,
+    ...contextSections(c),
   ].join('\n');
 }
 
-function runEngine(c, name, round) {
+function externalRefuterPrompt(c, round, kept) {
+  const list = JSON.stringify(kept.map((x) => ({
+    id: x.id, category: x.category, severity: x.severity, file: x.file, line: x.line, symbol: x.symbol,
+    snippet: x.snippet, claim: x.claim, evidence: x.evidence,
+  })), null, 2);
+  const f = common.fence(list);
+  return [
+    `You are a skeptical refuter of code review findings (round ${round}). You cannot edit files.`,
+    'Try to DISPROVE each finding below using only the brief, the review rules and the diff: is the claim false, already handled elsewhere in the diff, out of scope, or covered by the rules?',
+    'Output a JSON array with one element per finding: { "id": "<finding id>", "verdict": "upheld|refuted|uncertain", "evidence": "file:line and one sentence" }.',
+    'Use "refuted" only with concrete evidence; use "uncertain" when you cannot decide.',
+    'Reply with the JSON array only.',
+    '', '## Findings', f, list, f,
+    ...contextSections(c),
+  ].join('\n');
+}
+
+// Runs a global engine with the prompt from buildInput() on stdin (built only once the engine is
+// found) -> the JSON array in its output. `what` names the file kept when the output has no array
+// (engine.txt for the review, refuter-engine.txt for refutations).
+function callEngine(c, name, round, buildInput, what) {
   const eng = config.globalEngines()[name];
   if (!eng || !eng.command) throw new CrewError('wf.review.noEngine', { name });
-  const input = externalPrompt(c, round);
   const file = execx.resolveCommand(eng.command, { cwd: c.proj.path });
   if (!file) throw new CrewError('wf.review.engineNotFound', { name, command: eng.command });
+  const input = buildInput();
   const plan = execx.spawnPlan(file, eng.args || []);
   const r = spawnSync(plan.file, plan.args, {
     input, cwd: c.proj.path, encoding: 'utf8', timeout: 15 * 60 * 1000, maxBuffer: 64 * 1024 * 1024,
@@ -118,13 +145,27 @@ function runEngine(c, name, round) {
   }
   const list = rv.extractJsonArray(r.stdout);
   if (!list) {
-    json.saveRaw(rv.roundFile(c.dir, round, 'engine.txt'), clean(r.stdout, 20000));
-    throw new CrewError('wf.review.noJson', { name, file: rv.roundFile(c.dir, round, 'engine.txt') });
+    json.saveRaw(rv.roundFile(c.dir, round, what), clean(r.stdout, 20000));
+    throw new CrewError('wf.review.noJson', { name, file: rv.roundFile(c.dir, round, what) });
   }
+  return list;
+}
+
+function runEngine(c, name, round) {
+  const list = callEngine(c, name, round, () => externalPrompt(c, round), 'engine.txt');
   const safe = rv.sanitizeFindings(list, true);
   json.save(rv.roundFile(c.dir, round, 'raw.json'), safe);
   return safe;
 }
+
+function runRefuterEngine(c, name, round, kept) {
+  const list = callEngine(c, name, round, () => externalRefuterPrompt(c, round, kept), 'refuter-engine.txt');
+  const safe = list.map(rv.sanitizeRefutation);
+  json.save(rv.roundFile(c.dir, round, 'refutations.json'), safe);
+  return safe;
+}
+
+const refuterEngineOf = (c, a) => a.refuterEngine || (c.cfg.roles.refuter || {}).engine || 'claude';
 
 function doRun(ctx, a) {
   const c = ctxOf(ctx, a.task);
@@ -147,11 +188,30 @@ function doRun(ctx, a) {
     ]);
     return;
   }
+  // external reviewer: run it, then filter, refute and finalize in the same command
   const list = runEngine(c, engine, round);
-  ctx.emit({ engine, round, raw_path: rawPath, count: list.length }, [
-    ctx.t('wf.review.engineDone', { name: engine, n: list.length, path: rawPath }),
-    ctx.t('wf.review.thenFilter', { id: c.task.id }),
-  ]);
+  const L = [ctx.t('wf.review.engineDone', { name: engine, n: list.length, path: rawPath })];
+  const fil = filterRound(ctx, c, round);
+  L.push(...fil.lines);
+  const data = { engine, round, raw_path: rawPath, count: list.length, kept: fil.kept, dropped: fil.dropped };
+  const refEngine = refuterEngineOf(c, a);
+  if (fil.kept.length && refEngine === 'claude') {
+    const p = refuterPrompt(ctx, c, round);
+    data.refuter = p.data;
+    L.push(...p.lines);
+    ctx.emit(data, L);
+    return;
+  }
+  let refs = [];
+  if (fil.kept.length) {
+    refs = runRefuterEngine(c, refEngine, round, fil.kept);
+    data.refuter = { engine: refEngine, count: refs.length };
+    L.push(ctx.t('wf.review.refuterDone', { name: refEngine, n: refs.length }));
+  }
+  const fin = finalizeRound(ctx, c, round, fil.kept, refs);
+  Object.assign(data, { findings: fin.findings, refuted: fin.dropped.length, by_severity: fin.by, problems: fin.problems });
+  L.push(...fin.lines);
+  ctx.emit(data, L);
 }
 
 // ---------------------------------------------------------------- submit
@@ -172,9 +232,8 @@ function doSubmit(ctx, a) {
 // ---------------------------------------------------------------- filter
 const brief = (f) => `${f.id} [${f.severity}] ${f.category} ${f.file}:${f.line}  ${clean(f.claim || '', 140)}`;
 
-function doFilter(ctx, a) {
-  const c = ctxOf(ctx, a.task);
-  const round = currentRound(c, a, 'raw.json');
+// Filters one round (raw.json -> kept.json and filtered.json). -> { kept, dropped, lines }
+function filterRound(ctx, c, round) {
   const list = rv.sanitizeFindings(rv.readArray(rv.roundFile(c.dir, round, 'raw.json'), 'raw findings'), false);
   const { kept, dropped } = rv.filterFindings(list, { cfg: c.cfg, ledger: rv.readLedger(c.wt), baseDirs: baseDirs(c) });
   json.save(rv.roundFile(c.dir, round, 'filtered.json'), dropped);
@@ -195,19 +254,45 @@ function doFilter(ctx, a) {
   }
   if (seen.length) L.push(ctx.t('wf.review.droppedRead', { id: c.task.id }));
   for (const f of kept) L.push(`  ${brief(f)}`);
-  if (kept.length) {
-    const role = c.cfg.roles.refuter || {};
-    const keptPath = rv.roundFile(c.dir, round, 'kept.json');
-    const prompt = rv.refuterInstructions({
-      task: c.task, briefPath: path.join(c.dir, 'brief.md'), reviewPath: path.join(c.wt, '.crew', 'REVIEW.md'),
-      diffCmd: diffCommand(c), keptPath, round, cli: common.cliCommand(),
-    });
-    L.push(ctx.t('wf.review.refuteNext', { agent: role.agent || 'crew-refuter', model: role.model || 'sonnet' }), '--- prompt ---', prompt, '--- end ---');
-    ctx.emit({ round, kept, dropped, refuter: { subagent_type: role.agent || 'crew-refuter', model: role.model || 'sonnet', prompt, kept_path: keptPath } }, L);
-  } else {
+  return { kept, dropped, lines: L };
+}
+
+// The prompt for a Claude refuter subagent. -> { data, lines }
+function refuterPrompt(ctx, c, round) {
+  const role = c.cfg.roles.refuter || {};
+  const keptPath = rv.roundFile(c.dir, round, 'kept.json');
+  const prompt = rv.refuterInstructions({
+    task: c.task, briefPath: path.join(c.dir, 'brief.md'), reviewPath: path.join(c.wt, '.crew', 'REVIEW.md'),
+    diffCmd: diffCommand(c), keptPath, round, cli: common.cliCommand(),
+  });
+  const agent = role.agent || 'crew-refuter';
+  const model = role.model || 'sonnet';
+  return {
+    data: { engine: 'claude', subagent_type: agent, model, prompt, kept_path: keptPath },
+    lines: [ctx.t('wf.review.refuteNext', { agent, model }), '--- prompt ---', prompt, '--- end ---'],
+  };
+}
+
+function doFilter(ctx, a) {
+  const c = ctxOf(ctx, a.task);
+  const round = currentRound(c, a, 'raw.json');
+  const { kept, dropped, lines: L } = filterRound(ctx, c, round);
+  if (!kept.length) {
     L.push(ctx.t('wf.review.nothingToRefute', { id: c.task.id }));
     ctx.emit({ round, kept, dropped }, L);
+    return;
   }
+  const refEngine = refuterEngineOf(c, a);
+  if (refEngine === 'claude') {
+    const p = refuterPrompt(ctx, c, round);
+    L.push(...p.lines);
+    ctx.emit({ round, kept, dropped, refuter: p.data }, L);
+    return;
+  }
+  const refs = runRefuterEngine(c, refEngine, round, kept);
+  const refPath = rv.roundFile(c.dir, round, 'refutations.json');
+  L.push(ctx.t('wf.review.refuterDone', { name: refEngine, n: refs.length }), ctx.t('wf.review.thenFinalize', { id: c.task.id }));
+  ctx.emit({ round, kept, dropped, refuter: { engine: refEngine, count: refs.length, refutations_path: refPath } }, L);
 }
 
 // ---------------------------------------------------------------- finalize
@@ -221,6 +306,12 @@ function doFinalize(ctx, a) {
     if (!a.refFile && !fs.existsSync(file)) throw new UsageError('args.missing', { name: '--refutations-file' });
     refs = rv.readArray(file, 'refutations').map(rv.sanitizeRefutation);
   }
+  const fin = finalizeRound(ctx, c, round, kept, refs);
+  ctx.emit({ round, findings: fin.findings, refuted: fin.dropped.length, by_severity: fin.by, problems: fin.problems }, fin.lines);
+}
+
+// Applies the refutations to a round's kept findings and writes <round>.json. -> { findings, dropped, problems, by, lines }
+function finalizeRound(ctx, c, round, kept, refs) {
   const { findings, dropped, problems } = rv.applyRefutations(kept, refs);
   json.save(rv.roundFile(c.dir, round, 'json'), findings);
   let prior = [];
@@ -232,7 +323,7 @@ function doFinalize(ctx, a) {
   const L = [ctx.t('wf.review.finalized', { round, n: findings.length, refuted: dropped.length })];
   for (const p of problems) L.push(ctx.t('wf.review.problem', { text: p }));
   for (const f of findings) L.push(`  ${brief(f)} (${f.verdict})`);
-  ctx.emit({ round, findings, refuted: dropped.length, by_severity: by, problems }, L);
+  return { findings, dropped, problems, by, lines: L };
 }
 
 // ---------------------------------------------------------------- show

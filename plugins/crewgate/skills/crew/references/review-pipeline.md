@@ -7,13 +7,22 @@ only see the survivors.
 
 `crew review run <task>` (`--engine <name>` to use an external engine defined under `engines` in the **global** config `~/.crewgate/config.json`; a project's own `engines` block is ignored).
 
-- Engine `claude` (default): the command prints the exact prompt for the reviewer subagent and the
+Which engine reviews and refutes: the design is "Claude implements, Codex reviews and refutes".
+When the project's `.claude/crew.json` does not name `roles.reviewer.engine` / `roles.refuter.engine`
+(`crew init` leaves them out), the default is `codex` if the global config file itself defines
+`engines.codex` and its command is found, otherwise `claude` (model sonnet). An engine the project names
+explicitly always wins. `crew doctor` prints the engine of each role, where it came from, and a hint when
+Codex is not set up. The worker stays on `claude` / sonnet.
+
+- Engine `claude`: the command prints the exact prompt for the reviewer subagent and the
   round's raw file path. Dispatch it with the Agent tool (`subagent_type: crew-reviewer`). The
   reviewer is read-only; it sees the diff, the brief and `.crew/REVIEW.md`, and **not** the worker's
   report. It saves its findings by piping JSON to `crew review submit <task> --round N`.
 - External engine (for example Codex CLI): the command runs it itself, sends the prompt on stdin,
   extracts the JSON array from its output and writes `findings/<round>.raw.json`. A failure or
-  output without a JSON array is reported; nothing is guessed.
+  output without a JSON array is reported; nothing is guessed. The same command then runs the
+  filter, the refuter (stage 3) and finalize, so you only read `crew review show <task>` afterwards;
+  with a `claude` refuter it stops after the filter and prints the refuter prompt.
 
 Finding schema (an element of the array):
 
@@ -50,7 +59,10 @@ still sees only the survivors. `crew review show` prints the dropped count and r
 
 ## Stage 3: refute
 
-Dispatch the refuter subagent (`crew-refuter`) with the printed prompt. It tries to disprove each
+With an external refuter engine (`roles.refuter.engine`, or `--refuter-engine <name>` on `filter` / `run`),
+`crew review filter` sends it the kept findings with the brief, rules and diff on stdin, extracts the
+`{id, verdict, evidence}` array from its output and saves `<round>.refutations.json`; run
+`crew review finalize <task>` next. With `claude`, dispatch the refuter subagent (`crew-refuter`) with the printed prompt. It tries to disprove each
 finding using only the diff, the brief and REVIEW.md, and submits `{id, verdict, evidence}` entries
 (`upheld|refuted|uncertain`) with `crew review submit <task> --round N --kind refutations`.
 Then `crew review finalize <task>` (or `--refutations-file f.json`): refuted findings are dropped

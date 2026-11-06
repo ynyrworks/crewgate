@@ -49,6 +49,7 @@ async function run(argv, ctx) {
   const wtRoot = proj ? ctx.workTree() : (project.detectWorkTree(ctx.cwd) || root);
   let cfg = config.loadGlobal().config;
   let expectedAccount = '';
+  let roleEngines = null;
   if (!root && !proj) {
     add('config', 'warn', ctx.t('wf.doctor.noProject'));
     add('registration', 'warn', ctx.t('wf.doctor.noProject'));
@@ -57,6 +58,7 @@ async function run(argv, ctx) {
     const projDir = proj ? proj.path : root;
     if (projDir && path.resolve(projDir) !== path.resolve(dir)) add('worktree', 'ok', ctx.t('wf.doctor.worktree', { workTree: dir, root: projDir }));
     const loaded = config.loadFor(dir, projDir);
+    roleEngines = loaded.roleEngines || null;
     if (!loaded.exists) add('config', 'warn', ctx.t('wf.doctor.noConfig', { file: loaded.file }));
     else if (loaded.errors.length) {
       add('config', 'fail', loaded.errors.map((e) => `${path.relative(dir, e.file) || e.file}: ${e.path || '(file)'} - ${e.message}`).join('; '));
@@ -127,6 +129,16 @@ async function run(argv, ctx) {
     const file = execx.resolveCommand(command, { cwd: ctx.cwd });
     add('engine', file ? 'ok' : 'warn', ctx.t(file ? 'wf.doctor.engineOk' : 'wf.doctor.engineMissing', { name, command, file }));
   }
+
+  // reviewer and refuter: Codex by default when the global config defines a usable codex engine
+  const def = config.reviewEngineDefault();
+  const roleOf = (r) => (roleEngines && roleEngines[r]) || { engine: def.engine, source: 'default' };
+  const roleText = config.REVIEW_ROLES.map((r) => `${r} ${roleOf(r).engine} (${ctx.t(`wf.doctor.roleSource.${roleOf(r).source}`)})`).join(', ');
+  const fellBack = def.engine !== 'codex' && config.REVIEW_ROLES.some((r) => roleOf(r).source === 'default');
+  const roleNote = def.engine === 'codex'
+    ? ctx.t('wf.doctor.rolesCodex', { command: def.command })
+    : ctx.t(`wf.doctor.rolesNoCodex.${def.reason}`, { file: config.loadGlobal().file, command: def.command });
+  add('roles', fellBack ? 'warn' : 'ok', `${roleText}; ${roleNote}`);
 
   const hooksFile = path.join(common.PLUGIN_ROOT, 'hooks', 'hooks.json');
   let hooksOk = false;

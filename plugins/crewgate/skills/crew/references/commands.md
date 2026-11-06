@@ -44,9 +44,9 @@ A plan is a tree of steps in `.crew/plans/<slug>.md` (slug `[a-z0-9-]{1,40}`, at
 - Events: `plan.created`, `plan.node_added` (with origin), `plan.node_changed`, `plan.review_started`, `plan.review_finalized` (counts), `plan.proposal_accepted`, `plan.proposal_rejected` (ids only, never text).
 
 ## Review
-- `crew review run <task> [--engine claude|<name>] [--round N]`
+- `crew review run <task> [--engine claude|<name>] [--refuter-engine claude|<name>] [--round N]` (an external reviewer engine also filters, refutes and finalizes in the same command; with a `claude` refuter it stops at the refuter prompt)
 - `crew review submit <task> [--round N] [--kind findings|refutations] [--file F]` (JSON on stdin without `--file`)
-- `crew review filter <task> [--round N]`
+- `crew review filter <task> [--refuter-engine claude|<name>] [--round N]` (an external refuter engine is run here and its verdicts saved; then `finalize`)
 - `crew review finalize <task> [--refutations-file F] [--round N]`
 - `crew review show <task> [--round N]`
 - `crew review dismiss <task> <finding-id> --scope once|always --reason "..."`

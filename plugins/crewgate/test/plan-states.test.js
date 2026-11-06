@@ -341,7 +341,9 @@ test('settings plan.interview, plan.enforce and plan.review: enum, off accepted,
   assert.equal(tpl.plan.interview, 'on');
   assert.equal(tpl.plan.enforce, 'block');
   assert.equal(tpl.plan.review, 'large');
-  assert.deepEqual(tpl, JSON.parse(JSON.stringify(config.DEFAULTS)));
+  const tplWant = JSON.parse(JSON.stringify(config.DEFAULTS));
+  for (const r of config.REVIEW_ROLES) delete tplWant.roles[r].engine; // they follow the global default
+  assert.deepEqual(tpl, tplWant);
   // off is accepted by the loader; a value outside the enum is not
   const f = fixture();
   H.writeConfig(f.repo, { plan: { interview: 'off', enforce: 'off', review: 'off' } });
