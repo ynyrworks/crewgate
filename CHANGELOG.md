@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.24.0 — 2026-11-06
+
+Commands and the plan flow are easier to start with, and Codex can now review and refute with Claude as the fallback.
+
+### New
+
+- `crew --help` lists the 7 everyday groups first (init, doctor, plan, task, review, gate, board). The rest are named on one "Other groups" line, and `crew --help --all` shows them all. No command was removed.
+- `crew plan edit SLUG NODE "new text"` changes one step's text. On a draft it just edits. On a final plan it is refused until you answer the drift question (`plan drift --kind changed-text`), and then the approved text is updated.
+- Codex can run the refuter as well as the reviewer, for task review and plan review: set `roles.reviewer.engine` and `roles.refuter.engine` to an engine from the global config, such as `codex`.
+- When an engine fails (a usage limit, out of tokens, a timeout, or no JSON in its output), the review goes on with the Claude subagent on sonnet. The reason is printed on one line and recorded as `review.engine_fallback`. `roles.*.fallback: "none"` keeps the old error.
+
+### Changed
+
+- `plan.interview: off`: the model's own assumptions no longer block `crew plan finalize`. They are listed, and your one approval confirms them all.
+- The board's one-click update first checks that git can be found. When it cannot, it says why and shows the commands to run by hand.
+- Skill text: a small fix you ask for is always one crew task, with `--outside-plan "<reason>"` when a final plan exists. Each question asks one thing. `plan.review: ask` is followed, and an unattended run skips the question and says so.
+
+### Upgrade
+
+- Nothing to run. Projects that want Codex reviews set the two `roles.*.engine` keys in `.claude/crew.json`; the default stays Claude on sonnet.
+- An external review engine that fails no longer stops `crew review run`; it falls back to Claude. Set `roles.reviewer.fallback` or `roles.refuter.fallback` to `none` for the old behaviour.
+
+### Known issues
+
+- Codex review and the fallback were tested with a stand-in engine only, not with the real Codex CLI or a real usage limit.
+- With `fallback: "none"` and a failing engine, a plan review round is still used up.
+- The issues from real use of 0.23 are not in this release; they move to the next one.
+
 ## 0.23.0 — 2026-11-02
 
 When work leaves a plan you approved, crewgate stops and asks what you want to do with it. This is released for trying on real plans: whether the questions help or get in the way is still to be judged.
