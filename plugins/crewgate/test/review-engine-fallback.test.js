@@ -12,6 +12,7 @@ const config = require('../lib/core/config');
 const paths = require('../lib/core/paths');
 const events = require('../lib/core/events');
 const project = require('../lib/core/project');
+const pr = require('../lib/core/plan-review');
 
 const SRC = 'const total = compute(1);\nmodule.exports = total;\n';
 const PLAN = [
@@ -30,6 +31,7 @@ const FAKE = [
   "process.stdin.on('end', () => {",
   "  const [rev, ref, mode] = process.argv.slice(2);",
   "  if (mode === 'fail') { process.stderr.write('Error: usage limit reached, try again later'); process.exit(1); }",
+  "  if (mode === 'multi') { process.stderr.write('stack line 1\\n  at   deep\\t frame\\n\\nError:   usage   limit reached\\n\\n'); process.exit(1); }",
   "  if (mode === 'prose') { console.log('nothing to report, sorry'); return; }",
   "  const file = /You are the crew refuter/.test(input) ? ref : rev;",
   "  console.log('Done.\\n```json\\n' + fs.readFileSync(file, 'utf8') + '\\n```');",
@@ -226,4 +228,23 @@ test('config: roles.*.fallback accepts claude and none and rejects anything else
   u.patchCfg(repo, (c) => { c.roles.refuter.fallback = 'x'; });
   const d = JSON.parse(h.crew(['--json', 'doctor'], repo).out);
   assert.equal(d.checks.find((c) => c.name === 'config').status, 'fail');
+});
+
+// ---------------------------------------------------------------- reason shape, unknown engine
+test('fallback reason is one short line: the last non-empty stderr line, whitespace collapsed', () => {
+  const s = taskSetup('multi');
+  const r = u.crewJson(['review', 'run', s.t.id], s.repo);
+  assert.equal(r.code, 0, r.err);
+  assert.equal(r.data.fallback.reason, 'Error: usage limit reached');
+  assert.equal(s.fallbacks()[0].data.reason, 'Error: usage limit reached');
+  const out = h.crew(['review', 'run', s.t.id, '--round', '2'], s.repo).out;
+  assert.match(out.split('\n')[0], /^Engine fake failed \(Error: usage limit reached\); using the Claude subagent/);
+});
+
+test('plan review run with an unknown engine name fails before a round is used', () => {
+  const s = planSetup('ok');
+  const x = h.crew(['plan', 'review', 'run', 'demo', '--engine', 'ghost2'], s.repo);
+  assert.equal(x.code, 1);
+  assert.match(x.err, /No engine named "ghost2"/);
+  assert.equal(pr.roundsOf(s.proj.id, 'demo').length, 0);
 });

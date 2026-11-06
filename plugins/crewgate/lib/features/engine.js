@@ -14,6 +14,18 @@ const rv = require('./review');
 
 const TIMEOUT_MS = 15 * 60 * 1000;
 
+// A fallback reason is one short line: the last non-empty stderr line when there is stderr, whitespace collapsed.
+function oneLine(text) {
+  const lines = String(text || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  return clean((lines.length ? lines[lines.length - 1] : '').replace(/\s+/g, ' '), 200);
+}
+
+// Throws when `name` is not an engine of the global config; call it before anything is written.
+function check(name) {
+  const e = config.globalEngines()[name];
+  if (!e || !e.command) throw new CrewError('wf.review.noEngine', { name });
+}
+
 // -> { list } on success, or { fail: { key, vars, reason } } when the engine could not give an array.
 // A missing engine name in the global config is a setup error and still throws.
 // `input` may be a function: the prompt is built after the engine is known to exist.
@@ -23,14 +35,14 @@ function run({ cwd, name, input, engineTxt }) {
   if (!eng || !eng.command) throw new CrewError('wf.review.noEngine', { name });
   const file = execx.resolveCommand(eng.command, { cwd });
   if (!file) {
-    return { fail: { key: 'wf.review.engineNotFound', vars: { name, command: eng.command }, reason: clean(`command "${eng.command}" was not found on PATH`, 300) } };
+    return { fail: { key: 'wf.review.engineNotFound', vars: { name, command: eng.command }, reason: oneLine(`command "${eng.command}" was not found on PATH`) } };
   }
   const plan = execx.spawnPlan(file, eng.args || []);
   const r = spawnSync(plan.file, plan.args, {
     input: typeof input === 'function' ? input() : input, cwd, encoding: 'utf8', timeout: TIMEOUT_MS, maxBuffer: 64 * 1024 * 1024, windowsHide: true, ...plan.options,
   });
   if (r.error || r.status !== 0) {
-    const detail = clean((r.error && r.error.message) || r.stderr || `exit ${r.status}`, 300);
+    const detail = oneLine((r.error && r.error.message) || r.stderr || `exit ${r.status}`);
     return { fail: { key: 'wf.review.engineFailed', vars: { name, detail }, reason: detail } };
   }
   const list = rv.extractJsonArray(r.stdout);
@@ -51,4 +63,4 @@ function onFail(projectId, cfg, { role, name, fail, round, scope, task }) {
   return { engine: name, reason: fail.reason };
 }
 
-module.exports = { run, onFail, fallbackOf };
+module.exports = { check, run, onFail, fallbackOf };

@@ -141,8 +141,9 @@ function runEngine(c, name, round) {
 function doRun(ctx, a) {
   const c = ctxOf(ctx, a.task);
   for (const w of c.warnings) ctx.err(`warning: ${w.message}`);
-  const round = nextRound(c, a);
   const engine = a.engine || (c.cfg.roles.reviewer || {}).engine || 'claude';
+  if (engine !== 'claude') eng.check(engine);
+  const round = nextRound(c, a);
   const rawPath = rv.roundFile(c.dir, round, 'raw.json');
   let fallback = null;
   if (engine !== 'claude') {

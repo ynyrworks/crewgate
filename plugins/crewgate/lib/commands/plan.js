@@ -104,8 +104,9 @@ function reviewRun(argv, ctx) {
   plans.checkSlug(a.slug);
   const cfg = ctx.config().config;
   if (sub === 'run') {
-    const r = pr.start(root, proj.id, cfg, a.slug, { node: a.node, force: !!a.force });
     const engine = a.engine || ((cfg.roles || {}).reviewer || {}).engine || 'claude';
+    if (engine !== 'claude') eng.check(engine);
+    const r = pr.start(root, proj.id, cfg, a.slug, { node: a.node, force: !!a.force });
     let fallback = null;
     if (engine !== 'claude') {
       const dir = pr.dirOf(proj.id, a.slug);
