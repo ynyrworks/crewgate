@@ -46,6 +46,7 @@
   "plan.review.dispatch": "Dispatch the {agent} subagent (model {model}) for plan {slug}, plan review round {round}, with the prompt below (Agent tool, read-only).",
   "plan.review.rawAt": "The findings will be stored as {path}",
   "plan.review.thenFilter": "When it has saved its findings, run: crew plan review filter {slug}",
+  "plan.review.thenFinalize": "Next: crew plan review finalize {slug}",
   "plan.review.filtered": "Plan review round {round}: {total} findings, {kept} kept, {dropped} dropped",
   "plan.review.droppedEntry": "  dropped {id}: {reason} ({detail})",
   "plan.review.nothingToRefute": "Nothing left to refute. Close the round with: crew plan review finalize {slug}",
