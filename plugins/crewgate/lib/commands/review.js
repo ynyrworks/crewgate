@@ -18,12 +18,12 @@ const pr = require('../core/plan-review');
 
 const ROUND = { '--round': { dest: 'round', int: true } };
 const SPECS = {
-  run: { positionals: [{ name: 'task' }], options: { '--engine': { dest: 'engine' }, ...ROUND } },
+  run: { positionals: [{ name: 'task' }], options: { '--engine': { dest: 'engine' }, '--refuter-engine': { dest: 'refuterEngine' }, ...ROUND } },
   submit: {
     positionals: [{ name: 'task' }],
     options: { '--kind': { dest: 'kind', choices: ['findings', 'refutations'], default: 'findings' }, '--file': { dest: 'file' }, ...ROUND },
   },
-  filter: { positionals: [{ name: 'task' }], options: ROUND },
+  filter: { positionals: [{ name: 'task' }], options: { '--refuter-engine': { dest: 'refuterEngine' }, ...ROUND } },
   finalize: { positionals: [{ name: 'task' }], options: { '--refutations-file': { dest: 'refFile' }, ...ROUND } },
   show: { positionals: [{ name: 'task' }], options: ROUND },
   dismiss: {
@@ -143,16 +143,31 @@ function doRun(ctx, a) {
   for (const w of c.warnings) ctx.err(`warning: ${w.message}`);
   const engine = a.engine || (c.cfg.roles.reviewer || {}).engine || 'claude';
   if (engine !== 'claude') eng.check(engine);
+  if (engine !== 'claude' && refuterEngineOf(c, a) !== 'claude') eng.check(refuterEngineOf(c, a));
+  if (a.refuterEngine && a.refuterEngine !== 'claude') eng.check(a.refuterEngine);
   const round = nextRound(c, a);
   const rawPath = rv.roundFile(c.dir, round, 'raw.json');
   let fallback = null;
   if (engine !== 'claude') {
     const res = runEngine(c, engine, round);
     if (res.list) {
-      ctx.emit({ engine, round, raw_path: rawPath, count: res.list.length }, [
-        ctx.t('wf.review.engineDone', { name: engine, n: res.list.length, path: rawPath }),
-        ctx.t('wf.review.thenFilter', { id: c.task.id }),
-      ]);
+      // the engine answered: filter, refute and finalize in the same command
+      const L = [ctx.t('wf.review.engineDone', { name: engine, n: res.list.length, path: rawPath })];
+      const fil = filterRound(ctx, c, round);
+      L.push(...fil.lines);
+      const data = { engine, round, raw_path: rawPath, count: res.list.length, kept: fil.kept, dropped: fil.dropped };
+      let refs = [];
+      if (fil.kept.length) {
+        const ref = refuteRound(ctx, c, round, fil.kept, refuterEngineOf(c, a));
+        L.push(...ref.lines);
+        data.refuter = ref.refuter;
+        if (ref.fallback) data.fallback = ref.fallback;
+        if (!ref.refs) { ctx.emit(data, L); return; }
+        refs = ref.refs;
+      }
+      const fin = finalizeRound(c, round, fil.kept, refs);
+      L.push(...finalLines(ctx, round, fin));
+      ctx.emit({ ...data, findings: fin.findings, refuted: fin.dropped.length, by_severity: fin.by, problems: fin.problems }, L);
       return;
     }
     fallback = res.fallback;
@@ -164,12 +179,14 @@ function doRun(ctx, a) {
   });
   const data = { engine, round, raw_path: rawPath, subagent_type: role.agent || 'crew-reviewer', model: role.model || 'sonnet', prompt };
   if (fallback) data.fallback = fallback;
+  // the flag is carried to the next step, so the round's refuter is the one asked for
+  if (a.refuterEngine) data.refuter_engine = a.refuterEngine;
   ctx.emit(data, [
     ...(fallback ? [ctx.t('wf.review.engineFallback', { name: fallback.engine, reason: fallback.reason })] : []),
     ctx.t('wf.review.dispatch', { agent: data.subagent_type, model: data.model, round }),
     ctx.t('wf.review.rawAt', { path: rawPath }),
     '--- prompt ---', prompt, '--- end ---',
-    ctx.t('wf.review.thenFilter', { id: c.task.id }),
+    a.refuterEngine ? ctx.t('wf.review.thenFilterRef', { id: c.task.id, name: a.refuterEngine }) : ctx.t('wf.review.thenFilter', { id: c.task.id }),
   ]);
 }
 
@@ -191,9 +208,27 @@ function doSubmit(ctx, a) {
 // ---------------------------------------------------------------- filter
 const brief = (f) => `${f.id} [${f.severity}] ${f.category} ${f.file}:${f.line}  ${clean(f.claim || '', 140)}`;
 
+const refuterEngineOf = (c, a) => a.refuterEngine || (c.cfg.roles.refuter || {}).engine || 'claude';
+
 function doFilter(ctx, a) {
   const c = ctxOf(ctx, a.task);
   const round = currentRound(c, a, 'raw.json');
+  const refEngine = refuterEngineOf(c, a);
+  if (refEngine !== 'claude') eng.check(refEngine);
+  const { kept, dropped, lines: L } = filterRound(ctx, c, round);
+  if (!kept.length) {
+    L.push(ctx.t('wf.review.nothingToRefute', { id: c.task.id }));
+    ctx.emit({ round, kept, dropped }, L);
+    return;
+  }
+  const ref = refuteRound(ctx, c, round, kept, refEngine);
+  L.push(...ref.lines);
+  if (ref.refs) L.push(ctx.t('wf.review.thenFinalize', { id: c.task.id }));
+  ctx.emit({ round, kept, dropped, refuter: ref.refuter, ...(ref.fallback ? { fallback: ref.fallback } : {}) }, L);
+}
+
+// Filters one round (raw.json -> kept.json and filtered.json). -> { kept, dropped, lines }
+function filterRound(ctx, c, round) {
   const list = rv.sanitizeFindings(rv.readArray(rv.roundFile(c.dir, round, 'raw.json'), 'raw findings'), false);
   const { kept, dropped } = rv.filterFindings(list, { cfg: c.cfg, ledger: rv.readLedger(c.wt), baseDirs: baseDirs(c) });
   json.save(rv.roundFile(c.dir, round, 'filtered.json'), dropped);
@@ -214,36 +249,39 @@ function doFilter(ctx, a) {
   }
   if (seen.length) L.push(ctx.t('wf.review.droppedRead', { id: c.task.id }));
   for (const f of kept) L.push(`  ${brief(f)}`);
-  if (kept.length) {
-    const role = c.cfg.roles.refuter || {};
-    const keptPath = rv.roundFile(c.dir, round, 'kept.json');
-    const engine = role.engine || 'claude';
-    let fallback = null;
-    if (engine !== 'claude') {
-      const res = eng.run({ cwd: c.proj.path, name: engine, input: () => refuterEnginePrompt(c, round, kept), engineTxt: rv.roundFile(c.dir, round, 'engine.txt') });
-      if (!res.fail) {
-        const refs = res.list.map(rv.sanitizeRefutation);
-        const refPath = rv.roundFile(c.dir, round, 'refutations.json');
-        json.save(refPath, refs);
-        L.push(ctx.t('wf.review.engineRefDone', { name: engine, n: refs.length, path: refPath }), ctx.t('wf.review.thenFinalize', { id: c.task.id }));
-        ctx.emit({ round, kept, dropped, refuter: { engine, count: refs.length, refutations_path: refPath } }, L);
-        return;
-      }
-      fallback = eng.onFail(c.proj.id, c.cfg, { role: 'refuter', name: engine, fail: res.fail, round, scope: 'task', task: c.task.id });
-      L.push(ctx.t('wf.review.engineFallback', { name: fallback.engine, reason: fallback.reason }));
+  return { kept, dropped, lines: L };
+}
+
+// Refute a round's kept findings. An external engine is run here: on success its verdicts are saved
+// -> { refs, refuter, lines }; on failure (fallback claude) or with engine "claude" the Claude refuter
+// prompt is printed -> { refuter, fallback?, lines } with no refs.
+function refuteRound(ctx, c, round, kept, engine) {
+  const L = [];
+  const role = c.cfg.roles.refuter || {};
+  const keptPath = rv.roundFile(c.dir, round, 'kept.json');
+  let fallback = null;
+  if (engine !== 'claude') {
+    const res = eng.run({ cwd: c.proj.path, name: engine, input: () => refuterEnginePrompt(c, round, kept), engineTxt: rv.roundFile(c.dir, round, 'engine.txt') });
+    if (!res.fail) {
+      const refs = res.list.map(rv.sanitizeRefutation);
+      const refPath = rv.roundFile(c.dir, round, 'refutations.json');
+      json.save(refPath, refs);
+      L.push(ctx.t('wf.review.engineRefDone', { name: engine, n: refs.length, path: refPath }));
+      return { refs, refuter: { engine, count: refs.length, refutations_path: refPath }, lines: L };
     }
-    const prompt = rv.refuterInstructions({
-      task: c.task, briefPath: path.join(c.dir, 'brief.md'), reviewPath: path.join(c.wt, '.crew', 'REVIEW.md'),
-      diffCmd: diffCommand(c), keptPath, round, cli: common.cliCommand(),
-    });
-    L.push(ctx.t('wf.review.refuteNext', { agent: role.agent || 'crew-refuter', model: role.model || 'sonnet' }), '--- prompt ---', prompt, '--- end ---');
-    const refuter = { subagent_type: role.agent || 'crew-refuter', model: role.model || 'sonnet', prompt, kept_path: keptPath };
-    if (fallback) refuter.fallback = fallback;
-    ctx.emit({ round, kept, dropped, refuter, ...(fallback ? { fallback } : {}) }, L);
-  } else {
-    L.push(ctx.t('wf.review.nothingToRefute', { id: c.task.id }));
-    ctx.emit({ round, kept, dropped }, L);
+    fallback = eng.onFail(c.proj.id, c.cfg, { role: 'refuter', name: engine, fail: res.fail, round, scope: 'task', task: c.task.id });
+    L.push(ctx.t('wf.review.engineFallback', { name: fallback.engine, reason: fallback.reason }));
   }
+  const prompt = rv.refuterInstructions({
+    task: c.task, briefPath: path.join(c.dir, 'brief.md'), reviewPath: path.join(c.wt, '.crew', 'REVIEW.md'),
+    diffCmd: diffCommand(c), keptPath, round, cli: common.cliCommand(),
+  });
+  const agent = role.agent || 'crew-refuter';
+  const model = role.model || 'sonnet';
+  L.push(ctx.t('wf.review.refuteNext', { agent, model }), '--- prompt ---', prompt, '--- end ---');
+  const refuter = { engine: 'claude', subagent_type: agent, model, prompt, kept_path: keptPath };
+  if (fallback) refuter.fallback = fallback;
+  return { refuter, fallback, lines: L };
 }
 
 // ---------------------------------------------------------------- finalize
@@ -257,6 +295,12 @@ function doFinalize(ctx, a) {
     if (!a.refFile && !fs.existsSync(file)) throw new UsageError('args.missing', { name: '--refutations-file' });
     refs = rv.readArray(file, 'refutations').map(rv.sanitizeRefutation);
   }
+  const fin = finalizeRound(c, round, kept, refs);
+  ctx.emit({ round, findings: fin.findings, refuted: fin.dropped.length, by_severity: fin.by, problems: fin.problems }, finalLines(ctx, round, fin));
+}
+
+// Applies the refutations to a round's kept findings and writes <round>.json. -> { findings, dropped, problems, by }
+function finalizeRound(c, round, kept, refs) {
   const { findings, dropped, problems } = rv.applyRefutations(kept, refs);
   json.save(rv.roundFile(c.dir, round, 'json'), findings);
   let prior = [];
@@ -265,10 +309,14 @@ function doFinalize(ctx, a) {
   if (c.task.state === 'returned') tasks.transition(c.proj.id, c.task.id, 'reviewing', { src: 'cli', note: `review round ${round}` });
   const by = {};
   for (const f of findings) by[f.severity] = (by[f.severity] || 0) + 1;
-  const L = [ctx.t('wf.review.finalized', { round, n: findings.length, refuted: dropped.length })];
-  for (const p of problems) L.push(ctx.t('wf.review.problem', { text: p }));
-  for (const f of findings) L.push(`  ${brief(f)} (${f.verdict})`);
-  ctx.emit({ round, findings, refuted: dropped.length, by_severity: by, problems }, L);
+  return { findings, dropped, problems, by };
+}
+
+function finalLines(ctx, round, fin) {
+  const L = [ctx.t('wf.review.finalized', { round, n: fin.findings.length, refuted: fin.dropped.length })];
+  for (const p of fin.problems) L.push(ctx.t('wf.review.problem', { text: p }));
+  for (const f of fin.findings) L.push(`  ${brief(f)} (${f.verdict})`);
+  return L;
 }
 
 // ---------------------------------------------------------------- show
@@ -395,18 +443,18 @@ module.exports = {
   summary: { en: 'Review pipeline: find, filter, refute, finalize, dismiss', 'zh-TW': '審查流程：找出、過濾、反駁、定案、駁回' },
   usage: {
     en: [
-      '  crew review run <task> [--engine claude|<name>] [--round N]',
+      '  crew review run <task> [--engine claude|<name>] [--refuter-engine claude|<name>] [--round N]',
       '  crew review submit <task> [--round N] [--kind findings|refutations] [--file F]   (JSON on stdin without --file)',
-      '  crew review filter <task> [--round N]',
+      '  crew review filter <task> [--refuter-engine claude|<name>] [--round N]',
       '  crew review finalize <task> [--refutations-file F] [--round N]',
       '  crew review show <task> [--round N]',
       '  crew review dismiss <task> <finding-id> --scope once|always --reason "..."',
       '  crew review followup <task> <finding-id> --done-when "..." [--text "..."] [--plan SLUG] [--round N]   (proposes the work as a [?] step of the plan)',
     ].join('\n'),
     'zh-TW': [
-      '  crew review run <task> [--engine claude|<名稱>] [--round N]',
+      '  crew review run <task> [--engine claude|<名稱>] [--refuter-engine claude|<名稱>] [--round N]',
       '  crew review submit <task> [--round N] [--kind findings|refutations] [--file F]   （沒給 --file 就從標準輸入讀 JSON）',
-      '  crew review filter <task> [--round N]',
+      '  crew review filter <task> [--refuter-engine claude|<名稱>] [--round N]',
       '  crew review finalize <task> [--refutations-file F] [--round N]',
       '  crew review show <task> [--round N]',
       '  crew review dismiss <task> <finding-id> --scope once|always --reason "..."',

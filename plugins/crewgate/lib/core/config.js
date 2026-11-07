@@ -83,7 +83,7 @@ const SCHEMA = [
   f('language', 'string', d('Language of CLI output and generated files.', 'CLI 輸出與產生檔案的語言。'), { enum: ['en', 'zh-TW'] }),
   f('roles', 'object', d('Role map; add your own roles next to the built-in ones.', '角色對照表；可在內建角色之外自行新增。')),
   f('roles.*', 'object', d('One role.', '單一角色。')),
-  f('roles.*.engine', 'string', d('"claude" or the name of an engine defined in the global config (engines are never read from this file).', '"claude" 或全域設定中定義的引擎名稱（引擎定義不會從此檔讀取）。')),
+  f('roles.*.engine', 'string', d('"claude" or the name of an engine defined in the global config (engines are never read from this file). Left out for reviewer and refuter: "codex" when the global config defines a codex engine whose command is found, otherwise "claude".', '"claude" 或全域設定中定義的引擎名稱（引擎定義不會從此檔讀取）。reviewer 與 refuter 沒寫時：全域設定有定義且找得到指令的 codex 引擎就用 "codex"，否則用 "claude"。')),
   f('roles.*.fallback', 'string', d('What a reviewer or refuter does when its external engine fails (error, timeout, no usable JSON): claude (use the Claude subagent instead, the default) or none (stop with the error).', '審查者或反駁者的外部引擎失敗（錯誤、逾時、沒有可用的 JSON）時的處理：claude（改用 Claude 子代理，預設）或 none（直接報錯停止）。'), { enum: ['claude', 'none'] }),
   f('roles.*.model', 'string', d('inherit, opus, sonnet, haiku or a full model id.', 'inherit、opus、sonnet、haiku 或完整模型 ID。')),
   f('roles.*.agent', 'string', d('Agent name used for this role.', '此角色使用的 agent 名稱。')),
@@ -296,6 +296,43 @@ function globalEngines() {
   return isObj(e) ? e : {};
 }
 
+// Roles whose engine follows the global config when a project does not name one.
+const REVIEW_ROLES = ['reviewer', 'refuter'];
+
+// Default engine for the reviewer and refuter roles. The design is "Claude implements, Codex reviews
+// and refutes": when the global config file itself defines engines.codex and its command resolves
+// to a program, the default is "codex"; otherwise "claude" (model sonnet). The built-in codex entry
+// of GLOBAL_DEFAULTS does not count, so a machine without that setup keeps the old behaviour.
+// -> { engine, reason: 'codex' | 'not-defined' | 'not-found', command }
+function reviewEngineDefault() {
+  const r = json.readJson(paths.configFile(), {});
+  const raw = r.status === 'ok' && isObj(r.data) && isObj(r.data.engines) ? r.data.engines.codex : undefined;
+  if (!isObj(raw)) return { engine: 'claude', reason: 'not-defined', command: '' };
+  const eng = globalEngines().codex;
+  const command = isObj(eng) && typeof eng.command === 'string' ? eng.command : '';
+  const exec = require('./exec');
+  if (!command || !exec.resolveCommand(command)) return { engine: 'claude', reason: 'not-found', command };
+  return { engine: 'codex', reason: 'codex', command };
+}
+
+// Fills roles.reviewer/refuter.engine from reviewEngineDefault() unless the project named a valid
+// engine for that role. -> { reviewer: { engine, source: 'project' | 'default' }, refuter: ... }
+function applyRoleDefaults(merged, user, errors) {
+  const out = {};
+  let def = null;
+  for (const role of REVIEW_ROLES) {
+    const u = isObj(user) && isObj(user.roles) && isObj(user.roles[role]) ? user.roles[role] : null;
+    const explicit = u && typeof u.engine === 'string' && !errors.some((e) => e.path === `roles.${role}.engine`);
+    if (!isObj(merged.roles)) merged.roles = {};
+    if (!isObj(merged.roles[role])) merged.roles[role] = clone(DEFAULTS.roles[role]);
+    if (explicit) { out[role] = { engine: merged.roles[role].engine, source: 'project' }; continue; }
+    if (!def) def = reviewEngineDefault();
+    merged.roles[role].engine = def.engine;
+    out[role] = { engine: def.engine, source: 'default' };
+  }
+  return out;
+}
+
 // Directory whose .claude/crew.json applies: the work tree when it has its own file (a branch may change
 // the config), else the project root. Both may be the same directory.
 function configDir(workTree, root) {
@@ -313,12 +350,13 @@ function loadFor(workTree, root) { return load(configDir(workTree, root)); }
 function load(root) {
   const file = configFile(root);
   const res = { config: clone(DEFAULTS), errors: [], warnings: [], file, exists: false };
+  const fallback = () => { res.roleEngines = applyRoleDefaults(res.config, null, []); return res; };
   let raw;
   try {
     raw = fs.readFileSync(file, 'utf8');
   } catch (e) {
     if (e.code !== 'ENOENT' && e.code !== 'ENOTDIR') res.errors.push({ file, path: '', key: 'config.err.unreadable', vars: { code: e.code }, message: `cannot read ${file} (${e.code})` });
-    return res;
+    return fallback();
   }
   res.exists = true;
   let user;
@@ -326,11 +364,11 @@ function load(root) {
     user = JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw);
   } catch (e) {
     res.errors.push({ file, path: '', key: 'config.err.parse', vars: { detail: e.message }, message: `${file}: invalid JSON (${e.message})` });
-    return res;
+    return fallback();
   }
   const errors = validate(user, root).map((e) => ({ ...e, file }));
   res.errors = errors;
-  if (!isObj(user)) return res;
+  if (!isObj(user)) return fallback();
   // Engine definitions (an executable to run) are only trusted from the global config: a cloned
   // repository must not be able to make `crew review run` start a program of its choosing.
   let ignoredEngines = null;
@@ -345,6 +383,7 @@ function load(root) {
     const top = e.path.replace(/\[\d+\]$/, '');
     if (top) setPath(merged, top, getPath(DEFAULTS, top));
   }
+  res.roleEngines = applyRoleDefaults(merged, user, errors);
   res.config = merged;
   return res;
 }
@@ -435,5 +474,5 @@ function saveGlobal(obj, opts = {}) {
 
 module.exports = {
   DEFAULTS, GLOBAL_DEFAULTS, SCHEMA, GLOBAL_SCHEMA,
-  globalEngines, validate, validateGlobal, load, loadFor, configDir, save, loadGlobal, saveGlobal, configFile, deepMerge,
+  REVIEW_ROLES, globalEngines, reviewEngineDefault, validate, validateGlobal, load, loadFor, configDir, save, loadGlobal, saveGlobal, configFile, deepMerge,
 };

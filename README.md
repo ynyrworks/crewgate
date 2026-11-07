@@ -30,7 +30,7 @@ flowchart TD
     D --> E{"You approve?"}
     E -- "Not yet" --> C
     E -- "Yes" --> F
-    F --> G["Another agent reviews it,<br/>and a third tries to disprove the findings"]
+    F --> G["Codex reviews it (Claude when Codex is not set up),<br/>and a second pass tries to disprove the findings"]
     G --> H{"You see what survived.<br/>Good enough?"}
     H -- "No" --> F
     H -- "Yes" --> I["You approve the merge and the push"]

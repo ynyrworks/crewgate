@@ -14,9 +14,11 @@ const { renderAgent, AGENTS } = require('../lib/features/init');
 
 const TEMPLATES = path.join(__dirname, '..', 'templates');
 
-test('template crew.json equals the built-in defaults and validates', () => {
+test('template crew.json equals the built-in defaults (reviewer and refuter leave the engine out) and validates', () => {
   const t = JSON.parse(fs.readFileSync(path.join(TEMPLATES, 'crew.json'), 'utf8'));
-  assert.deepEqual(t, JSON.parse(JSON.stringify(config.DEFAULTS)));
+  const want = JSON.parse(JSON.stringify(config.DEFAULTS));
+  for (const r of config.REVIEW_ROLES) delete want.roles[r].engine;
+  assert.deepEqual(t, want);
   assert.deepEqual(config.validate(t), []);
 });
 
@@ -142,7 +144,7 @@ test('doctor: healthy project reports each check; board down is not an error', a
   const r = await u.crewAsync(['--json', 'doctor'], repo);
   const d = JSON.parse(r.out);
   const by = Object.fromEntries(d.checks.map((c) => [c.name, c]));
-  assert.deepEqual(Object.keys(by), ['node', 'config', 'checks', 'gates', 'registration', 'files', 'shim', 'hookseen', 'hookerrors', 'engine', 'hooks', 'board', 'account', 'autostart', 'update']);
+  assert.deepEqual(Object.keys(by), ['node', 'config', 'checks', 'gates', 'registration', 'files', 'shim', 'hookseen', 'hookerrors', 'engine', 'roles', 'hooks', 'board', 'account', 'autostart', 'update']);
   assert.equal(by.node.status, 'ok');
   assert.equal(by.config.status, 'ok');
   assert.equal(by.registration.status, 'ok');

@@ -98,8 +98,8 @@ Arguments: `$ARGUMENTS` — `init`, `status`, `wrap-up`, `handoff`, or empty (ru
    it back (step 9). If it ran a load test or a long-running process, check yourself that nothing is left: a
    worker's "nothing left" is a claim. Stop what is left by pid, after checking its command line, and tell the user.
 8. **Review.** Run the pipeline in `references/review-pipeline.md`:
-   `crew review run <id>` → dispatch the reviewer subagent (Agent tool; in Codex spawn the `crew-reviewer` custom agent) with the printed prompt →
-   `crew review filter <id>` → dispatch the refuter with the printed prompt →
+   `crew review run <id>`; an external reviewer (Codex by default, see `crew doctor`) also refutes and finalizes. With `claude`: dispatch the
+   reviewer subagent (in Codex the `crew-reviewer` agent) → `crew review filter <id>` → dispatch the refuter (an external one already ran) →
    `crew review finalize <id>` → `crew review show <id>`. You only ever read the survivors.
    Dismiss findings you judge wrong or irrelevant with `crew review dismiss` and a reason, so they do
    not come back. A real finding that this task will not fix is a **follow-up**: propose it with

@@ -124,7 +124,8 @@ test('task review: engine failure with "usage limit" falls back to the Claude di
 
 test('task review: refuter engine failure falls back to the crew-refuter dispatch (model sonnet by default)', () => {
   const s = taskSetup('ok');
-  assert.equal(u.crewJson(['review', 'run', s.t.id], s.repo).code, 0);
+  // a Claude refuter for this round, so review run stops before refuting and filter runs the refuter again
+  assert.equal(u.crewJson(['review', 'run', s.t.id, '--refuter-engine', 'claude'], s.repo).code, 0);
   fakeEngine('fail');
   u.patchCfg(s.repo, (c) => { delete c.roles.refuter.model; });
   const f = u.crewJson(['review', 'filter', s.t.id], s.repo);

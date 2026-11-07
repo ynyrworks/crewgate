@@ -46,9 +46,9 @@ A plan is a tree of steps in `.crew/plans/<slug>.md` (slug `[a-z0-9-]{1,40}`, at
 - Events: `plan.created`, `plan.node_added` (with origin), `plan.node_changed`, `plan.review_started`, `plan.review_finalized` (counts), `plan.proposal_accepted`, `plan.proposal_rejected` (ids only, never text).
 
 ## Review
-- `crew review run <task> [--engine claude|<name>] [--round N]` (an engine failure falls back to the Claude reviewer dispatch unless `roles.reviewer.fallback` is `none`)
+- `crew review run <task> [--engine claude|<name>] [--refuter-engine claude|<name>] [--round N]` (an external reviewer engine also filters, refutes and finalizes in the same command; with a `claude` refuter, or when the refuter engine fails, it stops at the refuter prompt; a reviewer engine failure falls back to the Claude reviewer dispatch unless `roles.reviewer.fallback` is `none`)
 - `crew review submit <task> [--round N] [--kind findings|refutations] [--file F]` (JSON on stdin without `--file`)
-- `crew review filter <task> [--round N]` (with `roles.refuter.engine` set it runs the engine and saves the refutations; on engine failure it prints the Claude refuter dispatch)
+- `crew review filter <task> [--refuter-engine claude|<name>] [--round N]` (with an external refuter engine it runs the engine and saves the refutations, then `finalize`; on engine failure it prints the Claude refuter dispatch)
 - `crew review finalize <task> [--refutations-file F] [--round N]`
 - `crew review show <task> [--round N]`
 - `crew review dismiss <task> <finding-id> --scope once|always --reason "..."`

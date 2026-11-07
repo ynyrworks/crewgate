@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.25.0 — 2026-11-06
+
+Reviews follow the intended split by default: Claude (sonnet) implements, Codex reviews and refutes.
+
+### Fixed
+
+- The reviewer and refuter roles default to the `codex` engine when the global config file (`~/.crewgate/config.json`) itself defines `engines.codex` and its command is found. Otherwise they stay on `claude` (sonnet), and `crew doctor` says why. Before, Codex was used only where a project set both `roles.*.engine` keys, so a project without `.claude/crew.json` could not review with Codex at all. The built-in `codex` entry alone does not count, so a machine without Codex set up behaves as before. The worker stays on `claude` / sonnet. Plan review follows the same two roles.
+- An engine a project names in `roles.reviewer.engine` or `roles.refuter.engine` always wins, `claude` included. An unknown engine name is still an error and falls back to the default.
+- `crew init` no longer writes `engine` for the reviewer and refuter, so new projects follow the global default.
+- When an external reviewer answers, `crew review run` runs the whole round: review, filter, refute and finalize, with no subagent prompt. With a `claude` refuter, or when the refuter engine fails and falls back, it stops at the refuter prompt. `--refuter-engine claude|<name>` on `run` and `filter` overrides the refuter for one round.
+- `crew doctor` has a **Review roles** line: the engine of each role, whether the project or the default chose it, and a hint when Codex is not set up or its command is not found.
+- `crew doctor` also says when a role is pinned to `claude` in `.claude/crew.json` (as an older `crew init` wrote it) and that removing `roles.<role>.engine` makes it follow the Codex default; the line warns when Codex is available.
+- `--refuter-engine` on `crew review run` is checked before a round starts, and when the run ends at the Claude reviewer prompt the next step is `crew review filter <id> --refuter-engine <name>`.
+
+### Upgrade
+
+- A project made by an older `crew init` has `"engine": "claude"` written for the reviewer and refuter, which counts as an explicit choice. Remove those two keys to follow the Codex default; `crew doctor` shows which one applies.
+
+### Known issues
+
+- Checked with the real Codex CLI on one throwaway task (review and refute both ran, the round was finalized). The fallback after a real usage limit is still untested.
+
 ## 0.24.0 — 2026-11-06
 
 Commands and the plan flow are easier to start with, and Codex can now review and refute with Claude as the fallback.
