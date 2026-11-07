@@ -11,6 +11,8 @@ Reviews follow the intended split by default: Claude (sonnet) implements, Codex 
 - `crew init` no longer writes `engine` for the reviewer and refuter, so new projects follow the global default.
 - When an external reviewer answers, `crew review run` runs the whole round: review, filter, refute and finalize, with no subagent prompt. With a `claude` refuter, or when the refuter engine fails and falls back, it stops at the refuter prompt. `--refuter-engine claude|<name>` on `run` and `filter` overrides the refuter for one round.
 - `crew doctor` has a **Review roles** line: the engine of each role, whether the project or the default chose it, and a hint when Codex is not set up or its command is not found.
+- `crew doctor` also says when a role is pinned to `claude` in `.claude/crew.json` (as an older `crew init` wrote it) and that removing `roles.<role>.engine` makes it follow the Codex default; the line warns when Codex is available.
+- `--refuter-engine` on `crew review run` is checked before a round starts, and when the run ends at the Claude reviewer prompt the next step is `crew review filter <id> --refuter-engine <name>`.
 
 ### Upgrade
 

@@ -138,7 +138,10 @@ async function run(argv, ctx) {
   const roleNote = def.engine === 'codex'
     ? ctx.t('wf.doctor.rolesCodex', { command: def.command })
     : ctx.t(`wf.doctor.rolesNoCodex.${def.reason}`, { file: config.loadGlobal().file, command: def.command });
-  add('roles', fellBack ? 'warn' : 'ok', `${roleText}; ${roleNote}`);
+  // an older `crew init` wrote engine claude for both roles; that counts as explicit and beats the Codex default
+  const pinned = config.REVIEW_ROLES.filter((r) => roleOf(r).source === 'project' && roleOf(r).engine === 'claude');
+  const pinNote = pinned.map((r) => ctx.t('wf.doctor.rolePinned', { role: r })).join('; ');
+  add('roles', fellBack || (pinned.length && def.engine === 'codex') ? 'warn' : 'ok', `${roleText}; ${roleNote}${pinNote ? `; ${pinNote}` : ''}`);
 
   const hooksFile = path.join(common.PLUGIN_ROOT, 'hooks', 'hooks.json');
   let hooksOk = false;

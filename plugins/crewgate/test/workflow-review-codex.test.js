@@ -23,7 +23,7 @@ const FAKE_CODEX = [
   "let input = '';",
   "process.stdin.on('data', (d) => { input += d; });",
   "process.stdin.on('end', () => {",
-  "  const refuter = input.includes('You are the crew refuter for task');",
+  "  const refuter = /You are the crew refuter for (task|plan)/.test(input);",
   "  fs.writeFileSync(process.argv[2] + (refuter ? '.refuter' : '.reviewer'), input);",
   "  if (refuter && process.argv[3] === 'refuter-fail') { process.stderr.write('usage limit reached'); process.exit(2); }",
   '  if (refuter) {',
@@ -197,5 +197,96 @@ test('review run: a refuter engine that fails falls back to the Claude refuter p
     const dir = paths.taskDir(project.findByCwd(repo).id, t.id);
     assert.equal(fs.existsSync(rv.roundFile(dir, 1, 'refutations.json')), false);
     assert.equal(fs.existsSync(rv.roundFile(dir, 1, 'json')), false);
+  } finally { resetGlobal(); }
+});
+
+test('review run: a bad --refuter-engine name is refused before a round is used, also with a claude reviewer', () => {
+  try {
+    const { repo, t } = codexSetup('ok', (c) => { c.roles.reviewer = { engine: 'claude', model: 'sonnet', agent: 'crew-reviewer' }; });
+    const dir = paths.taskDir(project.findByCwd(repo).id, t.id);
+    const bad = u.crewJson(['review', 'run', t.id, '--refuter-engine', 'no-such-engine'], repo);
+    assert.notEqual(bad.code, 0);
+    assert.match(bad.err, /no-such-engine/);
+    assert.equal(rv.latestRound(dir, 'raw.json'), 0, 'no round was used');
+    const bad2 = u.crewJson(['review', 'run', t.id, '--engine', 'claude', '--refuter-engine', 'no-such-engine'], repo);
+    assert.notEqual(bad2.code, 0);
+    assert.equal(rv.latestRound(dir, 'raw.json'), 0);
+  } finally { resetGlobal(); }
+});
+
+test('review run ending at the Claude reviewer dispatch carries --refuter-engine to the next step', () => {
+  try {
+    const { repo, t } = codexSetup('ok', (c) => { c.roles.reviewer = { engine: 'claude', model: 'sonnet', agent: 'crew-reviewer' }; });
+    const r = u.crewJson(['review', 'run', t.id, '--refuter-engine', 'codex'], repo);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(r.data.engine, 'claude');
+    assert.equal(r.data.refuter_engine, 'codex');
+    const text = h.crew(['review', 'run', t.id, '--refuter-engine', 'codex', '--round', '2'], repo);
+    assert.equal(text.code, 0, text.err);
+    assert.ok(text.out.includes(`crew review filter ${t.id} --refuter-engine codex`), text.out);
+    const plain = h.crew(['review', 'run', t.id, '--round', '3'], repo);
+    assert.ok(plain.out.includes(`crew review filter ${t.id}`) && !plain.out.includes('--refuter-engine'), plain.out);
+    // a reviewer engine that fails and falls back to Claude carries it too
+    const b = codexSetup('ok', (c) => { c.roles.reviewer = { engine: 'codex' }; });
+    setGlobalEngines({ codex: { command: path.join(h.tmpDir(), 'no-such-codex') }, other: { command: process.execPath, args: [] } });
+    const f = h.crew(['review', 'run', b.t.id, '--refuter-engine', 'other'], b.repo);
+    assert.equal(f.code, 0, f.err);
+    assert.ok(f.out.includes(`crew review filter ${b.t.id} --refuter-engine other`), f.out);
+  } finally { resetGlobal(); }
+});
+
+test('doctor hints at a role pinned to claude by an older init, and warns only when Codex is available', async () => {
+  try {
+    const repo = u.initRepo();
+    u.patchCfg(repo, (c) => { c.roles.reviewer = { engine: 'claude' }; c.roles.refuter = { engine: 'claude' }; });
+    resetGlobal();
+    let d = JSON.parse((await u.crewAsync(['--json', 'doctor'], repo)).out);
+    let roles = d.checks.find((c) => c.name === 'roles');
+    assert.match(roles.detail, /reviewer is pinned to claude in \.claude\/crew\.json; remove roles\.reviewer\.engine/);
+    assert.match(roles.detail, /refuter is pinned to claude/);
+    assert.match(roles.detail, /add engines\.codex/);
+    assert.equal(roles.status, 'ok', 'no Codex available: status as before');
+    setGlobalEngines({ codex: { command: process.execPath, args: [] } });
+    d = JSON.parse((await u.crewAsync(['--json', 'doctor'], repo)).out);
+    roles = d.checks.find((c) => c.name === 'roles');
+    assert.equal(roles.status, 'warn');
+    assert.match(roles.detail, /remove roles\.refuter\.engine from that file to make it follow the Codex default/);
+    // not pinned: no hint
+    u.patchCfg(repo, (c) => { delete c.roles.reviewer.engine; delete c.roles.refuter.engine; });
+    d = JSON.parse((await u.crewAsync(['--json', 'doctor'], repo)).out);
+    roles = d.checks.find((c) => c.name === 'roles');
+    assert.equal(roles.status, 'ok');
+    assert.doesNotMatch(roles.detail, /pinned/);
+  } finally { resetGlobal(); }
+});
+
+test('plan review follows the Codex default: run uses the codex reviewer, filter runs the codex refuter', () => {
+  try {
+    const repo = u.initRepo();
+    const scratch = h.tmpDir();
+    const script = u.writeFile(scratch, 'fake-codex.js', FAKE_CODEX);
+    const copy = path.join(scratch, 'stdin');
+    setGlobalEngines({ codex: { command: process.execPath, args: [script, copy, 'ok'] } });
+    assert.equal('engine' in u.readCfg(repo).roles.reviewer, false);
+    u.writeFile(repo, '.crew/plans/demo.md', [
+      '# Demo plan', 'Ship a todo CLI.', '',
+      '- [ ] Due dates <!-- id:n1 added:2026-10-01 origin:plan -->', '',
+    ].join('\n'));
+    const run = u.crewJson(['plan', 'review', 'run', 'demo'], repo);
+    assert.equal(run.code, 0, run.err);
+    assert.equal(run.data.engine, 'codex');
+    assert.equal(run.data.prompt, undefined, 'no subagent prompt is printed');
+    assert.match(fs.readFileSync(`${copy}.reviewer`, 'utf8'), /You are the crew reviewer for plan demo/);
+    const found = [{
+      node: 'n1', kind: 'missing-step', claim: 'claim', evidence: ['plan n1'],
+      proposal: { action: 'add', text: 'Reject past dates', done_when: 'past dates are rejected, checked by a test' },
+    }];
+    const sub = u.crewIn(['--json', 'plan', 'review', 'submit', 'demo', '--round', String(run.data.round)], repo, JSON.stringify(found));
+    assert.equal(sub.code, 0, sub.err);
+    const flt = u.crewJson(['plan', 'review', 'filter', 'demo', '--round', String(run.data.round)], repo);
+    assert.equal(flt.code, 0, flt.err);
+    assert.equal(flt.data.refuter.engine, 'codex');
+    assert.equal(flt.data.refuter.prompt, undefined);
+    assert.match(fs.readFileSync(`${copy}.refuter`, 'utf8'), /You are the crew refuter for plan demo/);
   } finally { resetGlobal(); }
 });

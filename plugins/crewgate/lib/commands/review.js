@@ -144,6 +144,7 @@ function doRun(ctx, a) {
   const engine = a.engine || (c.cfg.roles.reviewer || {}).engine || 'claude';
   if (engine !== 'claude') eng.check(engine);
   if (engine !== 'claude' && refuterEngineOf(c, a) !== 'claude') eng.check(refuterEngineOf(c, a));
+  if (a.refuterEngine && a.refuterEngine !== 'claude') eng.check(a.refuterEngine);
   const round = nextRound(c, a);
   const rawPath = rv.roundFile(c.dir, round, 'raw.json');
   let fallback = null;
@@ -178,12 +179,14 @@ function doRun(ctx, a) {
   });
   const data = { engine, round, raw_path: rawPath, subagent_type: role.agent || 'crew-reviewer', model: role.model || 'sonnet', prompt };
   if (fallback) data.fallback = fallback;
+  // the flag is carried to the next step, so the round's refuter is the one asked for
+  if (a.refuterEngine) data.refuter_engine = a.refuterEngine;
   ctx.emit(data, [
     ...(fallback ? [ctx.t('wf.review.engineFallback', { name: fallback.engine, reason: fallback.reason })] : []),
     ctx.t('wf.review.dispatch', { agent: data.subagent_type, model: data.model, round }),
     ctx.t('wf.review.rawAt', { path: rawPath }),
     '--- prompt ---', prompt, '--- end ---',
-    ctx.t('wf.review.thenFilter', { id: c.task.id }),
+    a.refuterEngine ? ctx.t('wf.review.thenFilterRef', { id: c.task.id, name: a.refuterEngine }) : ctx.t('wf.review.thenFilter', { id: c.task.id }),
   ]);
 }
 
