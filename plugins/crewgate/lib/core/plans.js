@@ -654,7 +654,7 @@ function takeReply(projectId, slug, gateId, answerOpts) {
   const prior = events.read(projectId, { types: ['gate.answered'] }).find((e) => e.data && e.data.id === gateId);
   const ans = prior ? prior.data : gates.answer(projectId, gateId, 'yes', '', { ...answerOpts, requireUserTurn: true });
   if (ans.answer !== 'yes') throw new CrewError('plan.gateNo', { slug });
-  if (ans.user_turn !== true && ans.user_turn !== 'project') throw new CrewError('plan.noUserTurn', { slug, id: gateId });
+  if (ans.user_turn !== true && ans.user_turn !== 'project' && ans.user_turn !== 'instruction') throw new CrewError('plan.noUserTurn', { slug, id: gateId });
 }
 
 // finalizeAnswer -> { slug, hash, gate_id }

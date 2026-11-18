@@ -32,8 +32,8 @@ const SPECS = {
   link: { positionals: [{ name: 'slug' }, { name: 'node' }, { name: 'task' }], options: {} },
   set: { positionals: [{ name: 'slug' }, { name: 'node' }, { name: 'action', choices: ['open', 'done', 'dropped', 'accept'] }], options: {} },
   part: { positionals: [{ name: 'slug' }, { name: 'part', choices: ['not-doing', 'done-when'] }, { name: 'text' }], options: { '--add': { dest: 'add', flag: true } } },
-  finalize: { positionals: [{ name: 'slug' }], options: { '--gate': { dest: 'gate' } } },
-  close: { positionals: [{ name: 'slug' }, { name: 'to', choices: ['done', 'parked'] }], options: { '--gate': { dest: 'gate' } } },
+  finalize: { positionals: [{ name: 'slug' }], options: { '--gate': { dest: 'gate' }, '--quote': { dest: 'quote' } } },
+  close: { positionals: [{ name: 'slug' }, { name: 'to', choices: ['done', 'parked'] }], options: { '--gate': { dest: 'gate' }, '--quote': { dest: 'quote' } } },
   reopen: { positionals: [{ name: 'slug' }], options: {} },
   adopt: { positionals: [{ name: 'slug' }], options: {} },
   rm: { positionals: [{ name: 'slug' }, { name: 'node' }], options: {} },
@@ -43,7 +43,7 @@ const SPECS = {
     positionals: [{ name: 'slug' }],
     options: {
       '--kind': { dest: 'kind', choices: drift.KINDS }, '--detail': { dest: 'detail' },
-      '--gate': { dest: 'gate' }, '--answer': { dest: 'answer', choices: drift.ANSWERS }, '--text': { dest: 'text' },
+      '--gate': { dest: 'gate' }, '--answer': { dest: 'answer', choices: drift.ANSWERS }, '--text': { dest: 'text' }, '--quote': { dest: 'quote' },
     },
   },
   'drift-stats': { positionals: [{ name: 'slug', optional: true }], options: {} },
@@ -195,10 +195,8 @@ function reviewRun(argv, ctx) {
 }
 
 // The options `crew gate answer` builds from the session: the user-turn check needs the session's prompt times.
-function answerOptions(proj) {
-  const session = gates.currentSession();
-  const promptsOf = (id) => { const s = sess.read(id); return s && Array.isArray(s.prompt_ts) ? s.prompt_ts : []; };
-  return { src: 'cli', session, prompts: session ? promptsOf(session) : [], promptsOf, projectPrompts: () => sess.promptsOfProject(proj.id) };
+function answerOptions(proj, quote) {
+  return sess.answerOptions(proj.id, gates.currentSession(), quote);
 }
 
 // finalize and close: without --gate they ask the user; with --gate they take the user's reply.
@@ -207,7 +205,7 @@ function askOrAnswer(sub, a, proj, root, ctx) {
   const cfg = ctx.config().config;
   if (sub === 'finalize') {
     if (a.gate) {
-      const r = plans.finalizeAnswer(root, proj.id, a.slug, a.gate, answerOptions(proj));
+      const r = plans.finalizeAnswer(root, proj.id, a.slug, a.gate, answerOptions(proj, a.quote));
       return ctx.emit(r, ctx.t('plan.finalizedOk', { slug: a.slug }));
     }
     const r = plans.finalizeAsk(root, proj.id, cfg, a.slug, { session, t: ctx.t });
@@ -215,7 +213,7 @@ function askOrAnswer(sub, a, proj, root, ctx) {
     return ctx.emit({ ...r, next: msg }, msg);
   }
   if (a.gate) {
-    const r = plans.closeAnswer(root, proj.id, a.slug, a.gate, answerOptions(proj));
+    const r = plans.closeAnswer(root, proj.id, a.slug, a.gate, answerOptions(proj, a.quote));
     return ctx.emit(r, ctx.t('plan.closedOk', { slug: a.slug, state: r.state }));
   }
   const r = plans.closeAsk(root, proj.id, cfg, a.slug, a.to, { session });
@@ -228,7 +226,7 @@ function driftRun(a, proj, root, ctx) {
   if (a.gate) {
     if (!a.answer) throw new UsageError('args.missing', { name: '--answer' });
     if (!a.text) throw new UsageError('args.missing', { name: '--text' });
-    const r = drift.answer(root, proj.id, a.slug, a.gate, a.answer, a.text, answerOptions(proj));
+    const r = drift.answer(root, proj.id, a.slug, a.gate, a.answer, a.text, answerOptions(proj, a.quote));
     return ctx.emit(r, ctx.t('plan.driftAnswered', { slug: a.slug, kind: r.kind, answer: r.answer }));
   }
   if (!a.kind) throw new UsageError('args.missing', { name: '--kind' });

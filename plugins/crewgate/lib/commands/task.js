@@ -38,8 +38,8 @@ const SPECS = {
     options: { '--report-file': { dest: 'reportFile' }, '--packet-file': { dest: 'packetFile' } },
   },
   'send-back': { positionals: [{ name: 'id' }], options: NOTE },
-  accept: { positionals: [{ name: 'id' }], options: { ...NOTE, '--skip-refuter': { dest: 'skipRefuter' }, '--widen': { dest: 'widen' }, '--gate': { dest: 'gate' } } },
-  merge: { positionals: [{ name: 'id' }], options: NOTE },
+  accept: { positionals: [{ name: 'id' }], options: { ...NOTE, '--skip-refuter': { dest: 'skipRefuter' }, '--widen': { dest: 'widen' }, '--gate': { dest: 'gate' }, '--quote': { dest: 'quote' } } },
+merge: { positionals: [{ name: 'id' }], options: NOTE },
   cancel: { positionals: [{ name: 'id' }], options: NOTE },
   run: {
     positionals: [{ name: 'id' }],
@@ -236,18 +236,15 @@ const evAppend = (proj, type, id, data, session) => {
 const listFiles = (files) => files.slice(0, 20).join(', ') + (files.length > 20 ? ` (+${files.length - 20} more)` : '');
 
 // Takes the user's reply to a task_scope gate asked for this task, once. A gate already answered is judged by what is stored.
-function takeWiden(proj, id, gateId) {
+function takeWiden(proj, id, gateId, quote) {
   const asked = events.read(proj.id, { types: ['gate.asked'] }).find((e) => e.data && e.data.id === gateId);
   if (!asked || asked.data.gate !== 'task_scope' || asked.task !== id) throw new CrewError('wf.task.widenBadGate', { id, gate: gateId });
   if (events.read(proj.id, { types: ['task.scope_widened'] }).some((e) => e.data && e.data.gate === gateId)) throw new CrewError('wf.task.widenUsed', { gate: gateId });
   const session = gates.currentSession();
-  const promptsOf = (sid) => { const x = sess.read(sid); return x && Array.isArray(x.prompt_ts) ? x.prompt_ts : []; };
   const prior = events.read(proj.id, { types: ['gate.answered'] }).find((e) => e.data && e.data.id === gateId);
-  const ans = prior ? prior.data : gates.answer(proj.id, gateId, 'yes', '', {
-    src: 'cli', session, prompts: session ? promptsOf(session) : [], promptsOf, projectPrompts: () => sess.promptsOfProject(proj.id), requireUserTurn: true,
-  });
+  const ans = prior ? prior.data : gates.answer(proj.id, gateId, 'yes', '', { ...sess.answerOptions(proj.id, session, quote), requireUserTurn: true });
   if (ans.answer !== 'yes') throw new CrewError('wf.task.widenNo', { id });
-  if (ans.user_turn !== true && ans.user_turn !== 'project') throw new CrewError('gate.needUserReply', { id: gateId });
+  if (ans.user_turn !== true && ans.user_turn !== 'project' && ans.user_turn !== 'instruction') throw new CrewError('gate.needUserReply', { id: gateId });
 }
 
 // `crew task accept`: the files really changed against the task's --allow and --deny (plan.enforce). -> { lines, after, asked } where
@@ -283,7 +280,7 @@ function scopeOnAccept(ctx, proj, cfg, id, a) {
     const g = gates.ask(proj.id, { ...cfg, gates: { ...cfg.gates, task_scope: 'ask' } }, { gate: 'task_scope', task: id, detail: `widen the scope of task ${id}: ${clean(a.widen, 200)}; files ${clean(list, 200)}` }, { src: 'cli', session });
     return { ...none, asked: { gate_id: g.id, files } };
   }
-  takeWiden(proj, id, a.gate);
+  takeWiden(proj, id, a.gate, a.quote);
   return { ...none, after: () => evAppend(proj, 'task.scope_widened', id, { reason: clean(a.widen, 500), files: files.slice(0, 50), gate: a.gate }, session) };
 }
 

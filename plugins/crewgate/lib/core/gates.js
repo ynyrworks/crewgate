@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const events = require('./events');
 const { currentSession } = require('./sessionid');
 const { CrewError, UsageError } = require('./errors');
+const { clean } = require('./redact');
 
 const GATES = ['push', 'open_pr', 'merge', 'remote_hosts', 'large_task', 'install_or_download'];
 const ANSWER_WINDOW_MS = 30 * 60 * 1000;
@@ -81,8 +82,24 @@ function userTurnVerdict(asked, session, opts, nowMs) {
   return typeof opts.projectPrompts === 'function' && between(opts.projectPrompts()) ? 'project' : false;
 }
 
+const squash = (s) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+const QUOTE_MIN = 2;
+const QUOTE_CAP = 200;
+
+// Does the user's own instruction approve this? True when the answering session also asked, the ask was made in the turn that
+// the prompt opts.turnPrompt ({ ts, text }) started, and opts.quote (trimmed, whitespace collapsed, case-insensitive, at least 2
+// characters) occurs in that prompt. A turn started by a task notification has no turnPrompt.
+function quoteInTurn(asked, session, opts) {
+  const q = squash(opts.quote).toLowerCase();
+  const tp = opts.turnPrompt;
+  if (q.length < QUOTE_MIN || !tp || typeof tp.text !== 'string' || !Number.isFinite(tp.ts)) return false;
+  if (!session || asked.session !== session || !(Date.parse(asked.ts) >= tp.ts)) return false;
+  return squash(tp.text).toLowerCase().includes(q);
+}
+
 // answer(projectId, gateId, 'yes'|'no', note, opts) -> { id, gate, answer, user_turn }
-// opts: src, session, prompts, promptsOf(sessionId), projectPrompts(), requireUserTurn. The ask is found by its id (the whole log, no time cutoff).
+// opts: src, session, prompts, promptsOf(sessionId), projectPrompts(), requireUserTurn, quote, turnPrompt. The ask is found by its id (the whole log, no time cutoff).
+// With opts.requireUserTurn === true, a yes that would be refused is accepted as user_turn 'instruction' when quoteInTurn() holds.
 // With opts.requireUserTurn === true a `yes` is refused (CrewError gate.needUserReply, a gate.refused event without the note) when a
 // session is known (the asking or the answering one) and the verdict is false. When no session is known at all the verdict stays as
 // before ('project' or false) and the answer is stored. A `no` is always recorded.
@@ -94,7 +111,12 @@ function answer(projectId, gateId, reply, note, opts = {}) {
   if (!asked) throw new CrewError('gate.notFound', { id: String(gateId) });
   const done = all.find((e) => e.type === 'gate.answered' && e.data && e.data.id === gateId);
   if (done) throw new CrewError('gate.alreadyAnswered', { id: gateId, answer: done.data.answer });
-  const userTurn = userTurnVerdict(asked, opts.session, opts, Date.now());
+  let userTurn = userTurnVerdict(asked, opts.session, opts, Date.now());
+  let quote;
+  if (reply === 'yes' && opts.requireUserTurn === true && userTurn === false && quoteInTurn(asked, opts.session, opts)) {
+    userTurn = 'instruction';
+    quote = clean(squash(opts.quote), QUOTE_CAP);
+  }
   if (reply === 'yes' && opts.requireUserTurn === true && userTurn === false && (asked.session || opts.session)) {
     events.append(projectId, {
       type: 'gate.refused', src: opts.src || 'cli', session: opts.session, task: asked.task || undefined,
@@ -104,7 +126,7 @@ function answer(projectId, gateId, reply, note, opts = {}) {
   }
   events.append(projectId, {
     type: 'gate.answered', src: opts.src || 'cli', session: opts.session, task: asked.task || undefined, key: `${gateId}:answered`,
-    data: { id: gateId, gate: asked.data.gate, answer: reply, auto: false, note: note || '', user_turn: userTurn, ask_session: asked.session || '' },
+    data: { id: gateId, gate: asked.data.gate, answer: reply, auto: false, note: note || '', user_turn: userTurn, ask_session: asked.session || '', ...(quote ? { quote } : {}) },
   });
   return { id: gateId, gate: asked.data.gate, answer: reply, user_turn: userTurn };
 }

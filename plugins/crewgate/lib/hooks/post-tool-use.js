@@ -205,8 +205,32 @@ function onBash(payload) {
   return lines.length ? C.withContext('PostToolUse', lines.join('\n')) : null;
 }
 
+// Did the AskUserQuestion widget come back with answers? The result shape is not documented in this repo, so only a result
+// that clearly holds answers counts: an `answers` object with a non-empty value, or the text "User has answered your
+// questions". A rejected or errored result never does.
+function widgetAnswered(payload) {
+  const r = payload.tool_response;
+  if (r && typeof r === 'object' && (r.is_error === true || r.isError === true)) return false;
+  const o = C.obj(r);
+  const ans = o.answers;
+  if (ans && typeof ans === 'object' && !Array.isArray(ans)) return Object.values(ans).some((v) => (typeof v === 'string' ? v.trim() !== '' : Array.isArray(v) && v.length > 0));
+  const parts = [C.str(o.content), C.str(o.output), C.str(o.result), C.str(o.text)];
+  if (Array.isArray(o.content)) parts.push(...o.content.map((x) => C.str(C.obj(x).text)));
+  const text = typeof r === 'string' ? r : parts.join('\n');
+  return /User has answered your questions/i.test(text);
+}
+
+// An answered widget question is a user reply: the time goes in the session file (never the answer text).
+function onAsk(payload) {
+  const h = C.open(payload, { fastOnly: true });
+  if (!h || !widgetAnswered(payload)) return null;
+  sess.touch(h, (s) => { s.widget_ts = [...(Array.isArray(s.widget_ts) ? s.widget_ts : []), Date.now()].slice(-20); });
+  return null;
+}
+
 function run(payload) {
   const tool = C.str(payload.tool_name);
+  if (tool === 'AskUserQuestion') return onAsk(payload);
   if (C.AGENT_TOOLS.has(tool)) return onAgent(payload);
   if (SHELL_TOOLS.has(tool)) return onBash(payload);
   return null;

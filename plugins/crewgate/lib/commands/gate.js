@@ -13,7 +13,7 @@ const SPECS = {
   },
   answer: {
     positionals: [{ name: 'id' }, { name: 'answer', choices: ['yes', 'no'] }],
-    options: { '--note': { dest: 'note' } },
+    options: { '--note': { dest: 'note' }, '--quote': { dest: 'quote' } },
   },
 };
 
@@ -30,9 +30,8 @@ function run(argv, ctx) {
   } else {
     // The user-turn rule needs the session's prompt times (kept by the UserPromptSubmit hook).
     const cfg = ctx.config().config;
-    const promptsOf = (id) => { const s = sess.read(id); return s && Array.isArray(s.prompt_ts) ? s.prompt_ts : []; };
     const r = gates.answer(proj.id, a.id, a.answer, a.note, {
-      ...opts, requireUserTurn: gates.requiresUserTurn(cfg), prompts: opts.session ? promptsOf(opts.session) : [], promptsOf, projectPrompts: () => sess.promptsOfProject(proj.id),
+      ...sess.answerOptions(proj.id, opts.session, a.quote), requireUserTurn: gates.requiresUserTurn(cfg),
     });
     const lines = [ctx.t('gate.answered', { id: r.id, gate: r.gate, answer: r.answer })];
     if (r.answer === 'yes' && r.user_turn === false && gates.requiresUserTurn(cfg)) lines.push(ctx.t('gate.noUserTurn', { id: r.id }));
@@ -45,8 +44,8 @@ module.exports = {
   name: 'gate',
   summary: { en: 'Record approval gates (ask the user before push, PR, merge ...)', 'zh-TW': '記錄核准關卡（推送、PR、合併前先問使用者）' },
   usage: {
-    en: '  crew gate ask <gate> [--task ID] [--detail "..."]   (prints a gate id; gate: push|open_pr|merge|remote_hosts|large_task|install_or_download, or one the project adds under gates in crew.json)\n  crew gate answer <gate-id> yes|no [--note "..."]',
-    'zh-TW': '  crew gate ask <gate> [--task ID] [--detail "..."]   （印出 gate id；gate：push|open_pr|merge|remote_hosts|large_task|install_or_download，或專案在 crew.json 的 gates 底下自訂的）\n  crew gate answer <gate-id> yes|no [--note "..."]',
+    en: '  crew gate ask <gate> [--task ID] [--detail "..."]   (prints a gate id; gate: push|open_pr|merge|remote_hosts|large_task|install_or_download, or one the project adds under gates in crew.json)\n  crew gate answer <gate-id> yes|no [--note "..."] [--quote "words of the user\'s own instruction"]',
+    'zh-TW': '  crew gate ask <gate> [--task ID] [--detail "..."]   （印出 gate id；gate：push|open_pr|merge|remote_hosts|large_task|install_or_download，或專案在 crew.json 的 gates 底下自訂的）\n  crew gate answer <gate-id> yes|no [--note "..."] [--quote "使用者自己指令裡的原話"]',
   },
   run,
 };

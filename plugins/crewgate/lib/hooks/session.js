@@ -22,6 +22,13 @@ function read(sid) {
   } catch { return null; }
 }
 
+// Times (ms) at which the user spoke in a session: the prompts they typed (prompt_ts) and the questions they answered in
+// the AskUserQuestion widget (widget_ts). Times only, no text.
+function replyTimes(s) {
+  if (!s) return [];
+  return [...(Array.isArray(s.prompt_ts) ? s.prompt_ts : []), ...(Array.isArray(s.widget_ts) ? s.widget_ts : [])];
+}
+
 // Prompt times (ms) of every live session file of a project (for answers whose session id is unknown).
 function promptsOfProject(pid) {
   const out = [];
@@ -30,10 +37,22 @@ function promptsOfProject(pid) {
     for (const n of fs.readdirSync(dir).slice(0, 300)) {
       if (!n.endsWith('.json')) continue;
       const s = read(n.slice(0, -5));
-      if (s && s.project === pid && Array.isArray(s.prompt_ts)) out.push(...s.prompt_ts);
+      if (s && s.project === pid) out.push(...replyTimes(s));
     }
   } catch { /* no sessions */ }
   return out;
+}
+
+// The options gates.answer needs, built from the session files: reply times, the text of the prompt that started the
+// session's current turn (only for --quote), and the quote itself.
+function answerOptions(pid, session, quote) {
+  const promptsOf = (id) => replyTimes(read(id));
+  const s = session ? read(session) : null;
+  const tp = s && s.turn_prompt && typeof s.turn_prompt === 'object' ? s.turn_prompt : null;
+  return {
+    src: 'cli', session, prompts: session ? promptsOf(session) : [], promptsOf, projectPrompts: () => promptsOfProject(pid),
+    ...(quote ? { quote, turnPrompt: tp } : {}),
+  };
 }
 
 function init(s, h) {
@@ -176,6 +195,6 @@ function clearStale(pid) {
 }
 
 module.exports = {
-  read, promptsOfProject, touch, bumpTool, addTask, remove, prune,
+  read, replyTimes, answerOptions, promptsOfProject, touch, bumpTool, addTask, remove, prune,
   remember, bindAgent, byAgent, byToolUse, readUses, markStopped, running, clearStale, sessionFile,
 };
