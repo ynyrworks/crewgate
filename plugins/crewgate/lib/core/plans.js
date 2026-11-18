@@ -447,10 +447,11 @@ function contentHash(text) {
   return crypto.createHash('sha256').update(serialize(doc)).digest('hex');
 }
 // What the user approved: the title, goal, ## Not doing, ## Done when, and each step's text and nesting. Not the box, the comment,
-// the state line, ## Drift or ## Clarified, and not a proposed [?] step (a plan review's proposal is not part of the plan until accepted).
+// the state line, ## Drift or ## Clarified, and not a proposed [?] step or a rejected one (a plan review's proposal is not part of the plan until accepted).
 function approvedHash(text) {
   const doc = parse(text);
-  const steps = doc.nodes.filter((n) => n.box !== '?').map((n) => [n.depth, n.text]);
+  // a proposal is not part of the plan, whether it is open ([?]) or was rejected (marked rejected): deciding it changes nothing approved
+  const steps = doc.nodes.filter((n) => n.box !== '?' && !n.meta.rejected).map((n) => [n.depth, n.text]);
   return crypto.createHash('sha256').update(JSON.stringify([doc.title, doc.goal, doc.notDoing, doc.doneWhen, steps])).digest('hex');
 }
 function fileApprovedHash(root, slug) {
@@ -585,14 +586,13 @@ function setPart(root, projectId, slug, which, text, opts = {}) {
 
 const isAssumed = (l) => /\(assumed\)\s*$/.test(l);
 
-// What stops a plan from being final, as codes: goal, not_doing, done_when, steps, assumed.
+// What stops a plan from being final, as codes: goal, not_doing, done_when, steps. (assumed) lines do not stop it: the user's yes confirms them.
 function readyProblems(doc) {
   const out = [];
   if (!doc.goal.trim()) out.push('goal');
   if (!doc.notDoing.trim()) out.push('not_doing');
   if (!doc.doneWhen.trim()) out.push('done_when');
   if (!doc.nodes.some((n) => n.box !== '~' && n.box !== '?')) out.push('steps');
-  if (doc.clarified.some(isAssumed)) out.push('assumed');
   return out;
 }
 
@@ -616,18 +616,37 @@ function finalizeAsk(root, projectId, cfg, slug, opts = {}) {
   if (info.state === 'legacy') throw new CrewError('plan.isLegacy', { slug });
   if (info.state !== 'draft') throw new CrewError('plan.notDraft', { slug, state: info.state });
   const doc = readCapped(root, slug);
-  // plan.interview off: the model's own (assumed) lines do not block; the user's yes confirms them with the plan.
-  const off = !!(cfg && cfg.plan && cfg.plan.interview === 'off');
+  // the model's own (assumed) lines do not block, whatever plan.interview says; the user's yes confirms them with the plan.
   const assumed = doc.clarified.filter(isAssumed);
-  const problems = readyProblems(doc).filter((p) => !(off && p === 'assumed'));
+  const problems = readyProblems(doc);
   if (problems.length) {
     const tt = opts.t || ((k, v) => require('./i18n').t('en', k, v));
     throw new CrewError('plan.notReady', { slug, list: problems.map((p) => `  - ${tt(`plan.problem.${p}`)}`).join('\n') });
   }
   const hash = fileHash(root, slug);
   const g = gates.ask(projectId, askCfg(cfg), { gate: 'plan_final', detail: `finalize plan ${slug}` }, { src: 'cli', session: opts.session });
-  writeRecord(projectId, slug, { state: 'draft', pending: { gate_id: g.id, kind: 'finalize', hash, ...(off ? { confirm_assumed: true } : {}) } });
-  return { slug, gate_id: g.id, hash, ...(off && assumed.length ? { assumed } : {}) };
+  writeRecord(projectId, slug, { state: 'draft', pending: { gate_id: g.id, kind: 'finalize', hash, confirm_assumed: true } });
+  return { slug, gate_id: g.id, hash, ...(assumed.length ? { assumed } : {}) };
+}
+
+// Is every step of the plan done or dropped (and is there one that is not a proposal)? Proposals do not count.
+function isComplete(root, projectId, slug) {
+  const doc = readCapped(root, slug);
+  if (!doc || !doc.nodes.some((n) => n.box !== '?' && !n.meta.rejected)) return false;
+  const top = derive(doc, taskStates(projectId)).nodes.filter((n) => n.state !== 'proposed');
+  return top.length > 0 && top.every((n) => n.state === 'done' || n.state === 'dropped');
+}
+// The slugs of the final plans that still have work: a final plan with every step done or dropped is waiting to be closed.
+function openFinalSlugs(root, projectId) {
+  return finalSlugs(root, projectId).filter((slug) => !isComplete(root, projectId, slug));
+}
+// A final plan whose steps are all done or dropped closes as done without a question: nothing is being decided.
+function closeDone(root, projectId, slug) {
+  mustBe(root, projectId, slug, ['final'], 'plan.notFinal');
+  if (!isComplete(root, projectId, slug)) return null;
+  transition(root, projectId, slug, 'done');
+  record(projectId, 'plan.closed', { slug, state: 'done', auto: true });
+  return { slug, state: 'done' };
 }
 
 // closeAsk -> { slug, gate_id, to }
@@ -664,7 +683,7 @@ function finalizeAnswer(root, projectId, slug, gateId, answerOpts) {
   takeReply(projectId, slug, gateId, answerOpts);
   let hash = pend.hash;
   if (pend.confirm_assumed) {
-    // asked under plan.interview off: the yes also confirms the model's assumptions, so each (assumed) line becomes (user)
+    // the yes also confirms the model's assumptions, so each (assumed) line becomes (user)
     let n = 0;
     update(root, slug, (doc) => {
       const at = clarifiedLine(doc);
@@ -824,7 +843,7 @@ function deepNodes(root) {
 
 module.exports = {
   SLUG_RE, ORIGINS, MAX_DEPTH, MAX_BYTES, MAX_NODES, planDir, planFile, checkSlug, parse, serialize, assignIds, find, addNode, removeNode,
-  STATES, PARTS, planOfTask, draftPlanOfTask, finalSlugs, finalPlanOfTask, stateOf, stateInfo, contentHash, fileHash, approvedHash, fileApprovedHash, changedSinceApproved, approveNow, changedPlanOfTask, readRecord, setPart, readyProblems, finalizeAsk, finalizeAnswer, closeAsk, closeAnswer, reopen, adopt, takeReply, writeRecord,
+  STATES, PARTS, planOfTask, draftPlanOfTask, finalSlugs, finalPlanOfTask, stateOf, stateInfo, contentHash, fileHash, approvedHash, fileApprovedHash, changedSinceApproved, approveNow, changedPlanOfTask, isComplete, openFinalSlugs, closeDone, readRecord, setPart, readyProblems, finalizeAsk, finalizeAnswer, closeAsk, closeAnswer, reopen, adopt, takeReply, writeRecord,
   KINDS, ACTIONS, encodeToken, decodeToken, proposalMeta, record, setBox, touch, BOX_STATE, cleanText, MAX_TEXT,
   derive, taskStates, slugs, readCapped, update, create, clarify, addTo, editText, linkTo: linkTask, setState, removeFrom, deepNodes, duplicateNodes, duplicateIds, exists, today, refOf,
 };
