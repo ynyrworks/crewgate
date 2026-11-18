@@ -105,15 +105,24 @@ function scopeRange(root, branch, recordedTips = []) {
     if (Number.isFinite(n) && n > bestN) { best = c; bestN = n; }
   }
   // Merged into a ref: the merge-base is then the tip itself; look at the side the branch was merged into.
+  // The merge-derived base joins the recorded ancestor tips (the tip itself removed); the closest wins, so a recorded tip still
+  // beats it when the task started from that tip.
   if (best === tipSha && !recordedTips.includes(tipSha)) {
+    const rest = cands.filter((c) => c !== tipSha);
     for (const c of refs) {
       const m = git(['rev-list', '--merges', '--ancestry-path', '--reverse', `${tipSha}..${c}`], root);
       const first = m && m.split(/\r?\n/).filter(Boolean)[0];
       if (!first) continue;
       const mb = git(['merge-base', `${first}^1`, tipSha], root);
-      if (mb && mb.trim() && mb.trim() !== tipSha) return { base: mb.trim(), branch };
+      if (mb && mb.trim() && mb.trim() !== tipSha) { rest.push(mb.trim()); break; }
     }
-    return { failed: 'no-commits' };
+    best = null;
+    bestN = -1;
+    for (const c of rest) {
+      const n = Number((git(['rev-list', '--count', c], root) || '').trim());
+      if (Number.isFinite(n) && n > bestN) { best = c; bestN = n; }
+    }
+    return best ? { base: best, branch } : { failed: 'no-commits' };
   }
   return { base: best, branch };
 }

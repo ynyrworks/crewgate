@@ -107,6 +107,40 @@ test('a branch already merged into HEAD is still checked, from the first parent 
   assert.equal(evs(f, 'task.scope_check_failed').length, 0);
 });
 
+function stackedMerged(f, bFiles, allow) {
+  const main = cur(f);
+  h.git(f.repo, 'checkout', '-q', '-b', 'feat/sm');
+  commit(f, { 'src/a.txt': 'a' });
+  h.git(f.repo, 'checkout', '-q', main);
+  const a = returned(f, 'feat/sm', ['src/**']);
+  assert.equal(run(f, ['task', 'accept', a.id]).code, 0);
+  h.git(f.repo, 'checkout', '-q', 'feat/sm');
+  commit(f, bFiles);
+  h.git(f.repo, 'checkout', '-q', main);
+  commit(f, { 'other.txt': 'o' }, 'main moves');
+  h.git(f.repo, 'merge', '-q', '--no-ff', '-m', 'merge', 'feat/sm');
+  return returned(f, 'feat/sm', allow);
+}
+
+test('stacked branch merged before the second accept: the first task\'s files are not counted', () => {
+  const f = fixture('block');
+  const b = stackedMerged(f, { 'lib/b.txt': 'b' }, ['lib/**']);
+  const r = run(f, ['task', 'accept', b.id]);
+  assert.equal(r.code, 0, r.err);
+  assert.doesNotMatch(r.err + r.out, /src\/a\.txt|other\.txt/);
+  assert.equal(state(f, b), 'accepted');
+});
+
+test('stacked branch merged before the second accept: an out-of-scope file is refused, naming only it', () => {
+  const f = fixture('block');
+  const b = stackedMerged(f, { 'lib/b.txt': 'b', 'docs/c.txt': 'c' }, ['lib/**']);
+  const r = run(f, ['task', 'accept', b.id]);
+  assert.notEqual(r.code, 0);
+  assert.match(r.err, /docs\/c\.txt/);
+  assert.doesNotMatch(r.err, /src\/a\.txt|lib\/b\.txt|other\.txt/);
+  assert.equal(state(f, b), 'returned');
+});
+
 test('check cannot run: the warning names the branch and repository; the event keeps a machine-readable reason', () => {
   const f = fixture('block');
   const t = returned(f, 'feat/elsewhere', ['src/**']);
