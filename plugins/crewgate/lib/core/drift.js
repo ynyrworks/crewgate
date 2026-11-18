@@ -152,7 +152,7 @@ function covered(root, projectId, slug, kind, session) {
   const sess = require('../hooks/session');
   let prompts;
   const s = session ? sess.read(session) : null;
-  if (s && Array.isArray(s.prompt_ts)) prompts = s.prompt_ts; else prompts = sess.promptsOfProject(projectId);
+  if (s && Array.isArray(s.prompt_ts)) prompts = sess.replyTimes(s); else prompts = sess.promptsOfProject(projectId);
   const from = Date.parse(last.ts);
   return !prompts.some((t) => t > from);
 }
