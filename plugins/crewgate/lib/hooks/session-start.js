@@ -28,7 +28,7 @@ function cutBytes(text, max) {
   return Buffer.from(text).subarray(0, max).toString('utf8').replace(/�+$/, '');
 }
 
-function build(h, perState) {
+function build(h, perState, card) {
   const cfg = h.cfg();
   const name = line(h.ctx.project && h.ctx.project.name, 60) || 'project';
   const byState = {};
@@ -52,22 +52,32 @@ function build(h, perState) {
   if (h.accountWarn) inner.push(h.t(h.accountWarn === 'unknown' ? 'brief.accountUnknown' : 'brief.accountMismatch'));
   inner.push(h.t('brief.rules', { file: line(cfg.lessons && cfg.lessons.rules_file, 80) || 'CLAUDE.md' }));
 
-  return [
-    h.t('brief.intro', { name }),
-    h.t('brief.cli', { cmd: C.crewCmd() }),
-    h.t('brief.dataNote'),
-    '<crew-state untrusted="true">',
-    ...inner,
-    '</crew-state>',
-  ].join('\n');
+  // Hook-authored text (outside the fence): the intro, the reply language and, after a compaction or resume, the role card.
+  const head = [h.t('brief.intro', { name })];
+  if (h.lang() !== 'en') head.push(h.t('brief.lang'));
+  head.push(h.t('brief.cli', { cmd: C.crewCmd() }), h.t('brief.dataNote'));
+  if (card) {
+    const max = cfg.limits && cfg.limits.max_parallel_workers;
+    head.push(h.t('card.title'), h.t('card.role'), h.t('card.playbook'),
+      h.t('card.limit', { max: Number.isInteger(max) ? max : 3 }), h.t('card.review'), h.t('card.gates'), h.t('card.wait'));
+  }
+  return { head: head.join('\n'), inner: inner.join('\n') };
 }
 
-function brief(h) {
+const OPEN = '<crew-state untrusted="true">\n';
+const CLOSE = '\n</crew-state>';
+
+// <= MAX_BYTES. When the state block is too long it is the state block that is cut, never the head.
+function brief(h, source) {
+  const card = /^(compact|resume)$/.test(C.str(source));
   for (const n of [6, 3, 1, 0]) {
-    const text = build(h, n);
+    const b = build(h, n, card);
+    const text = `${b.head}\n${OPEN}${b.inner}${CLOSE}`;
     if (Buffer.byteLength(text) <= MAX_BYTES) return text;
   }
-  return cutBytes(build(h, 0), MAX_BYTES);
+  const b = build(h, 0, card);
+  const room = MAX_BYTES - Buffer.byteLength(`${b.head}\n${OPEN}${CLOSE}`);
+  return `${b.head}\n${OPEN}${cutBytes(b.inner, Math.max(room, 0))}${CLOSE}`;
 }
 
 // Codex has no Claude account: its SessionStart carries a turn id or a rollout transcript.
@@ -135,7 +145,7 @@ function run(payload) {
     const b = h.cfg().board;
     if (!(b && b.enabled === false)) require('../commands/board').ensureStarted();
   } catch { /* the brief must not depend on the board */ }
-  return C.withContext('SessionStart', brief(h));
+  return C.withContext('SessionStart', brief(h, p.source));
 }
 
 module.exports = { run, brief };

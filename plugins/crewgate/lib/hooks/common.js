@@ -71,13 +71,24 @@ function open(payload, opts = {}) {
   }
   if (currentEvent) hookseen.note(ctx.projectId, currentEvent);
   let cfg = null;
+  let cfgExists = false;
+  let lang = null;
   return {
     payload: p, ctx, sid, pid: ctx.projectId, root: ctx.projectRoot, workTree: ctx.workTreeRoot || ctx.projectRoot,
     cfg() {
-      if (!cfg) { try { cfg = config.loadFor(ctx.workTreeRoot, ctx.projectRoot).config; } catch { cfg = config.DEFAULTS; } }
+      if (!cfg) { try { const r = config.loadFor(ctx.workTreeRoot, ctx.projectRoot); cfg = r.config; cfgExists = !!r.exists; } catch { cfg = config.DEFAULTS; } }
       return cfg;
     },
-    lang() { return this.cfg().language; },
+    // Same rule as the CLI (core/cli.js): the project's crew.json, else the global config, else en.
+    lang() {
+      if (lang === null) {
+        this.cfg();
+        try {
+          lang = i18n.normalizeLang(cfgExists ? cfg.language : config.loadGlobal().config.language);
+        } catch { lang = 'en'; }
+      }
+      return lang;
+    },
     t(key, vars) { return i18n.t(this.lang(), `hooks.${key}`, vars); },
   };
 }
