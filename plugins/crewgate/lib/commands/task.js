@@ -229,7 +229,7 @@ function changedFiles(root, branch, proj, id) {
   if (r.failed) return { failed: r.failed, branch, repo: root };
   const out = common.git(['diff', '--name-only', '--no-renames', '-z', r.base, r.branch], root);
   if (out === null) return { failed: 'git-diff', branch, repo: root };
-  return { files: out.split(' ').filter(Boolean) };
+  return { files: out.split('\0').filter(Boolean) };
 }
 
 const evAppend = (proj, type, id, data, session) => {

@@ -86,10 +86,17 @@ function scopeRange(root, branch, recordedTips = []) {
     if (/^[0-9a-f]{7,64}$/.test(t || '') && git(['merge-base', '--is-ancestor', t, tipSha], root) !== null) cands.push(t);
   }
   const refs = ['HEAD', 'main', 'master'].filter((c) => c !== branch);
+  // A merge-base equal to the tip (the branch is checked out as HEAD, or is merged into that ref) says nothing about where the task
+  // started; keep it only when every ref gives the tip.
+  let sawTip = false;
+  let nonTip = 0;
   for (const c of refs) {
     const mb = git(['merge-base', c, branch], root);
-    if (mb && mb.trim()) cands.push(mb.trim());
+    if (!mb || !mb.trim()) continue;
+    if (mb.trim() === tipSha) sawTip = true;
+    else { cands.push(mb.trim()); nonTip++; }
   }
+  if (sawTip && !nonTip) cands.push(tipSha);
   if (!cands.length) return { failed: 'no-base' };
   let best = null;
   let bestN = -1;

@@ -131,3 +131,33 @@ test('a branch with no commits beyond its base: warned with a plain reason, not 
   assert.match(r.err + r.out, /no commits beyond its base/);
   assert.equal(evs(f, 'task.scope_check_failed')[0].data.reason, 'no-commits');
 });
+
+test('the task branch checked out in the project repo: its out-of-scope file is still refused', () => {
+  const f = fixture('block');
+  const main = cur(f);
+  h.git(f.repo, 'checkout', '-q', '-b', 'feat/co');
+  commit(f, { 'src/a.txt': 'a', 'docs/z.txt': 'z' });
+  const t = returned(f, 'feat/co', ['src/**']);
+  assert.equal(cur(f), 'feat/co');
+  const r = run(f, ['task', 'accept', t.id]);
+  assert.notEqual(r.code, 0, 'the check must run, not find an empty range');
+  assert.match(r.err, /docs\/z\.txt/);
+  assert.doesNotMatch(r.err, /src\/a\.txt/);
+  assert.equal(state(f, t), 'returned');
+  assert.ok(main);
+});
+
+test('HEAD, main and master give different merge-bases: the nearest one is the base', () => {
+  const f = fixture('block');
+  const main = cur(f);
+  commit(f, { 'pre.txt': 'p' }, 'main moves before the branch');
+  h.git(f.repo, 'checkout', '-q', '-b', 'feat/near');
+  commit(f, { 'src/a.txt': 'a', 'docs/z.txt': 'z' });
+  h.git(f.repo, 'checkout', '-q', '-b', 'side', `${main}~1`);
+  assert.equal(cur(f), 'side');
+  const t = returned(f, 'feat/near', ['src/**']);
+  const r = run(f, ['task', 'accept', t.id]);
+  assert.notEqual(r.code, 0, r.err);
+  assert.match(r.err, /docs\/z\.txt/);
+  assert.doesNotMatch(r.err, /pre\.txt|src\/a\.txt/);
+});
