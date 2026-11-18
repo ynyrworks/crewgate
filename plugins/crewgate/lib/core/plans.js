@@ -511,6 +511,22 @@ function finalPlanOfTask(root, projectId, taskId) {
   return null;
 }
 
+// The slug of the final plan whose approval covers a local merge of these branches, or null. Every branch must be the branch of a
+// task that has passed acceptance (accepted, or merged after that) and that a final plan links. A plan that is closed, reopened
+// or still a draft covers nothing. -> slug of the first such plan.
+function mergeCover(root, projectId, branches) {
+  if (!Array.isArray(branches) || !branches.length) return null;
+  let first = null;
+  const all = tasks.list(projectId);
+  for (const b of branches) {
+    const tk = all.find((t) => t.branch && t.branch === b && (t.state === 'accepted' || t.state === 'merged'));
+    const slug = tk ? finalPlanOfTask(root, projectId, tk.id) : null;
+    if (!slug) return null;
+    if (!first) first = slug;
+  }
+  return first;
+}
+
 // Writes the state line into the file (replacing it, or adding it right under the title) and nothing else.
 function writeFileState(root, slug, state) {
   const file = planFile(root, checkSlug(slug));
@@ -824,7 +840,7 @@ function deepNodes(root) {
 
 module.exports = {
   SLUG_RE, ORIGINS, MAX_DEPTH, MAX_BYTES, MAX_NODES, planDir, planFile, checkSlug, parse, serialize, assignIds, find, addNode, removeNode,
-  STATES, PARTS, planOfTask, draftPlanOfTask, finalSlugs, finalPlanOfTask, stateOf, stateInfo, contentHash, fileHash, approvedHash, fileApprovedHash, changedSinceApproved, approveNow, changedPlanOfTask, readRecord, setPart, readyProblems, finalizeAsk, finalizeAnswer, closeAsk, closeAnswer, reopen, adopt, takeReply, writeRecord,
+  STATES, PARTS, planOfTask, draftPlanOfTask, finalSlugs, finalPlanOfTask, mergeCover, stateOf, stateInfo, contentHash, fileHash, approvedHash, fileApprovedHash, changedSinceApproved, approveNow, changedPlanOfTask, readRecord, setPart, readyProblems, finalizeAsk, finalizeAnswer, closeAsk, closeAnswer, reopen, adopt, takeReply, writeRecord,
   KINDS, ACTIONS, encodeToken, decodeToken, proposalMeta, record, setBox, touch, BOX_STATE, cleanText, MAX_TEXT,
   derive, taskStates, slugs, readCapped, update, create, clarify, addTo, editText, linkTo: linkTask, setState, removeFrom, deepNodes, duplicateNodes, duplicateIds, exists, today, refOf,
 };

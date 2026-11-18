@@ -178,8 +178,10 @@ function showLines(ctx, d, max) {
 // `crew task merge` is the authoritative merge record. When git shows the task branch is part of the
 // current HEAD, also record a git.merge event with the real branch name and tip commit, unless a hook
 // event already recorded this branch (same commit, or no commit and not older than the task).
-// -> { status: 'recorded' | 'already' | 'not-merged' | 'no-branch', commit? }
-function recordGitMerge(proj, task, cwd) {
+// -> { status: 'recorded' | 'already' | 'not-merged' | 'no-branch', commit?, approved_by?, missing? }
+// A recorded merge carries approved_by (the plan or gate answer that covers it) the same way the hook records it; with none,
+// `missing` is true and the caller prints the hook's reminder.
+function recordGitMerge(proj, task, cwd, cfg, workTree) {
   const branch = task.branch;
   if (!branch || !/^[A-Za-z0-9][A-Za-z0-9._/@+-]*$/.test(branch) || branch.includes('..')) return { status: 'no-branch' };
   const tip = common.git(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], cwd);
@@ -196,11 +198,20 @@ function recordGitMerge(proj, task, cwd) {
   // where it was merged into: the current branch and work tree, so a hook event for the same branch merged elsewhere is kept
   const into = (common.git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd) || '').trim();
   const top = (common.git(['rev-parse', '--show-toplevel'], cwd) || '').trim();
+  let covered = null;
+  let missing = false;
+  if (gates.modeOf(cfg, 'merge') === 'ask') {
+    const G = require('../hooks/gatecheck');
+    const h = { pid: proj.id, sid: gates.currentSession(), root: proj.path, workTree, cfg: () => cfg };
+    const chk = G.check(h, new Map([['merge', { command: 'git merge', text: `git merge ${branch}`, items: [{ command: 'git merge', branches: [branch] }] }]]));
+    covered = chk.by.get('merge') || null;
+    missing = chk.missing.length > 0;
+  }
   events.append(proj.id, {
     type: 'git.merge', src: 'cli', task: task.id,
-    data: { command: 'crew task merge', branches: [branch], flags: [], commit, via: 'cli-merge', ...(into ? { target: into } : {}), ...(top ? { root: require('../core/project').normalizePath(top) } : {}) }, key: `merge:${branch}:${sha}`,
+    data: { command: 'crew task merge', branches: [branch], flags: [], commit, via: 'cli-merge', ...(covered ? { approved_by: covered } : {}), ...(into ? { target: into } : {}), ...(top ? { root: require('../core/project').normalizePath(top) } : {}) }, key: `merge:${branch}:${sha}`,
   });
-  return { status: 'recorded', commit };
+  return { status: 'recorded', commit, ...(covered ? { approved_by: covered } : {}), ...(missing ? { missing: true } : {}) };
 }
 
 // `crew task accept` on a task of a final plan whose text no longer matches what the user approved (plan.enforce): block refuses, remind
@@ -424,9 +435,10 @@ function run(argv, ctx) {
     if (cfg.gates.merge === 'never') throw new CrewError('wf.task.mergeNever');
     const before = tasks.load(proj.id, a.id);
     const task = tasks.transition(proj.id, a.id, 'merged', { ...opts, note: a.note || '', data: { branch: before.branch || null, via: 'cli-merge' } });
-    const git = recordGitMerge(proj, task, ctx.workTree() || proj.path);
+    const git = recordGitMerge(proj, task, ctx.workTree() || proj.path, cfg, ctx.workTree() || proj.path);
     const L = [ctx.t('wf.task.merged', { id: task.id })];
     if (git.status === 'recorded') L.push(ctx.t('wf.task.mergeGit', { branch: task.branch, commit: git.commit }));
+    if (git.missing) L.push(ctx.t('hooks.gate.missing', { what: 'git merge', gate: 'merge', cmd: common.cliCommand() }));
     ctx.emit({ task, git_merge: git }, L);
   } else {
     const task = tasks.transition(proj.id, a.id, 'cancelled', { ...opts, note: a.note || '' });

@@ -293,18 +293,24 @@ function onBash(payload) {
   if (!h && !found.some((f) => f.cd.length)) return null;
   const handleFor = G.makeHandleFor(payload, h);
   const byProject = new Map();
+  const sessionCwd = C.str(payload.cwd) || process.cwd();
   for (const f of found) {
     const fh = handleFor(f);
     if (!fh) continue;
+    G.markTemp(fh, f, sessionCwd);
     if (!byProject.has(fh.pid)) byProject.set(fh.pid, { h: fh, found: [] });
     byProject.get(fh.pid).found.push(f);
   }
   const tuid = C.str(payload.tool_use_id);
   const reasons = [];
   let verdict = null; // 'ask' unless some project says block
+  // A crew call that records an approval, in the same command line as the action it approves, is denied in every enforce
+  // mode: its result (a refusal, a no) cannot stop what comes after it in the line.
+  const chained = gitcmd.hasGateCrew(command);
   for (const g of byProject.values()) {
-    const wanted = G.wantedGates(g.found);
-    for (const m of G.forbidden(g.h, wanted)) {
+    const all = G.wantedGates(g.found);
+    const wanted = G.wantedGates(g.found.filter((f) => !f.ignore)); // not a merge in a scratch worktree
+    for (const m of G.forbidden(g.h, all)) {
       reasons.push(g.h.t('gate.neverBlock', { what: m.text, gate: m.gate, project: path.basename(g.h.root) }));
       verdict = 'block';
       try {
@@ -314,6 +320,23 @@ function onBash(payload) {
           key: `${tuid || Date.now()}:${m.gate}:never`,
         });
       } catch { /* ignore */ }
+    }
+    if (chained) {
+      let cfg = null;
+      try { cfg = g.h.cfg(); } catch { /* modes unknown */ }
+      const hit = cfg ? [...wanted].filter(([gate]) => gates.modeOf(cfg, gate) === 'ask') : [];
+      for (const [gate, w] of hit) {
+        reasons.push(g.h.t('gate.chained', { what: w.text, gate, project: path.basename(g.h.root), cmd: C.crewCmd() }));
+        verdict = 'block';
+        try {
+          events.append(g.h.pid, {
+            type: 'gate.blocked', src: 'hook', session: g.h.sid, tool_use_id: tuid,
+            data: { gate, command: w.command, mode: 'chained', tool_use_id: C.snippet(tuid, 80) || null, permission_mode: C.snippet(payload.permission_mode, 40) || null },
+            key: `${tuid || Date.now()}:${gate}:chained`,
+          });
+        } catch { /* ignore */ }
+      }
+      if (hit.length) continue;
     }
     let enforce;
     try { enforce = gates.enforceOf(g.h.cfg()); } catch { continue; }

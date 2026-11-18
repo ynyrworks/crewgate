@@ -12,6 +12,8 @@ const { clean } = require('./redact');
 
 const GATES = ['push', 'open_pr', 'merge', 'remote_hosts', 'large_task', 'install_or_download'];
 const ANSWER_WINDOW_MS = 30 * 60 * 1000;
+// A yes older than the window still counts while it is the latest answer of its gate and task, up to this age.
+const APPROVAL_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 const newGateId = () => `g-${crypto.randomBytes(3).toString('hex')}`;
 
@@ -131,17 +133,33 @@ function answer(projectId, gateId, reply, note, opts = {}) {
   return { id: gateId, gate: asked.data.gate, answer: reply, user_turn: userTurn };
 }
 
-// Is there an approval for `gate` that this session can lean on? A gate.answered "yes" of the last 30
-// minutes counts when it belongs to this session, or to no session (the CLI cannot tell the session).
+// Is there an approval for `gate` that this session can lean on? A gate.answered "yes" counts when it belongs to this
+// session, or to no session (the CLI cannot tell the session), and
+//   - it is unused: no git.push / git.merge event carries data.approved_by "gate:<its id>" (a yes covers ONE action), and
+//   - no later answer of the same gate and task is a "no", and
+//   - it is younger than ANSWER_WINDOW_MS, or it is the latest answer of that gate and task and not older than
+//     APPROVAL_MAX_AGE_MS (a user who answers late, or acts late, is not punished; days-old yeses never count).
 // With opts.requireUserTurn (config gates.require_user_turn, default true) a hand-recorded yes also needs the
-// verdict `data.user_turn === true` that answer() stored when it was recorded; the automatic yes of an `auto`
-// gate does not, and an older event without the field counts as unknown, so it is not valid.
+// verdict `data.user_turn` true, 'project' or 'instruction' that answer() stored when it was recorded; the automatic yes
+// of an `auto` gate does not, and an older event without the field counts as unknown, so it is not valid.
+// opts.out, when given, receives `by` ("gate:<id>") of the approval that was found (the oldest usable one).
 function hasApproval(projectId, gate, session, now = Date.now(), opts = {}) {
-  const since = now - ANSWER_WINDOW_MS;
   const need = opts.requireUserTurn === true;
-  return events.read(projectId, { types: 'gate.answered', since }).some((e) => e.data && e.data.gate === gate && e.data.answer === 'yes'
-    && (!e.session || !session || e.session === session)
-    && (!need || e.data.auto === true || e.data.user_turn === true || e.data.user_turn === 'project'));
+  const answers = events.read(projectId, { types: 'gate.answered', since: now - APPROVAL_MAX_AGE_MS })
+    .filter((e) => e.data && e.data.gate === gate && Date.parse(e.ts) <= now);
+  const yes = answers.filter((e) => e.data.answer === 'yes' && (!e.session || !session || e.session === session)
+    && (!need || e.data.auto === true || e.data.user_turn === true || e.data.user_turn === 'project' || e.data.user_turn === 'instruction'));
+  if (!yes.length) return false;
+  const used = new Set(events.read(projectId, { types: ['git.push', 'git.merge'], since: Date.parse(yes[0].ts) })
+    .map((e) => e.data && e.data.approved_by).filter(Boolean));
+  const usable = yes.find((y) => {
+    if (used.has(`gate:${y.data.id}`)) return false;
+    const later = answers.filter((a) => a !== y && (a.task || '') === (y.task || '') && answers.indexOf(a) > answers.indexOf(y));
+    if (later.some((a) => a.data.answer === 'no')) return false;
+    return now - Date.parse(y.ts) <= ANSWER_WINDOW_MS || later.length === 0;
+  });
+  if (usable && opts.out) opts.out.by = `gate:${usable.data.id}`;
+  return !!usable;
 }
 
 // Which gate a detected git/PR command falls under (event types come from hooks/gitcmd.js).
@@ -171,4 +189,4 @@ function history(projectId, limit = 30) {
   return [...rows.values(), ...missing].sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0)).slice(0, limit);
 }
 
-module.exports = { GATES, gateNames, ANSWER_WINDOW_MS, modeOf, currentSession, enforceOf, requiresUserTurn, userTurnVerdict, ask, answer, hasApproval, gateOf, history };
+module.exports = { GATES, gateNames, ANSWER_WINDOW_MS, APPROVAL_MAX_AGE_MS, modeOf, currentSession, enforceOf, requiresUserTurn, userTurnVerdict, ask, answer, hasApproval, gateOf, history };

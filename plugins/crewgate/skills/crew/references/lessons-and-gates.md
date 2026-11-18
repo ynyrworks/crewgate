@@ -35,7 +35,7 @@ When a gate is `ask`, ask once, concretely, and wait:
 Not: "Should I continue?". Name the action, the target and what you checked. Run `crew gate ask <gate> --task <id> --detail "..."` first (it prints a gate id), ask in chat, and only
 after the user answers run `crew gate answer <gate-id> yes|no --note "<their words>"`. Record nothing as
 approved until the user answers in chat. If the user says yes to one push, the next push asks again.
-A gate answer needs a real user reply: `crew gate answer ... yes` is refused when no user message of the session came after the ask (a task notification is not one). An earlier approval does not carry over to a new version: ask again for it.
+A gate answer needs a real user reply: `crew gate answer ... yes` is refused when no user message of the session came after the ask (a task notification is not one). An earlier approval does not carry over to a new version: ask again for it. A yes covers one action (it is used up by the push or merge it approved), stays valid after 30 minutes while it is the latest answer of its gate, for at most 12 hours. The approval of a plan also covers the local merge of its accepted tasks.
 
 Two settings change what a recorded answer is worth. `gates.require_user_turn` (default true): the answer counts only
 when a user message of the same session arrived between your `gate ask` and your `gate answer yes` (judged when `crew gate answer` runs), so never run both in the same turn;
