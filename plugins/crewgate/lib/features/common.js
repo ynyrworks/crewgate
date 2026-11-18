@@ -70,6 +70,53 @@ function branchRange(root, branch) {
   return null;
 }
 
+// The commit a task's scope is judged from, for `crew task accept`. -> { base, branch } or { failed: code }.
+// Rule: the base is the closest of (a) the branch tips recorded when other tasks were accepted, if that tip is an ancestor of this
+// branch tip, and (b) the merge-base with HEAD/main/master; for a branch already merged, the merge-base of the first parent of the
+// merge commit that took it in. A branch with no commit beyond its base gives base = tip (nothing changed).
+// Codes: 'no-branch' (not in this repository), 'no-base' (no common history with HEAD/main/master), 'no-commits' (nothing beyond
+// the base, or fast-forwarded in with no recorded base: nothing to tell the task's own commits apart).
+function scopeRange(root, branch, recordedTips = []) {
+  if (!branch || !BRANCH_RE.test(branch)) return { failed: 'no-branch' };
+  const tip = git(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], root);
+  if (!tip) return { failed: 'no-branch' };
+  const tipSha = tip.trim();
+  const cands = [];
+  for (const t of recordedTips) {
+    if (/^[0-9a-f]{7,64}$/.test(t || '') && git(['merge-base', '--is-ancestor', t, tipSha], root) !== null) cands.push(t);
+  }
+  const refs = ['HEAD', 'main', 'master'].filter((c) => c !== branch);
+  for (const c of refs) {
+    const mb = git(['merge-base', c, branch], root);
+    if (mb && mb.trim()) cands.push(mb.trim());
+  }
+  if (!cands.length) return { failed: 'no-base' };
+  let best = null;
+  let bestN = -1;
+  for (const c of cands) {
+    const n = Number((git(['rev-list', '--count', c], root) || '').trim());
+    if (Number.isFinite(n) && n > bestN) { best = c; bestN = n; }
+  }
+  // Merged into a ref: the merge-base is then the tip itself; look at the side the branch was merged into.
+  if (best === tipSha && !recordedTips.includes(tipSha)) {
+    for (const c of refs) {
+      const m = git(['rev-list', '--merges', '--ancestry-path', '--reverse', `${tipSha}..${c}`], root);
+      const first = m && m.split(/\r?\n/).filter(Boolean)[0];
+      if (!first) continue;
+      const mb = git(['merge-base', `${first}^1`, tipSha], root);
+      if (mb && mb.trim() && mb.trim() !== tipSha) return { base: mb.trim(), branch };
+    }
+    return { failed: 'no-commits' };
+  }
+  return { base: best, branch };
+}
+
+function branchTip(root, branch) {
+  if (!branch || !BRANCH_RE.test(branch)) return null;
+  const t = git(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], root);
+  return t ? t.trim() : null;
+}
+
 function slug(s, max = 40) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, max).replace(/-+$/, '');
 }
@@ -85,5 +132,5 @@ function cliCommand() { return `node "${CLI_PATH}"`; }
 
 module.exports = {
   PLUGIN_ROOT, CLI_PATH, readText, readStdin, parseJsonText, today, checkDate, splitList, git,
-  checkBranch, branchRange, slug, fence, cliCommand,
+  checkBranch, branchRange, scopeRange, branchTip, slug, fence, cliCommand,
 };
