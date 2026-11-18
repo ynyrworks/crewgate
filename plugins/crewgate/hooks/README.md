@@ -17,7 +17,7 @@ Rules every hook follows
 
 | Event (arg) | Matcher | What it does |
 |---|---|---|
-| `session-start` | all | Records `session.start`, creates the session counter file, injects the brief (<= 4,000 bytes). |
+| `session-start` | all | Records `session.start`, creates the session counter file, injects the brief (<= 4,000 bytes; the state block is cut first). A non-English project language adds a reply-language line; on `compact` and `resume` a short role card (rules, parallel limit) follows. Language: project `.claude/crew.json`, else global config, else `en`. |
 | `user-prompt-submit` | all | Counts prompts, keeps a 200-char redacted first/last prompt and the times (ms, no text) of the last 20 prompts for the gate user-turn rule. Adds no context. |
 | `pre-tool-use` | `Agent\|Task\|collaborationspawn_agent` | Marker `crew-task: <id>` in the prompt: `created` -> `dispatched` (`task.dispatched`), remembers tool_use_id -> task, warns above `max_parallel_workers`. |
 | `pre-tool-use` | `Edit\|Write\|MultiEdit\|NotebookEdit` | Main session + main worktree + path inside the project and outside `orchestrator_edit_allow`: `warn` (context + user message + `orchestrator.warned`), `block` (deny), `off`. |
