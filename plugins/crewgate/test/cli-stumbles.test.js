@@ -58,6 +58,31 @@ test('a closed pipe on stdout ends crew without a stack trace and with exit 0', 
   }
 });
 
+test('a closed pipe never turns a failure into success: unknown option still exits 2, no stack trace', async () => {
+  for (let round = 0; round < 3; round++) {
+    const r = await new Promise((resolve) => {
+      const c = spawn(process.execPath, [h.BIN, 'plan', 'show', 'big', '--bogus'], { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
+      let out = '';
+      // the reader closes both pipes before the command writes its error
+      c.stdout.destroy();
+      c.stderr.destroy();
+      c.stdout.on('data', (d) => { out += d; });
+      c.on('close', (code) => resolve({ code, out }));
+    });
+    assert.equal(r.code, 2);
+    assert.equal(r.out, '');
+  }
+  // a reader that closes after the first line of a failing command's stderr
+  const r = await new Promise((resolve) => {
+    const c = spawn(process.execPath, [h.BIN, 'plan', 'show', 'big', '--bogus'], { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
+    let err = '';
+    c.stderr.on('data', (d) => { err += d; c.stderr.destroy(); });
+    c.on('close', (code) => resolve({ code, err }));
+  });
+  assert.equal(r.code, 2);
+  assert.doesNotMatch(r.err, /at .*\.js:\d+|EPIPE/);
+});
+
 test('plan part takes a text value that starts with "-" (also a single word), a real unknown option still errors', () => {
   const crew = (...a) => h.crew(['plan', ...a], repo);
   assert.equal(crew('new', 'dash', '--title', 'T', '--goal', 'G').code, 0);

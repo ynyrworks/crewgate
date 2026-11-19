@@ -6,16 +6,17 @@
 const { main } = require('../lib/core/cli');
 
 // A reader that closes early (`crew ... | head -1`) is not an error of crew: an EPIPE on stdout or
-// stderr ends the process quietly with the exit code the command had.
-let code = 0;
+// stderr stops further writing quietly; the process still ends with the exit code main() returns,
+// so a failure whose output is piped into `head` stays a failure.
+let closed = false;
 for (const s of [process.stdout, process.stderr]) {
   s.on('error', (e) => {
-    if (e && e.code === 'EPIPE') process.exit(code);
+    if (e && e.code === 'EPIPE') { closed = true; return; }
+    if (closed && e && e.code === 'ERR_STREAM_DESTROYED') return;
     throw e;
   });
 }
 
 main(process.argv.slice(2)).then((c) => {
-  code = c;
   process.exitCode = c;
 });
