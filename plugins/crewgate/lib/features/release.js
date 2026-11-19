@@ -143,6 +143,9 @@ function describeTask(projectId, entry, evs, allPlans) {
     const last = lastOf(finals);
     review = returnedAfterRound(dir, last.round, mine) ? { kind: 'stale', round: last.round } : { kind: 'ok', round: last.round };
   }
+  // what the orchestrator said it read when the accept rule (review.enforce) let a task through without a re-review
+  const noted = mine.filter((e) => e.type === 'task.accepted' && e.data && e.data.review_rule && e.data.review_rule.note);
+  if (noted.length && review.kind !== 'ok') review.read_note = String(lastOf(noted).data.review_rule.note);
   const skips = mine.filter((e) => e.type === 'task.accepted' && e.data && e.data.skip_refuter)
     .map((e) => ({ reason: String(e.data.skip_refuter), round: e.data.review_gap && e.data.review_gap.round }));
   const dismissals = mine.filter((e) => e.type === 'review.finding_dismissed' && e.data)
@@ -235,6 +238,7 @@ function renderTask(L, tr, k) {
   L.push(`- ${tr('release.rounds')}: ${k.rounds.filter((r) => r.finalized).length}`);
   if (k.review.kind === 'none') L.push(`- **${tr('release.noReview')}**`);
   else if (k.review.kind === 'stale') L.push(`- **${tr('release.stale', { round: k.review.round })}**`);
+  if (k.review.read_note) L.push(`- ${tr('release.readNote', { note: one(k.review.read_note, 300) })}`);
   for (const r of k.rounds) {
     const counts = tr('release.counts', { raw: r.raw, kept: r.kept, upheld: r.upheld, refuted: r.refuted, uncertain: r.uncertain, dismissed: r.dismissed });
     if (!r.finalized) { L.push(`- ${tr('release.roundOpen', { round: r.round })} ${counts}`); continue; }

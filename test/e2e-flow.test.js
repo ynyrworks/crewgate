@@ -129,7 +129,11 @@ test('full delegated flow: dispatch, report, review, send-back, accept, merge', 
     last_assistant_message: `Done again. crew-task: ${id}`, agent_transcript_path: path.join(repo, 'agent-2.jsonl'),
   }));
 
-  // ---- accept, merge
+  // ---- review round 2 of the fix (review.enforce: a fix after a send-back is reviewed again), then accept, merge
+  const raw2 = wf.writeFile(h.tmpDir('crew-find-'), 'raw2.json', '[]');
+  assert.equal(h.crew(['review', 'submit', id, '--round', '2', '--file', raw2], repo).code, 0);
+  assert.equal(wf.crewJson(['review', 'filter', id], repo).code, 0);
+  assert.equal(wf.crewJson(['review', 'finalize', id], repo).code, 0);
   const accepted = wf.crewJson(['task', 'accept', id, '--note', 'dedupe verified'], repo);
   assert.equal(accepted.code, 0, accepted.err);
   const sessEnv = { CLAUDE_CODE_SESSION_ID: SID };
@@ -153,7 +157,7 @@ test('full delegated flow: dispatch, report, review, send-back, accept, merge', 
   assert.deepEqual(all.map((e) => e.type).filter((t) => t !== 'task.leftovers'), [
     'session.start', 'task.created', 'task.dispatched', 'subagent.start', 'task.returned', 'subagent.stop',
     'task.reviewed', 'task.sent_back', 'task.dispatched', 'subagent.start', 'task.returned', 'subagent.stop',
-    'task.accepted', 'gate.asked', 'gate.answered', 'git.merge', 'task.merged', 'session.end',
+    'task.reviewed', 'task.accepted', 'gate.asked', 'gate.answered', 'git.merge', 'task.merged', 'session.end',
   ]);
   const dispatches = all.filter((e) => e.type === 'task.dispatched');
   assert.equal(dispatches[0].data.agent_type, 'crew-worker');
@@ -172,12 +176,12 @@ test('full delegated flow: dispatch, report, review, send-back, accept, merge', 
     assert.equal(t.id, id);
     assert.equal(t.state, 'merged');
     assert.equal(t.returns, 1);
-    assert.deepEqual(t.history.map((x) => x.state), ['created', 'dispatched', 'returned', 'reviewing', 'dispatched', 'returned', 'accepted', 'merged']);
+    assert.deepEqual(t.history.map((x) => x.state), ['created', 'dispatched', 'returned', 'reviewing', 'dispatched', 'returned', 'reviewing', 'accepted', 'merged']);
     assert.equal(t.review.raw, 3);
     assert.equal(t.review.filtered, 2);
     assert.equal(t.review.final, 1);
     assert.equal(t.review.upheld, 1);
-    assert.equal(t.review.rounds, 1);
+    assert.equal(t.review.rounds, 2);
     const dropped = JSON.parse(fs.readFileSync(path.join(process.env.CREWGATE_HOME, 'projects', pid, 'tasks', id, 'findings', '1.filtered.json'), 'utf8'));
     assert.deepEqual(dropped.map((x) => x.reason).sort(), ['dismissed', 'inference']);
     assert.deepEqual(d.needs.open, [], 'nothing is waiting for the user');

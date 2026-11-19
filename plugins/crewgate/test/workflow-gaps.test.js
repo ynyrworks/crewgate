@@ -60,7 +60,6 @@ test('gate auto answers yes at once; never refuses with exit 1 and records the r
 // ---------------------------------------------------------------- 3. task merge is the merge record
 function mergedTaskRepo() {
   const repo = u.initRepo();
-  u.patchCfg(repo, (c) => { c.review.enforce = 'off'; });
   const task = u.createTask(repo, { branch: 'feat/gap' });
   h.git(repo, 'checkout', '-q', '-b', 'feat/gap');
   fs.writeFileSync(path.join(repo, 'new.txt'), 'x\n');
@@ -69,7 +68,7 @@ function mergedTaskRepo() {
   h.git(repo, 'checkout', '-q', '-');
   const f = u.reportFiles();
   assert.equal(h.crew(['task', 'report', task.id, '--report-file', f.report], repo).code, 0);
-  assert.equal(h.crew(['task', 'accept', task.id], repo).code, 0);
+  assert.equal(h.crew(['task', 'accept', task.id, '--read-by-orchestrator', 'read the one-line change'], repo).code, 0);   // small task: review.enforce asks for this
   return { repo, task };
 }
 

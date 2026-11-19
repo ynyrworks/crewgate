@@ -101,7 +101,9 @@ function reviewGap(taskDir, projectId, taskId) {
   const suffix = fs.existsSync(review.roundFile(taskDir, round, 'kept.json')) ? 'kept.json' : 'raw.json';
   let n = 0;
   try { n = review.readArray(review.roundFile(taskDir, round, suffix), 'findings').length; } catch { /* unreadable: nothing to count */ }
-  return n ? { kind: 'unfinalized', round, n } : notReReviewed(taskDir, finalized, projectId, taskId);
+  if (n) return { kind: 'unfinalized', round, n };
+  // a round submitted with no findings and never finalized is no review: without any finalized round the task has none
+  return finalized ? notReReviewed(taskDir, finalized, projectId, taskId) : { kind: 'none' };
 }
 
 function notReReviewed(taskDir, finalized, projectId, taskId) {
@@ -132,7 +134,7 @@ function reviewRule(proj, cfg, task, taskDir, gap, readBy) {
     if (/^[0-9a-f]{7,64}$/.test(tip || '') && now) counted = common.changedLines(proj.path, tip, now);
   } else {
     const tips = tasks.list(proj.id, { state: 'accepted' }).concat(tasks.list(proj.id, { state: 'merged' })).filter((t) => t.id !== task.id && t.scope_tip).map((t) => t.scope_tip);
-    const r = common.scopeRange(proj.path, task.branch, tips);
+    const r = common.scopeRange(proj.path, task.branch, tips, task.scope_base || '');
     if (!r.failed) counted = common.changedLines(proj.path, r.base, r.branch);
     const ci = process.platform === 'win32' || process.platform === 'darwin';
     docs = !!counted && counted.files.length > 0 && counted.files.every((f) => glob.matchAny(cfg.review.docs_globs, f, ci));

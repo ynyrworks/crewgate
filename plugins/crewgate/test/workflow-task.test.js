@@ -10,6 +10,14 @@ h.setupHome();
 
 const run = (repo, ...args) => h.crew(args, repo);
 
+// One finalized review round with no findings (review.enforce: a task with no review is refused unless it is small or documentation).
+function finalizeEmptyRound(repo, id) {
+  assert.equal(run(repo, 'review', 'run', id).code, 0);
+  assert.equal(u.crewIn(['review', 'submit', id, '--round', '1'], repo, '[]').code, 0);
+  assert.equal(run(repo, 'review', 'filter', id).code, 0);
+  assert.equal(run(repo, 'review', 'finalize', id).code, 0);
+}
+
 test('task create: prints id, marker line, prompt; json carries the same data', () => {
   const repo = u.initRepo();
   const brief = u.writeFile(h.tmpDir(), 'b.md', h.GOOD_BRIEF);
@@ -165,12 +173,12 @@ test('send-back honours max_returns_before_takeover from the config', () => {
 
 test('accept, merge and cancel follow the state machine', () => {
   const repo = u.initRepo();
-  u.patchCfg(repo, (c) => { c.review.enforce = 'off'; });
   const t = u.createTask(repo);
   const f = u.reportFiles();
   assert.equal(run(repo, 'task', 'accept', t.id).code, 1, 'cannot accept before it returned');
   assert.equal(run(repo, 'task', 'merge', t.id).code, 1);
   run(repo, 'task', 'report', t.id, '--report-file', f.report);
+  finalizeEmptyRound(repo, t.id);
   const acc = u.crewJson(['task', 'accept', t.id, '--note', 'looks good'], repo);
   assert.equal(acc.code, 0, acc.err);
   assert.equal(acc.data.task.state, 'accepted');
@@ -186,9 +194,9 @@ test('accept, merge and cancel follow the state machine', () => {
 
 test('merge is refused when the merge gate is never; events are recorded', () => {
   const repo = u.initRepo();
-  u.patchCfg(repo, (c) => { c.review.enforce = 'off'; });
   const t = u.createTask(repo);
   run(repo, 'task', 'report', t.id, '--report-file', u.reportFiles().report);
+  finalizeEmptyRound(repo, t.id);
   run(repo, 'task', 'accept', t.id);
   u.patchCfg(repo, (c) => { c.gates = { merge: 'never' }; });
   const r = run(repo, 'task', 'merge', t.id);
@@ -199,19 +207,20 @@ test('merge is refused when the merge gate is never; events are recorded', () =>
   const events = require('../lib/core/events');
   const project = require('../lib/core/project');
   const types = events.read(project.findByCwd(repo).id).filter((e) => e.task === t.id).map((e) => e.type);
-  assert.deepEqual(types, ['task.created', 'task.dispatched', 'task.returned', 'task.accepted', 'task.merged']);
+  assert.deepEqual(types, ['task.created', 'task.dispatched', 'task.returned', 'task.reviewed', 'task.accepted', 'task.merged']);
 });
 
 test('accept warns about blocker/major findings that are still listed', () => {
   const repo = u.initRepo();
-  u.patchCfg(repo, (c) => { c.review.enforce = 'off'; });
   const t = u.createTask(repo);
   run(repo, 'task', 'report', t.id, '--report-file', u.reportFiles().report);
   const project = require('../lib/core/project');
   const paths = require('../lib/core/paths');
   const dir = path.join(paths.taskDir(project.findByCwd(repo).id, t.id), 'findings');
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, '1.json'), JSON.stringify([u.finding('f1'), u.finding('f2', { severity: 'nit', category: 'nit' })]));
+  const list = JSON.stringify([u.finding('f1'), u.finding('f2', { severity: 'nit', category: 'nit' })]);
+  fs.writeFileSync(path.join(dir, '1.raw.json'), list);   // a finalized round: the review rule is met
+  fs.writeFileSync(path.join(dir, '1.json'), list);
   const show = run(repo, 'task', 'show', t.id);
   assert.match(show.out, /Findings, round 1: 2/);
   const r = u.crewJson(['task', 'accept', t.id], repo);

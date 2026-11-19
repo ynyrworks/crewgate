@@ -13,12 +13,21 @@ const events = require('../lib/core/events');
 const tasks = require('../lib/core/tasks');
 
 function fixture(enforce = 'block') {
-  const f = H.fixture({ config: { gates: { enforce: 'confirm' }, plan: { enforce }, review: { enforce: 'off' }, limits: { dispatch_max_cpu: 100 } } });
+  const f = H.fixture({ config: { gates: { enforce: 'confirm' }, plan: { enforce }, limits: { dispatch_max_cpu: 100 } } });
   H.start(f);
   f.env = { CLAUDE_CODE_SESSION_ID: f.sid };
   return f;
 }
-const run = (f, args) => crew(args, f.repo, f.env);
+// review.enforce is on (block). These tests are about the scope and plan check at accept, and some tasks have no commits or no
+// countable change, so the review rule is met the way it is for any task: a finalized round (no findings) is on disk before accept.
+const reviewed = (f, args) => {
+  const i = args[0] === 'task' ? args.indexOf('accept') : -1;
+  if (i < 0 || !args[i + 1]) return;
+  const dir = path.join(require('../lib/core/paths').taskDir(f.pid, args[i + 1]), 'findings');
+  fs.mkdirSync(dir, { recursive: true });
+  for (const name of ['1.raw.json', '1.json']) if (!fs.existsSync(path.join(dir, name))) fs.writeFileSync(path.join(dir, name), '[]');
+};
+const run = (f, args) => { reviewed(f, args); return crew(args, f.repo, f.env); };
 const evs = (f, ...t) => events.read(f.pid, { types: t });
 
 function finalPlan(f, slug = 'p') {

@@ -232,3 +232,61 @@ test('release record still prints NOT RE-REVIEWED for a fix accepted with --read
   assert.equal(rec.code, 0, rec.err);
   assert.match(fs.readFileSync(path.join(repo, '.crew', 'releases', '0.0.2.md'), 'utf8'), /NOT RE-REVIEWED/);
 });
+
+test('release record prints NO REVIEW and the --read-by-orchestrator note for a small task accepted with no review', skip, () => {
+  const { repo, t } = setup({ 'src/tiny.js': lines(5) });
+  h.git(repo, 'tag', 'v0.0.1');
+  assert.equal(accept(repo, t.id, '--read-by-orchestrator', NOTE).code, 0);
+  h.git(repo, 'merge', '-q', '--no-ff', '-m', 'merge', 'feat/x');
+  h.git(repo, 'tag', 'v0.0.2');
+  assert.equal(run(repo, 'task', 'merge', t.id).code, 0);
+  const rec = h.crew(['--lang', 'en', 'release', 'record', '0.0.2'], repo);
+  assert.equal(rec.code, 0, rec.err);
+  const text = fs.readFileSync(path.join(repo, '.crew', 'releases', '0.0.2.md'), 'utf8');
+  assert.match(text, /NO REVIEW/);
+  assert.ok(text.includes(`--read-by-orchestrator): ${NOTE}`), 'the note is named beside the NO REVIEW line');
+});
+
+test('release record names the note beside NOT RE-REVIEWED too', skip, () => {
+  const { repo, t } = sentBackAfterReview({ 'src/x.js': 'a\nb\nc\nd\n' });
+  h.git(repo, 'tag', 'v0.0.1');
+  assert.equal(accept(repo, t.id, '--read-by-orchestrator', NOTE).code, 0);
+  h.git(repo, 'merge', '-q', '--no-ff', '-m', 'merge', 'feat/x');
+  h.git(repo, 'tag', 'v0.0.2');
+  assert.equal(run(repo, 'task', 'merge', t.id).code, 0);
+  assert.equal(h.crew(['--lang', 'en', 'release', 'record', '0.0.2'], repo).code, 0);
+  assert.ok(fs.readFileSync(path.join(repo, '.crew', 'releases', '0.0.2.md'), 'utf8').includes(`--read-by-orchestrator): ${NOTE}`));
+});
+
+// ---------------------------------------------------------------- review rounds that were never finalized
+test('a round submitted with zero findings and never finalized is no review: a big task is refused', skip, () => {
+  const { repo, t } = setup({ 'src/big.js': lines(40) });
+  const r1 = run(repo, 'review', 'run', t.id);
+  assert.equal(r1.code, 0, r1.err);
+  assert.equal(u.crewIn(['review', 'submit', t.id, '--round', '1'], repo, '[]').code, 0);
+  const r = accept(repo, t.id);
+  assert.notEqual(r.code, 0, 'a round with no finalize lets nothing through');
+  assert.match(r.err, /crew review run/);
+});
+
+// ---------------------------------------------------------------- the size check starts from the scope base stored at dispatch
+test('a small task on a branch stacked on unaccepted work is counted from its stored scope base', skip, () => {
+  const repo = u.initRepo();
+  const main = h.git(repo, 'rev-parse', '--abbrev-ref', 'HEAD');
+  h.git(repo, 'checkout', '-q', '-b', 'feat/base');
+  u.writeFile(repo, 'src/base.js', lines(60));
+  h.git(repo, 'add', '--', 'src/base.js');
+  h.git(repo, 'commit', '-q', '-m', 'unaccepted base work');
+  h.git(repo, 'branch', 'feat/x');
+  h.git(repo, 'checkout', '-q', main);
+  const t = u.createTask(repo, { branch: 'feat/x' });
+  const pid = project.findByCwd(repo).id;
+  assert.ok(require('../lib/core/tasks').recordScopeBase(pid, t.id, repo), 'the base is stored at dispatch');
+  commit(repo, { 'src/small.js': lines(3) }, 'small work');
+  run(repo, 'task', 'report', t.id, '--report-file', u.reportFiles().report);
+  const r = accept(repo, t.id, '--read-by-orchestrator', NOTE);
+  assert.equal(r.code, 0, r.err);
+  const rule = JSON.parse(r.out).review_rule;
+  assert.equal(rule.applied, 'small_read');
+  assert.equal(rule.lines, 3, 'only the task\'s own lines are counted, not the 60 of the work it stacks on');
+});
