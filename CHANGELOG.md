@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.26.1 — 2026-11-20
+
+Fixes one macOS-only case of the closed-pipe handling added in 0.26.0.
+
+On macOS, a failing `crew` command whose output pipes were closed by the reader before the command wrote its error could exit 1 instead of its own code (2 for a usage error). It was never reported as success. Linux and Windows were not affected.
+
+### Fixed
+
+- `bin/crew.js` ignored only `EPIPE` on stdout and stderr; any other stream error was rethrown and ended the process with exit 1. The handler now lives in `lib/core/stream-guard.js` and ignores an explicit list of codes that mean "the reader is gone": `EPIPE`, `EPROTOTYPE` and `ECONNRESET` (what macOS can return for a write to a socket whose peer is being torn down) and `ERR_STREAM_DESTROYED` (also when it arrives before any other code). Every other stream error still surfaces.
+- With `CREWGATE_TEST=1` and `CREWGATE_STREAM_ERROR_LOG=<file>`, the handler appends the code of each stream error it sees to that file. Only tests use it; the closed-pipe test prints the file when it fails.
+
+### Not verified / known limits
+
+- The error code macOS really returns was not observed before the fix. The fix covers the likely codes; whether it is the whole story is confirmed only by CI on macOS (if the test fails again, its message carries the recorded codes).
+- The commit released as 0.26.0 failed CI on macOS twice after the release (runs 44558121301 on Node 20 and 44558141097 on Node 18), in the test "a closed pipe never turns a failure into success", although its release record says all nine jobs were green; that was true for the run it names (44549361300).
+
 ## 0.26.0 — 2026-11-19
 
 The review rule is now enforced by `crew task accept` instead of only being written in the skill, and the review pipeline, briefs, lessons and CLI stumbles found in the usage data of 0.25 are fixed. Real-run checks for this version were only half done, because the Claude Code CLI on the test machine was not logged in (see "Not verified / known limits").
