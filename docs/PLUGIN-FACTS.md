@@ -210,3 +210,30 @@ In the second quit, a logger outside the session's job and process tree polled e
 - The cause of the simultaneous end was not read from the app. It fits a job closed with the app, and that is not proven.
 - This does not explain the incident, where six loops outlived a quit with the same app version. Those loops may have been outside the tree, or the quit may have differed. Not known.
 - Not measured: closing one session while the app stays open, and closing a terminal that runs an interactive `claude`.
+
+## Real-run checks for 0.25 (claude -p, plugin loaded with `--plugin-dir`)
+
+Worker, 2026-11-19, Claude Code 2.1.316, Windows 11, plugin worktree of `rc/0.21` at commit 174d234, model `haiku`. 8 runs, one at a time, each in a throwaway git repository outside this repository with its own `CREWGATE_HOME`. Stream capture: `--output-format stream-json --verbose --include-hook-events`. The Bash tool was allowed with `--allowedTools Bash`. In Git Bash, `MSYS_NO_PATHCONV=1` is needed, or a prompt that starts with `/` (for example `/compact`) is rewritten to a Windows path before Claude Code sees it.
+
+**Role card and language line (project language zh-TW).** Confirmed.
+- The real `source` values sent to SessionStart were `startup` (fresh run), `resume` (`--resume <id>`) and `compact`. A `--resume` run keeps the same `session_id`. The `session.start` events carry the same three values.
+- Fresh run (`startup`): the hook output holds the reply-language line and no card.
+- `--resume`: the output holds the language line and the role card.
+- `compact`: `claude -p --resume <id> "/compact"` runs a real compaction headless. The stream shows `SessionStart:resume`, then `status: compacting`, `PreCompact` (completed, `{}`), then `SessionStart:compact` whose output holds the language line and the card.
+- `data.model` of `session.start` was empty in these runs.
+
+**Instruction as approval.** Confirmed, with one finding.
+- Prompt "Please merge the branch feat/x ...", the model ran `gate ask merge` and then `gate answer <id> yes --quote "merge the branch feat/x"` as two Bash commands in the same turn: accepted, `gate.answered` has `user_turn: "instruction"` and `quote`.
+- Control: a second run whose quote ("delete the database", built by the model from words in the prompt, so not in the prompt text) was not in the prompt was refused: `gate.refused` with `reason: "no_user_turn"`, exit code 1, no `gate.answered`.
+- The full prompt text is in no gate event. It is NOT true that the prompt text is in no event at all: the `session.end` event carries `first_prompt` and `last_prompt` (redacted, cut at 200 characters), so the first 200 characters of the prompt, quote included when it is within them, are in an event. The 4000-character `turn_prompt` was only in the session file, which was gone after the run (session files are removed at session end).
+
+**Plan-covered merge and chained commands.** Confirmed.
+- Setup, from the shell: a project with a draft plan of two steps, two tasks linked to them and accepted (branches `feat/t1`, `feat/t2`), a local bare repository as `origin`. The plan was approved inside the run by an instruction: `plan finalize pl`, then `gate answer <id> yes --quote "I approve plan pl"` (`user_turn: "instruction"`), then `plan finalize pl --gate <id>` ("Plan pl is final"). No `--resume` turn was used.
+- A plan cannot be made final from a shell with no session: `gate answer` stores `user_turn: false` and `plan finalize --gate` refuses, also with `gates.require_user_turn` false.
+- `git merge feat/t1` (plain command): PreToolUse `{}`, PostToolUse `{}` (no reminder), event `git.merge` with `approved_by: "plan:pl"`.
+- `<crew> gate answer g-000000 yes && git merge feat/t2` in one Bash command: PreToolUse answered `permissionDecision: "deny"` with the chained text; the command did not run (`feat/t2` not merged, no `gate.answered` for the id); `gate.blocked` with `mode: "chained"`.
+- `git push origin main` (to the local bare repository, default `gates.enforce` remind): PreToolUse `{}`, the push ran, PostToolUse gave the "push gate is set to ask" reminder; the `git.push` event has no `approved_by`.
+
+**AskUserQuestion.** Could not be checked headless.
+- Documented here: nothing. No file in this repository or in the locally installed plugin docs describes the PostToolUse payload of AskUserQuestion; `claude --help` has no mention. The shape `widgetAnswered()` reads (`answers` object, or the text "User has answered your questions") is a guess.
+- One run with `CLAUDE_CODE_ENABLE_ASK_USER_QUESTION_TOOL=1`, `--allowedTools AskUserQuestion` and a settings hook on PreToolUse, PostToolUse and PostToolUseFailure for the tool: the model did not have the tool (ToolSearch `select:AskUserQuestion` found no match), never called it, and no hook payload file was written. So no payload shape, answered or not, was seen. `--tools` was not tried (run limit reached).
