@@ -193,7 +193,7 @@ test('full pipeline: filter -> finalize -> show; task show lists the survivors',
   assert.equal(filtered.length, 3);
   assert.match(run(repo, 'review', 'filter', t.id).out, /invalid entry bad/);
 
-  assert.equal(run(repo, 'review', 'finalize', t.id).code, 1, 'refutations are required when something survived');
+  assert.equal(run(repo, 'review', 'finalize', t.id).code, 2, 'refutations are required when something survived');
   const refs = u.writeFile(h.tmpDir(), 'ref.json', JSON.stringify([
     { id: 'keep', verdict: 'upheld', evidence: 'src/x.js:1 confirmed' },
     { id: 'wrong', verdict: 'refuted', evidence: 'src/x.js:2 already handled' },
