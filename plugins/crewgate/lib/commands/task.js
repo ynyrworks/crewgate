@@ -289,9 +289,13 @@ function scopeOnAccept(ctx, proj, cfg, id, a) {
   if (slug) {
     if (drift.covered(root, proj.id, slug, 'out-of-scope', session)) return none;
     evAppend(proj, 'plan.drift_denied', id, { slug, kind: 'out-of-scope' }, session);
+    if (got.stale) ctx.err(none.lines[0]);
     throw new CrewError('wf.task.acceptOutOfScopePlan', { id, slug, files: list });
   }
-  if (a.widen === undefined) throw new CrewError('wf.task.acceptOutOfScope', { id, files: list });
+  if (a.widen === undefined) {
+    if (got.stale) ctx.err(none.lines[0]);
+    throw new CrewError('wf.task.acceptOutOfScope', { id, files: list });
+  }
   if (!a.gate) {
     const g = gates.ask(proj.id, { ...cfg, gates: { ...cfg.gates, task_scope: 'ask' } }, { gate: 'task_scope', task: id, detail: `widen the scope of task ${id}: ${clean(a.widen, 200)}; files ${clean(list, 200)}` }, { src: 'cli', session });
     return { ...none, asked: { gate_id: g.id, files } };

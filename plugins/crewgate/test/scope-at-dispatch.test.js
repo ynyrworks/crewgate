@@ -184,3 +184,48 @@ test('a stored base the branch was reset past is not used: the guess applies and
   assert.match(r.err + r.out, /no longer belongs to branch feat\/r/);
   assert.equal(state(f, t), 'accepted');
 });
+
+test('a branch that no longer exists: no stale note next to the no-branch failure', () => {
+  const f = fixture();
+  h.git(f.repo, 'branch', 'feat/gone');
+  const t = dispatch(f, 'feat/gone', ['src/**']);
+  assert.ok(tasks.load(f.pid, t.id).scope_base);
+  h.git(f.repo, 'branch', '-D', 'feat/gone');
+  ret(f, t);
+  const r = run(f, ['task', 'accept', t.id]);
+  assert.doesNotMatch(r.err + r.out, /no longer belongs/);
+  assert.equal(evs(f, 'task.scope_check_failed').length, 1);
+});
+
+test('block mode, reset branch whose guess finds an out-of-scope file: the refusal comes with the stale note', () => {
+  const f = fixture();
+  const main = cur(f);
+  h.git(f.repo, 'branch', 'feat/rb');
+  work(f, 'feat/rb', { 'src/first.txt': 'f' });
+  const t = dispatch(f, 'feat/rb', ['src/**']);
+  h.git(f.repo, 'branch', '-f', 'feat/rb', main);
+  work(f, 'feat/rb', { 'docs/out.txt': 'o' });
+  ret(f, t);
+  const r = run(f, ['task', 'accept', t.id]);
+  assert.notEqual(r.code, 0);
+  assert.match(r.err, /docs\/out\.txt/);
+  assert.match(r.err, /no longer belongs to branch feat\/rb/);
+});
+
+test('two tasks dispatched on one branch at the same commit: accepting the first does not put its files on the second', () => {
+  const f = fixture();
+  h.git(f.repo, 'branch', 'feat/two');
+  const a = dispatch(f, 'feat/two', ['src/**']);
+  const b = dispatch(f, 'feat/two', ['lib/**']);
+  assert.equal(tasks.load(f.pid, a.id).scope_base, tasks.load(f.pid, b.id).scope_base);
+  work(f, 'feat/two', { 'src/a.txt': 'a' });
+  ret(f, a);
+  const ra = run(f, ['task', 'accept', a.id]);
+  assert.equal(ra.code, 0, ra.err);
+  work(f, 'feat/two', { 'lib/b.txt': 'b', 'docs/c.txt': 'c' });
+  ret(f, b);
+  const r = run(f, ['task', 'accept', b.id]);
+  assert.notEqual(r.code, 0);
+  assert.match(r.err, /docs\/c\.txt/);
+  assert.doesNotMatch(r.err, /src\/a\.txt|lib\/b\.txt/);
+});

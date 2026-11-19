@@ -81,10 +81,23 @@ function scopeRange(root, branch, recordedTips = [], scopeBase = '') {
   const has = /^[0-9a-f]{7,64}$/.test(scopeBase || '');
   if (has) {
     const tip = git(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], root);
-    if (tip && git(['merge-base', '--is-ancestor', scopeBase, tip.trim()], root) !== null) return { base: scopeBase, branch };
+    if (!tip) return { failed: 'no-branch' };
+    const tipSha = tip.trim();
+    if (git(['merge-base', '--is-ancestor', scopeBase, tipSha], root) !== null) {
+      // The stored base is the floor; a recorded accept tip between it and the branch tip is closer.
+      let best = scopeBase;
+      let bestN = Number((git(['rev-list', '--count', scopeBase], root) || '').trim());
+      for (const t of recordedTips) {
+        if (!/^[0-9a-f]{7,64}$/.test(t || '')) continue;
+        if (git(['merge-base', '--is-ancestor', scopeBase, t], root) === null || git(['merge-base', '--is-ancestor', t, tipSha], root) === null) continue;
+        const n = Number((git(['rev-list', '--count', t], root) || '').trim());
+        if (Number.isFinite(n) && n > bestN) { best = t; bestN = n; }
+      }
+      return { base: best, branch };
+    }
+    return { ...guessRange(root, branch, recordedTips), stale: true };
   }
-  const r = guessRange(root, branch, recordedTips);
-  return has ? { ...r, stale: true } : r;
+  return guessRange(root, branch, recordedTips);
 }
 
 function guessRange(root, branch, recordedTips) {
