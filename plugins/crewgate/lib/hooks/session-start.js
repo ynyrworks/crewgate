@@ -29,7 +29,7 @@ function cutBytes(text, max) {
   return Buffer.from(text).subarray(0, max).toString('utf8').replace(/�+$/, '');
 }
 
-function build(h, perState, card) {
+function build(h, perState, card, ready) {
   const cfg = h.cfg();
   const name = line(h.ctx.project && h.ctx.project.name, 60) || 'project';
   const byState = {};
@@ -50,7 +50,7 @@ function build(h, perState, card) {
   const inner = [parts.length ? h.t('brief.tasks', { list: parts.join('; ') }) : h.t('brief.noTasks')];
   if (handoffs.length) inner.push(h.t('brief.handoffs', { count: handoffs.length, ids: handoffs.slice(0, 5).join(', ') + (handoffs.length > 5 ? ', ...' : '') }));
   if (needs) inner.push(h.t('brief.needs', { count: needs }));
-  try { const n = lessons.suggest(h.workTree, cfg).length; if (n) inner.push(h.t('brief.lessons', { count: n })); } catch { /* no lessons file */ }
+  if (ready) inner.push(h.t('brief.lessons', { count: ready }));
   if (h.accountWarn) inner.push(h.t(h.accountWarn === 'unknown' ? 'brief.accountUnknown' : 'brief.accountMismatch'));
   inner.push(h.t('brief.rules', { file: line(cfg.lessons && cfg.lessons.rules_file, 80) || 'CLAUDE.md' }));
 
@@ -72,12 +72,15 @@ const CLOSE = '\n</crew-state>';
 // <= MAX_BYTES. When the state block is too long it is the state block that is cut, never the head.
 function brief(h, source) {
   const card = /^(compact|resume)$/.test(C.str(source));
+  // Read once: the loop below builds up to five times, and the count reads LESSONS.md and the rules file.
+  let ready = 0;
+  try { ready = lessons.suggest(h.workTree, h.cfg()).length; } catch { /* no lessons file */ }
   for (const n of [6, 3, 1, 0]) {
-    const b = build(h, n, card);
+    const b = build(h, n, card, ready);
     const text = `${b.head}\n${OPEN}${b.inner}${CLOSE}`;
     if (Buffer.byteLength(text) <= MAX_BYTES) return text;
   }
-  const b = build(h, 0, card);
+  const b = build(h, 0, card, ready);
   const room = MAX_BYTES - Buffer.byteLength(`${b.head}\n${OPEN}${CLOSE}`);
   return `${b.head}\n${OPEN}${cutBytes(b.inner, Math.max(room, 0))}${CLOSE}`;
 }

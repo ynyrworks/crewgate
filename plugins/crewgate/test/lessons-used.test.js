@@ -86,12 +86,30 @@ test('SessionStart: one line with the count when lessons are ready, none otherwi
   assert.ok(zt.includes('可讓使用者看的經驗：1 筆'));
 });
 
+test('SessionStart: a long state block reads the lessons once, not once per cut', () => {
+  const lessons = require('../lib/features/lessons');
+  const ss = require('../lib/hooks/session-start');
+  const real = lessons.suggest;
+  let calls = 0;
+  lessons.suggest = (...a) => { calls++; return [1, 2]; };
+  try {
+    const hh = {
+      pid: 'p-none', workTree: ROOT, cfg: () => ({}), ctx: { project: { name: 'x' } }, lang: () => 'en',
+      t: (k) => (k === 'brief.noTasks' ? 'x'.repeat(5000) : k),
+    };
+    const text = ss.brief(hh, 'startup');
+    assert.ok(Buffer.byteLength(text) <= 4000);
+    assert.equal(calls, 1);
+  } finally { lessons.suggest = real; }
+});
+
 test('skills: pinned wording for the session-start line, find before briefs and plans, checks before rules', () => {
   const crew = read('skills', 'crew', 'SKILL.md');
   assert.ok(crew.includes('session-start state names lessons ready'));
   assert.ok(crew.includes('before you write a brief, run `crew lesson find'));
   assert.ok(crew.includes('offer an automatic check (a test, lint rule or hook) first'));
   assert.ok(crew.includes('Promote nothing without a clear yes'));
+  assert.ok(crew.includes('at the next natural pause') && crew.includes('not only at wrap-up'));
   assert.ok(fs.readFileSync(path.join(ROOT, 'skills', 'crew', 'SKILL.md'), 'utf8').split('\n').length < 250);
   const plan = read('skills', 'plan', 'SKILL.md');
   assert.ok(plan.includes('run `crew lesson find <the goal\'s words>` before the first round'));
