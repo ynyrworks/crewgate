@@ -220,13 +220,15 @@ function planChangedOnAccept(ctx, proj, cfg, id) {
   return ctx.t('wf.task.acceptPlanChangedWarn', { id, slug });
 }
 
-// The files changed on a task's branch against its base, as `crew task show` finds them. Both paths of a rename are listed (the old
-// one was touched too). -> { files } or { failed: reason } when git cannot say.
-function changedFiles(root, branch) {
-  const r = common.branchRange(root, branch);
-  if (!r) return { failed: 'no branch range' };
+// The files changed on a task's branch since its scope base (see common.scopeRange: the branch tips recorded at earlier accepts count),
+// so files of an earlier accepted task on the same branch are not this task's. Both paths of a rename are listed (the old one was
+// touched too). -> { files } or { failed: code, branch, repo } when it cannot be said.
+function changedFiles(root, branch, proj, id) {
+  const tips = proj ? tasks.list(proj.id, { state: 'accepted' }).concat(tasks.list(proj.id, { state: 'merged' })).filter((t) => t.id !== id && t.scope_tip).map((t) => t.scope_tip) : [];
+  const r = common.scopeRange(root, branch, tips);
+  if (r.failed) return { failed: r.failed, branch, repo: root };
   const out = common.git(['diff', '--name-only', '--no-renames', '-z', r.base, r.branch], root);
-  if (out === null) return { failed: 'git diff failed' };
+  if (out === null) return { failed: 'git-diff', branch, repo: root };
   return { files: out.split('\0').filter(Boolean) };
 }
 
@@ -257,10 +259,10 @@ function scopeOnAccept(ctx, proj, cfg, id, a) {
   const task = tasks.load(proj.id, id);
   if (!task.scope.allow.length && !task.scope.deny.length) return none;
   const session = gates.currentSession();
-  const got = changedFiles(proj.path, task.branch);
+  const got = changedFiles(proj.path, task.branch, proj, id);
   if (got.failed) {
-    evAppend(proj, 'task.scope_check_failed', id, { reason: got.failed }, session);
-    return { ...none, lines: [ctx.t('wf.task.scopeCheckFailed', { id, reason: got.failed })] };
+    evAppend(proj, 'task.scope_check_failed', id, { reason: got.failed, branch: got.branch || '', repo: got.repo }, session);
+    return { ...none, lines: [ctx.t('wf.task.scopeCheckFailed', { id, reason: ctx.t(`wf.task.scopeWhy.${got.failed}`, { branch: got.branch || '-', repo: got.repo }) })] };
   }
   const files = drift.outsideFiles(task.scope, got.files, process.platform === 'win32' || process.platform === 'darwin');
   if (!files.length) return none;
@@ -411,6 +413,7 @@ function run(argv, ctx) {
     }
     const task = tasks.transition(proj.id, a.id, 'accepted', { ...opts, note: a.note || '', data: skipped || undefined });
     if (scope.after) scope.after();
+    try { const tip = common.branchTip(proj.path, task.branch); if (tip) tasks.recordScopeTip(proj.id, a.id, tip); } catch { /* ignore */ }
     const open = (findingsSummary(taskDir) || { items: [] }).items.filter((f) => f.severity === 'blocker' || f.severity === 'major');
     const L = [ctx.t('wf.task.accepted', { id: task.id }), ...(changedWarn ? [changedWarn] : []), ...scope.lines];
     if (open.length) L.push(ctx.t('wf.task.acceptedWithFindings', { n: open.length, ids: open.map((f) => f.id).join(', ') }));

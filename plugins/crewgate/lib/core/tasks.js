@@ -226,6 +226,15 @@ function setFields(projectId, taskId, fields) {
   });
 }
 
+// recordScopeTip(projectId, taskId, sha) -> task. The branch tip when the task was accepted: the base for the next task's scope check.
+function recordScopeTip(projectId, taskId, sha) {
+  return json.update(taskFile(projectId, taskId), {}, (t) => {
+    if (!t.id) throw new CrewError('task.notFound', { id: taskId });
+    t.scope_tip = String(sha);
+    return t;
+  });
+}
+
 const sendBack = (projectId, taskId, opts) => transition(projectId, taskId, 'dispatched', opts);
 
 // recordReport(projectId, taskId, { report, packet }, { maxTokens, ...transition opts })
@@ -259,5 +268,5 @@ function readBrief(projectId, taskId) {
 module.exports = {
   STATES, TRANSITIONS, BRIEF_SECTIONS, REPORT_SECTIONS,
   estimateTokens, validateBrief, validateReport, createTask, load, list, findMarker,
-  transition, setFields, sendBack, recordReport, readReport, readBrief,
+  transition, setFields, recordScopeTip, sendBack, recordReport, readReport, readBrief,
 };
