@@ -29,7 +29,7 @@ question or work. If the user names a size, use theirs.
 ## 2. Asking
 Skip this section when `plan.interview` is `off` (still write the plan) or the size is small.
 
-- **Read the code first.** Look in the repo, the docs and `crew plan list`. Never ask what the repo can answer.
+- **Read the code first.** Look in the repo, the docs and `crew plan list`. Never ask what the repo can answer; run `crew lesson find <the goal's words>` before the first round and treat what it finds as facts, not questions.
 - **Map the decisions as a tree.** A decision that depends on another is its child.
 - **Ask in rounds.** A round asks every question whose prerequisites are settled (the frontier), then waits.
   Recompute the frontier from the answers; a question that depends on an open one waits for a later round.

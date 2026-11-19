@@ -26,6 +26,13 @@ Promotion is the user's decision:
 4. At `lessons.rules_cap` the command refuses and names the oldest/least-cited rule. Offer to retire it
    (`crew lesson retire <key>`); do not retire anything unasked.
 
+Checks before rules: `crew lesson suggest` adds a hint to a candidate whose text names a command, file pattern,
+option or banned call (backticked code, `--flag`, `foo()`, a path or extension, "never use"). Such a lesson is
+better held by a test, a lint rule or a hook: offer that first. A rule is for judgement calls.
+
+Using lessons: the session-start state says how many are ready. Before a brief or a plan, `crew lesson find <words...>
+[--paths <glob>...]` brings back the recorded lessons that match; use them as facts.
+
 ## Gate wording
 
 When a gate is `ask` and the user has not already named the action, ask once, in plain chat text, as the closing status line:

@@ -67,6 +67,7 @@ A plan is a tree of steps in `.crew/plans/<slug>.md` (slug `[a-z0-9-]{1,40}`, at
 ## Handoff and lessons
 - `crew handoff create --title T --body-file F [--task <id>]`, `list [--all]`, `show <id>`, `accept <id>`, `cancel <id>`
 - `crew lesson add --key slug --text "..." [--kind correction|send-back|dismissal|takeover]`, `list`, `suggest`,
+  `find <words...> [--paths <glob>...] [--limit N]` (recorded lessons, retired excluded, newest first, default 5; matches words in key or text, or a file named in the text that fits a glob; `--json` as data),
   `promote <key> --rule "..."`, `retire <key>`
 
 ## Board data (manual items)

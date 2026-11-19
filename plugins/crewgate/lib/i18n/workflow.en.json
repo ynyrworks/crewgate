@@ -150,7 +150,7 @@
   "wf.handoff.untrustedEnd": "End of handoff data.",
   "wf.handoff.cancelled": "Handoff {id} cancelled.",
 
-  "wf.lesson.usage": "lesson takes add | list | suggest | promote | retire",
+  "wf.lesson.usage": "lesson takes add | list | suggest | find | promote | retire",
   "wf.lesson.badKey": "A lesson key is a lower-case slug (a-z, 0-9, dashes, at most 64 characters): {key}",
   "wf.lesson.badKind": "Unknown lesson kind {kind}; use one of: {kinds}",
   "wf.lesson.noText": "A lesson needs text",
@@ -162,6 +162,9 @@
   "wf.lesson.suggestHead": "{n} lesson(s) seen on at least {days} different days:",
   "wf.lesson.suggestAsk": "Ask the user which of these to promote to rules; promote nothing without a clear yes.",
   "wf.lesson.noCandidates": "No lesson is ready for promotion.",
+  "wf.lesson.checkHint": "This reads as mechanical (a command, file pattern, option or banned call): offer an automatic check (a test, lint rule or hook) before a rule.",
+  "wf.lesson.findNeeds": "lesson find needs at least one word or --paths <glob>",
+  "wf.lesson.findLimit": "--limit must be at least 1",
   "wf.lesson.unknownKey": "No lesson recorded under the key {key}",
   "wf.lesson.noRule": "A rule needs text (--rule)",
   "wf.lesson.ruleNewline": "A rule must be a single line of text (no line breaks)",
