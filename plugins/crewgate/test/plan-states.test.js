@@ -140,9 +140,9 @@ test('finalize refuses and names each problem; it asks nothing then', () => {
   ready(f, 'q');
   run(f, ['plan', 'clarify', 'q', '--question', 'Which?', '--answer', 'This one', '--by', 'assumed']);
   const as = run(f, ['plan', 'finalize', 'q']);
-  assert.notEqual(as.code, 0);
-  assert.match(as.err, /assumed/i);
-  assert.equal(events.read(f.pid, { types: 'gate.asked' }).length, 0);
+  assert.equal(as.code, 0, as.err); // an (assumed) line does not stop finalize: the user's yes confirms it
+  assert.match(as.out, /assumed/i);
+  assert.equal(events.read(f.pid, { types: 'gate.asked' }).length, 1);
   assert.equal(stateOf(f, 'q'), 'draft');
 });
 

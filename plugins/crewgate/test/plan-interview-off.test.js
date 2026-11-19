@@ -89,16 +89,19 @@ test('off: a no leaves the plan as it was', () => {
   assert.equal(count(f, 'plan.assumptions_confirmed'), 0);
 });
 
-test('on: the same plan is refused as before', () => {
+test('on: the same plan is asked too, with the assumed lines listed; the one yes confirms them', () => {
   const f = fixture('on');
   draft(f);
-  const r = run(f, ['plan', 'finalize', 'p']);
-  assert.notEqual(r.code, 0);
-  assert.match(r.err, /ends in \(assumed\)/);
-  assert.equal(count(f, 'gate.asked'), 0);
+  const a = ask(f);
+  assert.deepEqual(a.assumed, ['Q: Which db? A: sqlite (assumed)', 'Q: Which os? A: windows (assumed)']);
+  assert.equal(count(f, 'gate.asked'), 1);
+  H.prompt(f);
+  const r = run(f, ['plan', 'finalize', 'p', '--gate', a.gate_id]);
+  assert.equal(r.code, 0, r.err);
+  assert.doesNotMatch(text(f), /\(assumed\)/);
 });
 
-test('off at ask, on at answer: the conversion follows the ask; asked under on is not converted', () => {
+test('asked under off, answered under on: the assumed lines are still converted and the plan reads unchanged', () => {
   const f = fixture('off');
   draft(f);
   const a = ask(f);

@@ -440,7 +440,8 @@ function accept(root, projectId, cfg, slug, ref) {
     st.accepted.push({ node: info.id, round: info.round, ts: Date.now() });
     const e = st.rounds.find((x) => x.round === info.round);
     if (e) e.accepted += 1;
-    return growthOf(projectId, cfg, slug, st);
+    // work linked to a final plan is not asked about large_task: the user approved the plan
+    return plans.stateOf(root, projectId, slug) === 'final' ? null : growthOf(projectId, cfg, slug, st);
   });
   return { ...info, state: info.removed ? 'removed' : 'open', growth };
 }

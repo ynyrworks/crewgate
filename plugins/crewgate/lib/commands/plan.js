@@ -22,6 +22,7 @@ const SPECS = {
     options: {
       '--under': { dest: 'under' }, '--task': { dest: 'task' },
       '--origin': { dest: 'origin', choices: plans.ORIGINS, default: 'plan' }, '--proposed': { dest: 'proposed', flag: true },
+      '--quote': { dest: 'quote' },
     },
   },
   edit: { positionals: [{ name: 'slug' }, { name: 'node' }, { name: 'text' }], options: {} },
@@ -43,6 +44,7 @@ const SPECS = {
     positionals: [{ name: 'slug' }],
     options: {
       '--kind': { dest: 'kind', choices: drift.KINDS }, '--detail': { dest: 'detail' },
+      '--expected': { dest: 'expected' }, '--found': { dest: 'found' }, '--why': { dest: 'why' },
       '--gate': { dest: 'gate' }, '--answer': { dest: 'answer', choices: drift.ANSWERS }, '--text': { dest: 'text' }, '--quote': { dest: 'quote' },
     },
   },
@@ -216,6 +218,11 @@ function askOrAnswer(sub, a, proj, root, ctx) {
     const r = plans.closeAnswer(root, proj.id, a.slug, a.gate, answerOptions(proj, a.quote));
     return ctx.emit(r, ctx.t('plan.closedOk', { slug: a.slug, state: r.state }));
   }
+  if (a.to === 'done') {
+    // every step done or dropped: nothing is being decided, so there is no question
+    const d = plans.closeDone(root, proj.id, a.slug);
+    if (d) return ctx.emit(d, ctx.t('plan.closedOk', { slug: a.slug, state: d.state }));
+  }
   const r = plans.closeAsk(root, proj.id, cfg, a.slug, a.to, { session });
   const msg = ctx.t('plan.closeAsked', { slug: a.slug, id: r.gate_id, to: a.to });
   return ctx.emit({ ...r, next: msg }, msg);
@@ -230,11 +237,17 @@ function driftRun(a, proj, root, ctx) {
     return ctx.emit(r, ctx.t('plan.driftAnswered', { slug: a.slug, kind: r.kind, answer: r.answer }));
   }
   if (!a.kind) throw new UsageError('args.missing', { name: '--kind' });
-  const r = drift.ask(root, proj.id, ctx.config().config, a.slug, a.kind, a.detail, { session: gates.currentSession() });
+  const r = drift.ask(root, proj.id, ctx.config().config, a.slug, a.kind, a.detail, { session: gates.currentSession(), t: ctx.t, expected: a.expected, found: a.found, why: a.why });
   const L = [ctx.t('plan.driftAsked', { slug: a.slug, kind: r.kind, id: r.gate_id })];
+  L.push(`  ${r.parts.labels.expected}: ${r.parts.expected}`, `  ${r.parts.labels.found}: ${r.parts.found}`, `  ${r.parts.labels.why}: ${r.parts.why}`);
   for (const k of drift.ANSWERS) L.push(ctx.t(`plan.driftAnswer.${k}`));
   L.push(ctx.t('plan.driftNext', { slug: a.slug, id: r.gate_id }));
   return ctx.emit({ ...r, answers: drift.ANSWERS }, L);
+}
+
+// One line when the last open step of a final plan is done or dropped (or gone): the plan is waiting to be closed.
+function completeLine(a, proj, root, ctx) {
+  return plans.stateOf(root, proj.id, a.slug) === 'final' && plans.isComplete(root, proj.id, a.slug) ? [ctx.t('plan.complete', { slug: a.slug })] : [];
 }
 
 // A step added to a final plan raises the drift question first (plan.enforce); see drift.stepCheck.
@@ -306,6 +319,11 @@ function run(argv, ctx) {
     ]);
   } else if (sub === 'add') {
     if (a.task) checkTask(proj.id, a.task);
+    if (!a.proposed) {
+      // splitting an approved step, or acting on the user's own words from this turn, is not drift
+      const ex = drift.exemptAdd(root, proj.id, ctx.config().config, a.slug, { text: a.text, under: a.under, task: a.task, origin: a.origin, quote: a.quote }, { session: gates.currentSession(), answerOpts: answerOptions(proj, a.quote) });
+      if (ex) return ctx.emit({ slug: a.slug, ...ex.added, drift: ex.how }, [ctx.t(ex.how === 'split' ? 'plan.splitAdded' : 'plan.instructionAdded', { id: ex.added.id, slug: a.slug, node: a.under }), ...completeLine(a, proj, root, ctx)]);
+    }
     const chk = a.proposed ? null : stepCheck(a, proj, root, ctx);
     const r = plans.addTo(root, proj.id, a.slug, { text: a.text, under: a.under, task: a.task, origin: a.origin, proposed: !!a.proposed });
     drift.approveStep(root, proj.id, a.slug, chk);
@@ -349,10 +367,10 @@ function run(argv, ctx) {
     const chk = a.action === 'accept' ? stepCheck(a, proj, root, ctx) : null; // a plain [?] step becomes a real step
     const r = plans.setState(root, proj.id, a.slug, a.node, a.action);
     drift.approveStep(root, proj.id, a.slug, chk);
-    ctx.emit({ slug: a.slug, ...r }, [ctx.t('plan.changed', { id: r.id, state: ctx.t(`plan.state.${r.state}`) }), ...(chk && chk.warn ? [ctx.t('plan.driftUnasked', { slug: a.slug })] : [])]);
+    ctx.emit({ slug: a.slug, ...r }, [ctx.t('plan.changed', { id: r.id, state: ctx.t(`plan.state.${r.state}`) }), ...(chk && chk.warn ? [ctx.t('plan.driftUnasked', { slug: a.slug })] : []), ...completeLine(a, proj, root, ctx)]);
   } else {
     const r = plans.removeFrom(root, proj.id, a.slug, a.node);
-    ctx.emit({ slug: a.slug, ...r, removed: true }, ctx.t('plan.removed', { id: r.id }));
+    ctx.emit({ slug: a.slug, ...r, removed: true }, [ctx.t('plan.removed', { id: r.id }), ...completeLine(a, proj, root, ctx)]);
   }
   return 0;
 }
@@ -367,11 +385,11 @@ module.exports = {
       '  crew plan show SLUG [--json]',
       '  crew plan part SLUG not-doing|done-when "text" [--add]   (sets the ## Not doing or ## Done when section before the steps; line breaks stay as lines; --add appends)',
       '  crew plan finalize SLUG   (asks the user; show them the plan, end your turn)   |   crew plan finalize SLUG --gate ID   (after their reply)',
-      '  crew plan close SLUG done|parked [--gate ID]   |   crew plan reopen SLUG   |   crew plan adopt SLUG   (a legacy plan becomes a draft)',
-      '  crew plan add SLUG "text" [--under NODE] [--task TASK] [--origin plan|user|review|refute|implementation|send-back] [--proposed]',
+      '  crew plan close SLUG done|parked [--gate ID]   (done needs no question when every step is done or dropped)   |   crew plan reopen SLUG   |   crew plan adopt SLUG   (a legacy plan becomes a draft)',
+      '  crew plan add SLUG "text" [--under NODE] [--task TASK] [--origin plan|user|review|refute|implementation|send-back] [--proposed] [--quote "the words of the user"]   (on a final plan: --under an approved open step is a split, --origin user --quote "words from this turn" is the user instruction; both need no drift question)',
       '  crew plan edit SLUG NODE "new text"   (changes the text of one step; on a final plan it asks first, see plan drift --kind changed-text)',
       '  crew plan clarify SLUG --question "..." --answer "..." [--by user|assumed|decision]   (keeps a settled question under ## Clarified)',
-      '  crew plan drift SLUG --kind new-step|changed-text|unlinked-task|out-of-scope [--detail "..."]   (asks the user how to treat work that left a final plan; end your turn)',
+      '  crew plan drift SLUG --kind new-step|changed-text|unlinked-task|out-of-scope [--detail "..."] [--expected "..."] [--found "..."] [--why "..."]   (asks the user how to treat work that left a final plan; end your turn)',
       '  crew plan drift SLUG --gate ID --answer add|goal|new|drop|defer --text "..."   (after their reply)   |   crew plan drift-stats [SLUG] [--json]',
       '  crew plan link SLUG NODE TASK',
       '  crew plan set SLUG NODE open|done|dropped|accept',
@@ -390,11 +408,11 @@ module.exports = {
       '  crew plan show SLUG [--json]',
       '  crew plan part SLUG not-doing|done-when "文字" [--add]   （設定步驟之前的 ## Not doing 或 ## Done when 區段；換行保留成多行；--add 是附加）',
       '  crew plan finalize SLUG   （詢問使用者；把計畫給他看，結束這一輪）   |   crew plan finalize SLUG --gate ID   （他回覆之後）',
-      '  crew plan close SLUG done|parked [--gate ID]   |   crew plan reopen SLUG   |   crew plan adopt SLUG   （舊計畫變成草稿）',
-      '  crew plan add SLUG "文字" [--under NODE] [--task TASK] [--origin plan|user|review|refute|implementation|send-back] [--proposed]',
+      '  crew plan close SLUG done|parked [--gate ID]   （每個步驟都完成或捨棄時，done 不必詢問）   |   crew plan reopen SLUG   |   crew plan adopt SLUG   （舊計畫變成草稿）',
+      '  crew plan add SLUG "文字" [--under NODE] [--task TASK] [--origin plan|user|review|refute|implementation|send-back] [--proposed] [--quote "使用者的原話"]   （已定案的計畫上：--under 一個已核准的未完成步驟是拆分，--origin user --quote "這一輪的原話" 是使用者的指令；兩者都不必問偏離）',
       '  crew plan edit SLUG NODE "新文字"   （改一個步驟的文字；已定案的計畫會先詢問，見 plan drift --kind changed-text）',
       '  crew plan clarify SLUG --question "..." --answer "..." [--by user|assumed|decision]   （把釐清的問題記在 ## Clarified 下）',
-      '  crew plan drift SLUG --kind new-step|changed-text|unlinked-task|out-of-scope [--detail "..."]   （工作偏離已定案的計畫時詢問使用者；結束這一輪）',
+      '  crew plan drift SLUG --kind new-step|changed-text|unlinked-task|out-of-scope [--detail "..."] [--expected "..."] [--found "..."] [--why "..."]   （工作偏離已定案的計畫時詢問使用者；結束這一輪）',
       '  crew plan drift SLUG --gate ID --answer add|goal|new|drop|defer --text "..."   （他回覆之後）   |   crew plan drift-stats [SLUG] [--json]',
       '  crew plan link SLUG NODE TASK',
       '  crew plan set SLUG NODE open|done|dropped|accept',

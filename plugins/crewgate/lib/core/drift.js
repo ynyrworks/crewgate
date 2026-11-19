@@ -45,13 +45,30 @@ function mustBeFinal(root, projectId, slug) {
   if (info.state !== 'final') throw new CrewError('plan.driftNotFinal', { slug, state: info.state });
 }
 
-// ask -> { slug, kind, gate_id }; throws plan.driftNotFinal for a plan that is not final.
+// The three parts of the question, in the project language: what the plan expected, what was found, why it matters.
+// opts: t (translator), expected, found, why (the caller's words), detail. Missing parts get a default from the kind and the plan.
+function partsOf(root, slug, kind, opts) {
+  const tt = opts.t || ((k, v) => require('./i18n').t('en', k, v));
+  const doc = plans.readCapped(root, slug);
+  const cut = (x) => clean(String(x || '').replace(/\s+/g, ' ').trim(), 300);
+  return {
+    expected: cut(opts.expected) || cut(tt('plan.drift.expectedDefault', { slug, goal: (doc && doc.goal) || (doc && doc.title) || slug })),
+    found: cut(opts.found) || cut(opts.detail) || cut(tt('plan.drift.foundDefault', { kind })),
+    why: cut(opts.why) || cut(tt(`plan.drift.why.${kind}`)),
+    labels: { expected: tt('plan.drift.expected'), found: tt('plan.drift.found'), why: tt('plan.drift.why') },
+  };
+}
+
+// ask -> { slug, kind, gate_id, parts }; throws plan.driftNotFinal for a plan that is not final.
 function ask(root, projectId, cfg, slug, kind, detail, opts = {}) {
   if (!KINDS.includes(kind)) throw new CrewError('plan.driftBadKind', { kind: String(kind), kinds: KINDS.join(', ') });
   mustBeFinal(root, projectId, slug);
-  const g = gates.ask(projectId, askCfg(cfg), { gate: GATE, detail: `drift on plan ${slug} (${kind}): ${clean(String(detail || ''), 300)}` }, { src: 'cli', session: opts.session });
+  const parts = partsOf(root, slug, kind, { ...opts, detail });
+  const L = parts.labels;
+  const text = `drift on plan ${slug} (${kind}) | ${L.expected}: ${parts.expected} | ${L.found}: ${parts.found} | ${L.why}: ${parts.why}`;
+  const g = gates.ask(projectId, askCfg(cfg), { gate: GATE, detail: text }, { src: 'cli', session: opts.session });
   plans.record(projectId, 'plan.drift_asked', { slug, kind, gate: g.id });
-  return { slug, kind, gate_id: g.id };
+  return { slug, kind, gate_id: g.id, parts };
 }
 
 // ---------------------------------------------------------------- the plan file
@@ -147,7 +164,7 @@ function answer(root, projectId, slug, gateId, reply, text, answerOpts) {
 // every session's of the project when the session is not known (what commands/gate.js passes to gates.answer).
 function covered(root, projectId, slug, kind, session) {
   const last = events.read(projectId, { types: ['plan.drift_answered'] })
-    .filter((e) => e.data && e.data.slug === slug && e.data.kind === kind).pop();
+    .filter((e) => e.data && e.data.slug === slug && e.data.kind === kind && e.data.via !== 'instruction').pop(); // a quoted-instruction add is not an answered question
   if (!last) return false;
   const sess = require('../hooks/session');
   let prompts;
@@ -175,6 +192,53 @@ function stepCheck(root, projectId, cfg, slug, opts = {}) {
   }
   return { mode, covered: true, clean: clean0, kind };
 }
+// ---------------------------------------------------------------- additions that are not drift
+// Splitting an approved step, or acting on what the user just typed, is added and recorded without the question.
+// splitOf: the node `under` names when it is an approved open step (not a proposal, not done or dropped, no done or dropped
+// ancestor), else null.
+function splitOf(root, projectId, slug, under) {
+  if (!under) return null;
+  const doc = plans.readCapped(root, slug);
+  if (!doc) return null;
+  let n;
+  try { n = plans.find(doc, under); } catch { return null; }
+  if (n.box !== ' ' || n.meta.rejected) return null;
+  // the derived view (as plans.isComplete): a step is also done through its merged or accepted task, or when its children are done
+  const byId = new Map();
+  const walk = (list) => list.forEach((x) => { byId.set(x.id, x); walk(x.children); });
+  walk(plans.derive(doc, plans.taskStates(projectId)).nodes);
+  const bad = (x) => { const d = byId.get(plans.refOf(x)); return !d || d.state === 'done' || d.state === 'dropped' || d.state === 'proposed'; };
+  for (let p = n; p; p = p.parent) if (bad(p)) return null;
+  return n;
+}
+// The quote is checked with gates.quoteInTurn: it must occur in the prompt that started this turn of this session.
+function quoteHolds(session, opts) {
+  return gates.quoteInTurn({ session, ts: new Date().toISOString() }, session, opts);
+}
+// planAdd(root, projectId, cfg, slug, input, ctx) -> { added, how } when the add was exempt from the drift question and was
+// written, else null (the caller asks as before). input: { text, under, task, origin, quote }; ctx: { session, answerOpts }.
+// Needs a final plan with plan.enforce not off. The new step is approved with the plan only when the file matched what was approved.
+function exemptAdd(root, projectId, cfg, slug, input, ctx) {
+  const mode = cfg && cfg.plan && cfg.plan.enforce;
+  if (mode === 'off' || plans.stateOf(root, projectId, slug) !== 'final') return null;
+  let how = null;
+  let quote;
+  if (input.origin === 'user' && input.quote && quoteHolds(ctx.session, ctx.answerOpts)) { how = 'add'; quote = clean(String(input.quote).replace(/\s+/g, ' ').trim(), 200); }
+  else if (input.origin === 'plan' || input.origin === undefined) { if (splitOf(root, projectId, slug, input.under)) how = 'split'; }
+  if (!how) return null;
+  const clean0 = !plans.changedSinceApproved(root, projectId, slug);
+  const added = plans.addTo(root, projectId, slug, { text: input.text, under: input.under, task: input.task, origin: input.origin });
+  const body = one(input.text);
+  const date = plans.today();
+  const kind = how === 'split' ? 'split' : 'new-step';
+  addDriftLine(root, slug, how === 'split' ? `- ${date} split ${input.under}: ${body}` : `- ${date} new-step add: ${body} (user: "${quote}")`);
+  if (clean0) {
+    plans.writeRecord(projectId, slug, { hash: plans.fileHash(root, slug), approved: plans.fileApprovedHash(root, slug) });
+  }
+  plans.record(projectId, 'plan.drift_answered', { slug, kind, answer: 'add', node: added.id, gate: '', ...(how === 'split' ? { under: input.under } : { quote, via: 'instruction' }) });
+  return { added, how };
+}
+
 // Called after the step was written: under remind, the step went in without the question, so that is recorded now (never for a failed add).
 function approveStep(root, projectId, slug, chk) {
   if (chk && chk.warn) {
@@ -189,7 +253,7 @@ function approveStep(root, projectId, slug, chk) {
 function unlinkedCheck(root, projectId, cfg, opts = {}) {
   const mode = cfg && cfg.plan && cfg.plan.enforce;
   if (mode === 'off') return null;
-  const open = plans.finalSlugs(root, projectId);
+  const open = plans.openFinalSlugs(root, projectId); // a final plan with every step done waits to be closed: it asks for nothing
   if (!open.length) return null;
   if (open.some((slug) => covered(root, projectId, slug, 'unlinked-task', opts.session))) return { mode, slugs: open, covered: true };
   if (mode === 'remind') return { mode, slugs: open, covered: false, warn: true, session: opts.session };
@@ -232,4 +296,4 @@ function stats(projectId, slug) {
   return { plans: [...by.values()].sort((a, b) => (a.slug < b.slug ? -1 : 1)), outside_plan: outside };
 }
 
-module.exports = { KINDS, ANSWERS, GATE, ask, answer, covered, stepCheck, approveStep, unlinkedCheck, noteUnlinked, outsideFiles, stats };
+module.exports = { KINDS, ANSWERS, GATE, ask, answer, covered, stepCheck, exemptAdd, approveStep, unlinkedCheck, noteUnlinked, outsideFiles, stats };

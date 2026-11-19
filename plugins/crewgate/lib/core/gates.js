@@ -191,4 +191,4 @@ function history(projectId, limit = 30) {
   return [...rows.values(), ...missing].sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0)).slice(0, limit);
 }
 
-module.exports = { GATES, gateNames, ANSWER_WINDOW_MS, APPROVAL_MAX_AGE_MS, modeOf, currentSession, enforceOf, requiresUserTurn, userTurnVerdict, ask, answer, hasApproval, usableYeses, gateOf, history };
+module.exports = { GATES, gateNames, ANSWER_WINDOW_MS, APPROVAL_MAX_AGE_MS, modeOf, currentSession, enforceOf, requiresUserTurn, userTurnVerdict, quoteInTurn, ask, answer, hasApproval, usableYeses, gateOf, history };
