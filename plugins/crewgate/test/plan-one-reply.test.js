@@ -151,6 +151,16 @@ test('reject and rm of a [?] proposal on a final plan leave changedSinceApproved
   assert.equal(changed(f), false, 'after rm');
 });
 
+test('a rejected proposal set back to open on a final plan is not silently part of the approved plan', () => {
+  const f = fixture();
+  finalPlan(f);
+  assert.equal(run(f, ['plan', 'add', 'p', 'Maybe this', '--proposed']).code, 0);
+  assert.equal(run(f, ['plan', 'reject', 'p', 'n2', '--note', 'superseded']).code, 0);
+  assert.equal(changed(f), false, 'after reject');
+  const r = run(f, ['plan', 'set', 'p', 'n2', 'open']);
+  assert.ok(r.code !== 0 || changed(f) === true, 'reopening a rejected proposal must be refused or read as a change');
+});
+
 test('a plan finalized with a rejected [~] proposal under the old hash formula still reads unchanged, and its record is rewritten', () => {
   const f = fixture();
   finalPlan(f);

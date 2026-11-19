@@ -452,7 +452,8 @@ function approvedHash(text, withRejected) {
   const doc = parse(text);
   // a proposal is not part of the plan, whether it is open ([?]) or was rejected (marked rejected): deciding it changes nothing approved
   // withRejected: the formula of records written before that, which kept rejected proposals
-  const steps = doc.nodes.filter((n) => n.box !== '?' && (withRejected || !n.meta.rejected)).map((n) => [n.depth, n.text]);
+  // only while it is still rejected ([~]): a rejected proposal set back to open is a step again and must change the hash
+  const steps = doc.nodes.filter((n) => n.box !== '?' && (withRejected || !(n.box === '~' && n.meta.rejected))).map((n) => [n.depth, n.text]);
   return crypto.createHash('sha256').update(JSON.stringify([doc.title, doc.goal, doc.notDoing, doc.doneWhen, steps])).digest('hex');
 }
 function fileApprovedHash(root, slug) {
