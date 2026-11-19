@@ -8,6 +8,7 @@ the [CHANGELOG](../CHANGELOG.md).
 
 One line per minor version; the full notes are in the [CHANGELOG](../CHANGELOG.md).
 
+- **0.25** — Your own instruction counts as approval (`--quote`, and the question widget); an approved plan covers local merges of its tasks; one reply approves a plan; fewer false drift questions and a scope check that judges only a task's own commits; a role card after compact or resume; the plan skill interviews along a decision tree and the crew skill closes each message with a status line. The question-widget reply is not seen in a real run.
 - **0.24** — `crew --help` lists the everyday groups first, `crew plan edit` changes a step's text through the drift question, the board checks for git before an update, and Codex can review and refute with Claude as the fallback.
 - **0.23** — When work leaves a final plan, it stops and asks: add to this plan, change the goal, new plan, drop or defer. It asks only where code can tell, and `crew plan drift-stats` shows how often. Released for real use; whether it helps is not judged yet.
 - **0.22** — The purpose widens to "be sure it does what you want". `/crewgate:plan` finds that out before work starts, plans have states, a task on a draft plan cannot start, and only your reply makes a plan final.
@@ -56,7 +57,12 @@ Open problems in the latest release, and what has not been checked.
 Decided, not started or not finished.
 
 - **0.23 in real use.** Try the drift question on 2 real plans and judge whether it helps or gets in the way, using `crew plan drift-stats`. Tighten the triggers if it gets in the way.
-- **0.25.** Whatever the first real plans under 0.23 and 0.24 show, and Codex review checked with the real Codex CLI.
+- **0.26.** What the plan `usage-fixes` still holds:
+  - Review rule: a re-review after every send-back (only the fix's diff), `crew task accept` refusing an accept with no review unless the task is docs-only or within 20 lines, the exact `review dismiss` and `review finalize` arguments in the skill, reviewer and refuter prompts that avoid the first denied command, and a way to rescue a finding the confidence filter dropped.
+  - Commands, dispatch and lessons: `crew <group> help`, output piped to `head` or `tail` without a crash, `plan part` values that start with `- `, the `work set` states in the skill; visible side effects (windows, notifications, reboots, real drivers or services) in the brief's machine impact; a fresh worker for every task and every review fix; the usage-data script kept in the repo and documented.
+  - Scope base: record the task branch tip at dispatch and let `crew task accept` use it first, also for a task accepted after its branch was merged.
+  - Release: rerun the usage script some days after 0.25 and write the before/after table of the three numbers into the release record.
+- **Codex review.** Check it with the real Codex CLI, and the first real plans under 0.23 to 0.25.
 - **HD Office.** The look stays frozen as v0.1.0 for now. Still to do before it can be the default: warm tone, foreground, and performance on integrated graphics.
 - **Machine load in real use.** Measure closing one session while the app stays open, and closing a terminal that runs an interactive `claude`. Then decide whether cleanup should stay at all.
 - **macOS and Linux.** Probe `StartTransientUnit` through `busctl --user` with an existing pid and a real quota, and measure `taskpolicy -b` on a saturated Mac. Build only what those show.

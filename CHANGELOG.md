@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.25.0 — 2026-11-19
+
+Your own words now count as approval, an approved plan covers its local merges, and the plan questions stop where nothing has really drifted. This comes from the usage data of two machines (462 tasks, 108 session transcripts): the merge gate was answered yes 259 of 275 times, 34 gate answers were refused although you had spoken, and 78 pushes or merges had no recorded approval.
+
+### New
+
+- A user's own instruction counts as approval. `crew gate answer`, `crew plan finalize|close|drift --gate` and `crew task accept --gate` take `--quote "your words"`; the quote must be in your message of this turn, or the answer is refused. An answer in the question widget counts as a reply.
+- An approved plan covers the local merges of its accepted tasks (`gates.plan_covers_merge`, default `true`), only while the plan has its approval record and is unchanged. Push, PR, remote hosts, installs and downloads still ask every time.
+- One yes covers one action and belongs to its task (a yes with no task covers any). An unused yes stays valid past 30 minutes while it is the latest for its gate and task, up to 12 hours.
+- A merge or push written in the same command as a crew call that records an approval is denied, because a refused answer could not stop it.
+- SessionStart tells the model which language to reply in, and after a compact or a resume it adds a role card (reply language, parallel limit, review rule, tasks and plan in progress). Hooks use the global language when a project has no `crew.json`.
+- Skills: the plan skill interviews along a decision tree until no decision is assumed silently, with no cap on questions, in plain chat text, and a builder read-through before you approve. The crew skill has a language rule for every message, a closing status line ("waiting for you: ..." or "not needed, continuing when the task returns"), keeps going after a merge, and has a review rule for fixes after a send-back.
+
+### Changed
+
+- Plans: one reply approves the plan and confirms the assumed answers. Splitting a step under an approved open step and a quoted user instruction are not drift. Rejecting or removing a proposal no longer voids an approval. A finished plan closes without a gate and no longer blocks tasks that are not linked to it. The drift question has three labelled parts (expected, found, why it matters).
+- The scope check at `crew task accept` judges only the task's own commits: recorded accept tips, merged branches, and plain reasons instead of "no branch range".
+- Merges in a scratch worktree that a command steps into are ignored by the gate. The session's own work tree is always gated.
+
+### Upgrade
+
+- Nothing to run. Set `gates.plan_covers_merge` to `false` to ask for each local merge as before.
+- The new text kept for `--quote` is up to 4000 characters of your prompt, redacted. It is in the session file only and is removed with it.
+
+### Not verified / known limits
+
+- The question-widget reply was not seen in a real run. No headless run produced the tool or its payload, so the payload shape the hook reads is unconfirmed ([PLUGIN-FACTS.md](docs/PLUGIN-FACTS.md), "Real-run checks for 0.25").
+- Confirmed in real `claude -p` runs (same section): the role card on resume and compact, `--quote` accepted and refused, the plan-covered merge, the chained-command denial, and the push reminder.
+- The review rule for fixes after a send-back is a rule in the skill. The CLI does not enforce it yet (planned for 0.26).
+- Scope check: a task accepted after its branch was merged, with HEAD ahead of main, can still count other tasks' files. Planned for 0.26: record the base at dispatch.
+- The other drift stop messages (scope, unlinked task, hook) do not have the three-part form yet.
+- The first 200 characters of a prompt, redacted, are stored in the `session.end` event as before this version. The text kept for `--quote` is in the session file only.
+- `hooks-sessionjob` "holder: the session ends…" times out in a full local `npm test` on this machine, on this version and on 0.24.0 alike. Alone the file passes.
+
 ## 0.24.0 — 2026-11-06
 
 Commands and the plan flow are easier to start with, and Codex can now review and refute with Claude as the fallback.
