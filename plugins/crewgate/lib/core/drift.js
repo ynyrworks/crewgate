@@ -196,14 +196,19 @@ function stepCheck(root, projectId, cfg, slug, opts = {}) {
 // Splitting an approved step, or acting on what the user just typed, is added and recorded without the question.
 // splitOf: the node `under` names when it is an approved open step (not a proposal, not done or dropped, no done or dropped
 // ancestor), else null.
-function splitOf(root, slug, under) {
+function splitOf(root, projectId, slug, under) {
   if (!under) return null;
   const doc = plans.readCapped(root, slug);
   if (!doc) return null;
   let n;
   try { n = plans.find(doc, under); } catch { return null; }
   if (n.box !== ' ' || n.meta.rejected) return null;
-  for (let p = n.parent; p; p = p.parent) if (p.box === 'x' || p.box === '~' || p.box === '?') return null;
+  // the derived view (as plans.isComplete): a step is also done through its merged or accepted task, or when its children are done
+  const byId = new Map();
+  const walk = (list) => list.forEach((x) => { byId.set(x.id, x); walk(x.children); });
+  walk(plans.derive(doc, plans.taskStates(projectId)).nodes);
+  const bad = (x) => { const d = byId.get(plans.refOf(x)); return !d || d.state === 'done' || d.state === 'dropped' || d.state === 'proposed'; };
+  for (let p = n; p; p = p.parent) if (bad(p)) return null;
   return n;
 }
 // The quote is checked with gates.quoteInTurn: it must occur in the prompt that started this turn of this session.
@@ -219,7 +224,7 @@ function exemptAdd(root, projectId, cfg, slug, input, ctx) {
   let how = null;
   let quote;
   if (input.origin === 'user' && input.quote && quoteHolds(ctx.session, ctx.answerOpts)) { how = 'add'; quote = clean(String(input.quote).replace(/\s+/g, ' ').trim(), 200); }
-  else if (input.origin === 'plan' || input.origin === undefined) { if (splitOf(root, slug, input.under)) how = 'split'; }
+  else if (input.origin === 'plan' || input.origin === undefined) { if (splitOf(root, projectId, slug, input.under)) how = 'split'; }
   if (!how) return null;
   const clean0 = !plans.changedSinceApproved(root, projectId, slug);
   const added = plans.addTo(root, projectId, slug, { text: input.text, under: input.under, task: input.task, origin: input.origin });

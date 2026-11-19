@@ -90,6 +90,24 @@ test('add: a top-level step, and a step under a done or dropped node, still stop
   assert.doesNotMatch(text(f), /Top level|Under done|Under dropped/);
 });
 
+test('add --under: a step done through its merged linked task, or under one, is not an approved open step: no split, the drift stop', () => {
+  const f = fixture();
+  finalPlan(f);
+  const t = tasks.createTask(f.pid, { title: 'T', brief: h.GOOD_BRIEF });
+  assert.equal(plans.linkTo(f.repo, f.pid, 'p', 'n1', t.id).task, t.id);
+  const tf = path.join(require('../lib/core/paths').taskDir(f.pid, t.id), 'task.json');
+  const j = JSON.parse(fs.readFileSync(tf, 'utf8'));
+  fs.writeFileSync(tf, JSON.stringify({ ...j, state: 'merged' }));
+  assert.equal(plans.derive(plans.readCapped(f.repo, 'p'), plans.taskStates(f.pid)).nodes[0].state, 'done');
+  assert.match(text(f), /\[ \] Write the code/, 'the box is still open');
+  const before = text(f);
+  const r = run(f, ['plan', 'add', 'p', 'Under merged', '--under', 'n1', '--origin', 'plan']);
+  assert.notEqual(r.code, 0);
+  assert.match(r.err, /Expected:/);
+  assert.equal(text(f), before);
+  assert.equal(evs(f, 'plan.drift_answered').length, 0);
+});
+
 // ---------------------------------------------------------------- 3. the user's instruction
 test('add --origin user --quote: accepted when the quote is in the prompt of this turn, recorded as add with the quote', () => {
   const f = fixture();
