@@ -143,21 +143,27 @@ function answer(projectId, gateId, reply, note, opts = {}) {
 // verdict `data.user_turn` true, 'project' or 'instruction' that answer() stored when it was recorded; the automatic yes
 // of an `auto` gate does not, and an older event without the field counts as unknown, so it is not valid.
 // opts.out, when given, receives `by` ("gate:<id>") of the approval that was found (the oldest usable one).
-function hasApproval(projectId, gate, session, now = Date.now(), opts = {}) {
+function usableYeses(projectId, gate, session, now = Date.now(), opts = {}) {
   const need = opts.requireUserTurn === true;
   const answers = events.read(projectId, { types: 'gate.answered', since: now - APPROVAL_MAX_AGE_MS })
     .filter((e) => e.data && e.data.gate === gate && Date.parse(e.ts) <= now);
   const yes = answers.filter((e) => e.data.answer === 'yes' && (!e.session || !session || e.session === session)
     && (!need || e.data.auto === true || e.data.user_turn === true || e.data.user_turn === 'project' || e.data.user_turn === 'instruction'));
-  if (!yes.length) return false;
+  if (!yes.length) return [];
   const used = new Set(events.read(projectId, { types: ['git.push', 'git.merge'], since: Date.parse(yes[0].ts) })
     .map((e) => e.data && e.data.approved_by).filter(Boolean));
-  const usable = yes.find((y) => {
+  return yes.filter((y) => {
     if (used.has(`gate:${y.data.id}`)) return false;
     const later = answers.filter((a) => a !== y && (a.task || '') === (y.task || '') && answers.indexOf(a) > answers.indexOf(y));
     if (later.some((a) => a.data.answer === 'no')) return false;
     return now - Date.parse(y.ts) <= ANSWER_WINDOW_MS || later.length === 0;
   });
+}
+
+// opts.task: the task the action belongs to; then only a yes asked for that task counts (a yes without a task covers an action
+// without one, and, as before, any action when no task is given).
+function hasApproval(projectId, gate, session, now = Date.now(), opts = {}) {
+  const usable = usableYeses(projectId, gate, session, now, opts).find((y) => !opts.task || y.task === opts.task);
   if (usable && opts.out) opts.out.by = `gate:${usable.data.id}`;
   return !!usable;
 }
@@ -189,4 +195,4 @@ function history(projectId, limit = 30) {
   return [...rows.values(), ...missing].sort((a, b) => (a.ts < b.ts ? 1 : a.ts > b.ts ? -1 : 0)).slice(0, limit);
 }
 
-module.exports = { GATES, gateNames, ANSWER_WINDOW_MS, APPROVAL_MAX_AGE_MS, modeOf, currentSession, enforceOf, requiresUserTurn, userTurnVerdict, ask, answer, hasApproval, gateOf, history };
+module.exports = { GATES, gateNames, ANSWER_WINDOW_MS, APPROVAL_MAX_AGE_MS, modeOf, currentSession, enforceOf, requiresUserTurn, userTurnVerdict, ask, answer, hasApproval, usableYeses, gateOf, history };

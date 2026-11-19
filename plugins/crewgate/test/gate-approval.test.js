@@ -239,7 +239,8 @@ test('used up: a yes of one gate does not cover another, and a chained pair of p
   const f = fixture();
   H.approve(f, { gate: 'push' });
   assert.match(post(f, 'git merge feat/x', 'w1').json.hookSpecificOutput.additionalContext, /"merge" gate/);
-  assert.equal(post(f, 'git push a && git push b', 'w2').out, '{}');
+  // one yes covers one of the two pushes; the other one is reminded
+  assert.match(post(f, 'git push a && git push b', 'w2').json.hookSpecificOutput.additionalContext, /"push" gate/);
   assert.equal(events.read(f.pid, { types: 'git.push' }).filter((e) => e.data.approved_by).length, 1);
 });
 
@@ -276,8 +277,71 @@ test('crew task merge: quiet with a plan cover or an unused yes, and the yes is 
   const g = fixture();
   const t2 = taskAt(g, 'feat/s1');
   mergedTaskRepo(g);
-  const id = H.approve(g, { gate: 'merge' });
+  const id = approveFor(g, 'merge', t2.id); // a yes is tied to its task
   const r2 = run(g, ['task', 'merge', t2.id]);
   assert.doesNotMatch(r2.out, /gate is set to ask/);
   assert.equal(merges(g)[0].data.approved_by, `gate:${id}`);
+});
+
+// ---------------------------------------------------------------- round 2
+// A yes asked for `task` (or for none), answered by the user in this session.
+function approveFor(f, gate, task) {
+  const id = gates.ask(f.pid, {}, { gate, task }, { session: f.sid }).id;
+  H.prompt(f);
+  const sess = require('../lib/hooks/session');
+  const s = sess.read(f.sid);
+  gates.answer(f.pid, id, 'yes', 'ok', { session: f.sid, prompts: s && Array.isArray(s.prompt_ts) ? s.prompt_ts : [] });
+  return id;
+}
+
+test('session worktree: a merge in the own linked worktree of the session is gated; a detached HEAD or a throwaway branch is not', () => {
+  const f = fixture({ enforce: 'block' });
+  const wt = path.join(tmpDir('crew-sesswt-'), 'wt');
+  git(f.repo, 'worktree', 'add', '-q', '-b', 'harness/work', wt);
+  // throwaway: no commit of its own
+  assert.equal(pre(f, 'git merge feat/x', 'k1', { cwd: wt }).out, '{}');
+  // real work on the branch: the merge moves a branch that matters
+  fs.writeFileSync(path.join(wt, 'own.txt'), 'x');
+  git(wt, 'add', 'own.txt');
+  git(wt, 'commit', '-q', '-m', 'own work');
+  assert.equal(decision(pre(f, 'git merge feat/x', 'k2', { cwd: wt })), 'deny');
+  const r = post(f, 'git merge feat/x', 'k2', { cwd: wt });
+  assert.match(r.json.hookSpecificOutput.additionalContext, /"merge" gate/);
+  assert.equal(merges(f).length, 1);
+  // detached HEAD is ignored
+  const det = path.join(tmpDir('crew-detwt-'), 'wt');
+  git(f.repo, 'worktree', 'add', '-q', '--detach', det);
+  assert.equal(pre(f, 'git merge feat/x', 'k3', { cwd: det }).out, '{}');
+  assert.equal(post(f, 'git merge feat/x', 'k3', { cwd: det }).out, '{}');
+  assert.equal(merges(f).length, 1);
+});
+
+test('one yes per action: two pushes in one command with one yes leave the second missing, in both hooks', () => {
+  const f = fixture({ enforce: 'block' });
+  H.approve(f, { gate: 'push' });
+  assert.equal(decision(pre(f, 'git push a && git push b', 'x1')), 'deny');
+  assert.equal(pre(f, 'git push a', 'x2').out, '{}');
+  const g = fixture();
+  H.approve(g, { gate: 'push' });
+  assert.match(post(g, 'git push a && git push b', 'x3').json.hookSpecificOutput.additionalContext, /"push" gate/);
+  H.approve(g, { gate: 'push' });
+  H.approve(g, { gate: 'push' });
+  assert.equal(post(g, 'git push a && git push b', 'x4').out, '{}');
+  assert.equal(events.read(g.pid, { types: 'git.push' }).filter((e) => e.data.approved_by).length, 3);
+});
+
+test('a yes belongs to its task: a yes asked for another task does not cover a merge; its own task and a task-less action do', () => {
+  const f = fixture({ enforce: 'block' });
+  const t1 = taskAt(f, 'feat/t1', 'accepted');
+  const t2 = taskAt(f, 'feat/t2', 'accepted');
+  approveFor(f, 'merge', t2.id);
+  assert.equal(decision(pre(f, 'git merge feat/t1', 'y1')), 'deny');
+  assert.match(post(f, 'git merge feat/t1', 'y1').json.hookSpecificOutput.additionalContext, /"merge" gate/);
+  assert.equal(pre(f, 'git merge feat/t2', 'y2').out, '{}');
+  assert.equal(post(f, 'git merge feat/t2', 'y2').out, '{}');
+  assert.equal(merges(f).filter((e) => e.data.approved_by).length, 1);
+  // a yes with no task covers an action with no task
+  const g = fixture({ enforce: 'block' });
+  approveFor(g, 'merge');
+  assert.equal(pre(g, 'git merge feat/other', 'y3').out, '{}');
 });

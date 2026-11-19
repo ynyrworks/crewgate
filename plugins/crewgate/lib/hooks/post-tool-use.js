@@ -196,14 +196,17 @@ function onBash(payload) {
   });
   // What covers each gate is read before this command's own events are written: an event that carries approved_by uses a yes up.
   for (const g of byProject.values()) g.chk = G.check(g.h, G.wantedGates(g.found.filter((f) => !f.ignore && !f.cliRecorded)));
-  const claimed = new Set();
+  const nth = new Map();
   found.forEach((f, i) => {
     const g = owner.get(f);
     if (!g || f.ignore || f.cliRecorded) return;
     const gate = gates.gateOf(f);
-    const by = g.chk.by.get(gate);
-    const mine = by && (by.startsWith('plan:') || !claimed.has(`${g.h.pid}:${gate}`));
-    if (mine) claimed.add(`${g.h.pid}:${gate}`);
+    // one yes per action: the n-th action of a gate in this command takes the n-th cover the check found
+    const k0 = `${g.h.pid}:${gate}`;
+    const n = nth.get(k0) || 0;
+    nth.set(k0, n + 1);
+    const by = (g.chk.items.get(gate) || [])[n] || null;
+    const mine = !!by;
     const list = f.type === 'git.merge' ? mergeEvents(f, merges, found.filter((x) => x.type === 'git.merge').length) : [f.data];
     list.forEach((data, k) => {
       try {
