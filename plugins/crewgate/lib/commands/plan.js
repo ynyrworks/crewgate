@@ -32,7 +32,7 @@ const SPECS = {
   },
   link: { positionals: [{ name: 'slug' }, { name: 'node' }, { name: 'task' }], options: {} },
   set: { positionals: [{ name: 'slug' }, { name: 'node' }, { name: 'action', choices: ['open', 'done', 'dropped', 'accept'] }], options: {} },
-  part: { positionals: [{ name: 'slug' }, { name: 'part', choices: ['not-doing', 'done-when'] }, { name: 'text' }], options: { '--add': { dest: 'add', flag: true } } },
+  part: { positionals: [{ name: 'slug' }, { name: 'part', choices: ['not-doing', 'done-when'] }, { name: 'text', text: true }], options: { '--add': { dest: 'add', flag: true } } },
   finalize: { positionals: [{ name: 'slug' }], options: { '--gate': { dest: 'gate' }, '--quote': { dest: 'quote' } } },
   close: { positionals: [{ name: 'slug' }, { name: 'to', choices: ['done', 'parked'] }], options: { '--gate': { dest: 'gate' }, '--quote': { dest: 'quote' } } },
   reopen: { positionals: [{ name: 'slug' }], options: {} },

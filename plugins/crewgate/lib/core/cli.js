@@ -200,8 +200,21 @@ async function main(argv, io = { stdout: process.stdout, stderr: process.stderr 
       printHelp(ctx, true);
       return 0;
     }
+    // `crew help` and `crew help <group>` print what --help prints (unless a command group is named help)
+    if (group === 'help' && !loadGroup('help')) {
+      if (g.rest.length === 1) { printHelp(ctx); return 0; }
+      mod = loadGroup(g.rest[1]);
+      if (!mod) throw new UsageError('cli.unknownGroup', { group: g.rest[1] });
+      printGroupHelp(ctx, mod);
+      return 0;
+    }
     mod = loadGroup(group);
     if (!mod) throw new UsageError('cli.unknownGroup', { group });
+    // `crew <group> help` is `crew <group> --help`
+    if (g.rest.length === 2 && g.rest[1] === 'help') {
+      printGroupHelp(ctx, mod);
+      return 0;
+    }
     if (g.help || g.rest.length === 1 && mod.requiresAction !== false) {
       printGroupHelp(ctx, mod);
       return g.help ? 0 : 2;
