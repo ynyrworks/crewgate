@@ -191,6 +191,19 @@ test('review keep puts a dropped finding back among the kept ones; show names th
   assert.match(run(repo, 'review', 'show', t.id).out, /kept by the orchestrator: the trace/);
 });
 
+test('review keep after the refuter answered sets the old verdicts aside, so finalize asks for the refuter again', skip, () => {
+  const { repo, t } = filtered();
+  const dir = findingsDir(repo, t.id);
+  assert.equal(submitIn(repo, t, [{ id: 'f1', verdict: 'upheld', evidence: 'x' }], '--round', '1', '--kind', 'refutations').code, 0);
+  const k = run(repo, 'review', 'keep', t.id, 'f3', '--reason', 'the trace in src/x.js is real');
+  assert.equal(k.code, 0, k.err);
+  assert.match(k.out, /set aside/);
+  assert.equal(fs.existsSync(path.join(dir, '1.refutations.json')), false, 'the verdicts that do not cover f3 are not used');
+  assert.notEqual(run(repo, 'review', 'finalize', t.id).code, 0, 'finalize needs the refuter again');
+  assert.equal(submitIn(repo, t, [{ id: 'f1', verdict: 'upheld', evidence: 'x' }, { id: 'f3', verdict: 'upheld', evidence: 'y' }], '--round', '1', '--kind', 'refutations').code, 0);
+  assert.equal(run(repo, 'review', 'finalize', t.id).code, 0);
+});
+
 test('review keep refuses without a reason, for an unknown id, for an invalid entry and after the round is finalized', skip, () => {
   const { repo, t } = filtered();
   const noReason = run(repo, 'review', 'keep', t.id, 'f3');

@@ -289,8 +289,9 @@
   "wf.review.keepUnknown": "Finding {id} is not among the findings the filter dropped in round {round}.",
   "wf.review.keepInvalid": "Finding {id} was dropped as invalid ({detail}) and cannot be kept; ask the reviewer to file it again.",
   "wf.review.keptBack": "Finding {id} is back among the kept findings of round {round} (kept by the orchestrator: {reason}).",
+  "wf.review.keepRedo": "The refuter verdicts saved for round {round} do not cover it, so they were set aside ({file}); the refuter must judge the updated list again before finalize.",
   "wf.review.keepNext": "The refuter has not judged it yet: run crew review filter {id} --round {round} to get the refuter prompt for the updated list, then crew review finalize {id}.",
   "wf.review.keptByLine": "kept by the orchestrator: {reason}",
   "wf.review.scopeDefault": "No --scope given: used once (this round's finding only; pass --scope always to keep it dismissed for later tasks).",
-  "wf.task.acceptedDismissed": "Note: every kept finding of review round {round} was dismissed or judged ({dismissed} of {n} dismissed), so the round counts as decided without finalize."
+  "wf.task.acceptedDismissed": "Note: every kept finding of review round {round} was dismissed ({dismissed} of {n}), so the round counts as decided without finalize."
 }

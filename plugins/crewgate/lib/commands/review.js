@@ -285,8 +285,17 @@ function doKeep(ctx, a) {
   json.save(rv.roundFile(c.dir, round, 'filtered.json'), dropped);
   const keeps = readKeeps(c, round).filter((k) => k.id !== a.finding).concat({ id: a.finding, reason: item.keep_reason, at: new Date().toISOString() });
   json.save(rv.roundFile(c.dir, round, 'keeps.json'), keeps);
-  ctx.emit({ round, finding: item, kept_count: kept.length }, [
+  // Verdicts saved before this keep do not cover the finding: set them aside, so finalize asks for the refuter again.
+  const refFile = rv.roundFile(c.dir, round, 'refutations.json');
+  let redo = null;
+  if (fs.existsSync(refFile)) {
+    let covered = false;
+    try { covered = rv.readArray(refFile, 'refutations').some((r) => r && r.id === a.finding); } catch { /* unreadable: redo */ }
+    if (!covered) { redo = `${refFile}.stale`; fs.renameSync(refFile, redo); }
+  }
+  ctx.emit({ round, finding: item, kept_count: kept.length, refutations_set_aside: !!redo }, [
     ctx.t('wf.review.keptBack', { id: a.finding, round, reason: item.keep_reason }),
+    ...(redo ? [ctx.t('wf.review.keepRedo', { round, file: path.basename(redo) })] : []),
     ctx.t('wf.review.keepNext', { id: c.task.id, round }),
   ]);
 }

@@ -289,8 +289,9 @@
   "wf.review.keepUnknown": "第 {round} 輪被過濾掉的發現裡沒有 {id}。",
   "wf.review.keepInvalid": "發現 {id} 因格式無效（{detail}）被丟掉，不能救回；請審查者重新提出。",
   "wf.review.keptBack": "發現 {id} 已放回第 {round} 輪的保留清單（統籌保留：{reason}）。",
+  "wf.review.keepRedo": "第 {round} 輪已存的反駁裁決沒有涵蓋它，所以已移到一旁（{file}）；定案前反駁者必須重新判斷更新後的清單。",
   "wf.review.keepNext": "反駁者還沒判斷它：請執行 crew review filter {id} --round {round} 取得更新後清單的反駁提示，再執行 crew review finalize {id}。",
   "wf.review.keptByLine": "統籌保留：{reason}",
   "wf.review.scopeDefault": "沒給 --scope，已用 once（只駁回這一筆；要讓之後的任務也駁回請加 --scope always）。",
-  "wf.task.acceptedDismissed": "注意：審查第 {round} 輪保留的發現都已駁回或已有裁決（{n} 筆中駁回 {dismissed} 筆），這一輪視為已決定，不需要定案。"
+  "wf.task.acceptedDismissed": "注意：審查第 {round} 輪保留的發現都已駁回（{n} 筆中駁回 {dismissed} 筆），這一輪視為已決定，不需要定案。"
 }
