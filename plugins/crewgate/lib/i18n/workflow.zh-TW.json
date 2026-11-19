@@ -71,6 +71,7 @@
   "wf.task.scopeWhy.no-commits": "儲存庫 {repo} 裡的分支 {branch} 沒有超出基準的提交，或已合併而沒有記錄的基準",
   "wf.task.scopeWhy.git-diff": "在儲存庫 {repo} 對分支 {branch} 執行 git diff 失敗",
   "wf.task.scopeCheckFailed": "警告：無法從 git 讀取任務 {id} 改動的檔案（{reason}），所以沒有檢查範圍。",
+  "wf.task.scopeStale": "注意：任務 {id} 派工時記下的起點已不屬於分支 {branch}（被 rebase 或重設過），所以改用該分支與 HEAD/main/master 的關係來判斷範圍。",
   "wf.task.scopeWarn": "警告：任務 {id} 改了範圍之外的檔案（plan.enforce=remind）：{files}",
   "wf.task.acceptOutOfScopePlan": "任務 {id} 未被接受：它改了 --allow/--deny 範圍之外的檔案：{files}。它屬於計畫 {slug}：請先問使用者：執行 crew plan drift {slug} --kind out-of-scope --detail \"...\"（說明哪些檔案、為什麼），結束你的回合，使用者回覆後執行 crew plan drift {slug} --gate <gate id> --answer add|goal|new|drop|defer --text \"...\"，再重新接受。或退回任務：crew task send-back {id} --note \"...\"",
   "wf.task.acceptOutOfScope": "任務 {id} 未被接受：它改了 --allow/--deny 範圍之外的檔案：{files}。可以退回（crew task send-back {id} --note \"...\"），或放寬範圍後接受，這需要使用者回覆：crew task accept {id} --widen \"原因\" 會先詢問他。",

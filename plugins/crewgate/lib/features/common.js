@@ -70,13 +70,37 @@ function branchRange(root, branch) {
   return null;
 }
 
-// The commit a task's scope is judged from, for `crew task accept`. -> { base, branch } or { failed: code }.
-// Rule: the base is the closest of (a) the branch tips recorded when other tasks were accepted, if that tip is an ancestor of this
-// branch tip, and (b) the merge-base with HEAD/main/master; for a branch already merged, the merge-base of the first parent of the
-// merge commit that took it in. A branch with no commit beyond its base gives base = tip (nothing changed).
+// The commit a task's scope is judged from, for `crew task accept`. -> { base, branch } or { failed: code }; stale: true when a stored base was dropped.
+// Rule: the base stored at dispatch (scopeBase), when it is an ancestor of the branch tip. Without one (or when the branch was rebased
+// or reset past it) the 0.25 guess: the closest of the branch tips recorded at other accepts that are ancestors of the tip, and the
+// merge-base with HEAD/main/master (for a merged branch, of the first parent of the merge that took it in).
 // Codes: 'no-branch' (not in this repository), 'no-base' (no common history with HEAD/main/master), 'no-commits' (nothing beyond
 // the base, or fast-forwarded in with no recorded base: nothing to tell the task's own commits apart).
-function scopeRange(root, branch, recordedTips = []) {
+function scopeRange(root, branch, recordedTips = [], scopeBase = '') {
+  if (!branch || !BRANCH_RE.test(branch)) return { failed: 'no-branch' };
+  const has = /^[0-9a-f]{7,64}$/.test(scopeBase || '');
+  if (has) {
+    const tip = git(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], root);
+    if (!tip) return { failed: 'no-branch' };
+    const tipSha = tip.trim();
+    if (git(['merge-base', '--is-ancestor', scopeBase, tipSha], root) !== null) {
+      // The stored base is the floor; a recorded accept tip between it and the branch tip is closer.
+      let best = scopeBase;
+      let bestN = Number((git(['rev-list', '--count', scopeBase], root) || '').trim());
+      for (const t of recordedTips) {
+        if (!/^[0-9a-f]{7,64}$/.test(t || '')) continue;
+        if (git(['merge-base', '--is-ancestor', scopeBase, t], root) === null || git(['merge-base', '--is-ancestor', t, tipSha], root) === null) continue;
+        const n = Number((git(['rev-list', '--count', t], root) || '').trim());
+        if (Number.isFinite(n) && n > bestN) { best = t; bestN = n; }
+      }
+      return { base: best, branch };
+    }
+    return { ...guessRange(root, branch, recordedTips), stale: true };
+  }
+  return guessRange(root, branch, recordedTips);
+}
+
+function guessRange(root, branch, recordedTips) {
   if (!branch || !BRANCH_RE.test(branch)) return { failed: 'no-branch' };
   const tip = git(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], root);
   if (!tip) return { failed: 'no-branch' };

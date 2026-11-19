@@ -222,3 +222,14 @@ test('parseFinal: plain, fenced and wrapped JSON; wrong shapes are rejected', ()
   assert.equal(codexrun.parseFinal(JSON.stringify([good])), null);
   assert.equal(codexrun.parseFinal(''), null);
 });
+
+test('run: scope_base is the worktree branch tip at the first run and unchanged by a second run', () => {
+  const s = setup();
+  const tasks = require('../lib/core/tasks');
+  assert.equal(s.run('invalid').code, 1);
+  const tip = gitOut(s.wt, 'rev-parse', 'HEAD');
+  assert.equal(tasks.load(s.pid, s.task.id).scope_base, tip);
+  assert.equal(s.run('ok').code, 0);
+  assert.notEqual(gitOut(s.wt, 'rev-parse', 'HEAD'), tip, 'the second run committed');
+  assert.equal(tasks.load(s.pid, s.task.id).scope_base, tip);
+});

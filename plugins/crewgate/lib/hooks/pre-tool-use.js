@@ -120,6 +120,7 @@ function onAgent(payload) {
         src: 'hook', session: h.sid,
         data: { ...typeFields(C.agentTypeOf(ti)), model, background: bg, tool_use_id: C.snippet(tuid, 80) || null, via: 'pre-tool-use', ...eng },
       });
+      tasks.recordScopeBase(h.pid, id, h.root);
     } else if (task.state === 'dispatched' && !sess.byToolUse(h.pid, key)) {
       // Already dispatched through the CLI (send-back): record this launch.
       events.append(h.pid, {
