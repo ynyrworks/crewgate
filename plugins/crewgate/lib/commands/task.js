@@ -107,7 +107,7 @@ function findingsSummary(taskDir) {
 // { kind: 'unfinalized', round, n } when the latest round has findings that never went through
 // the refuter and `review finalize`, { kind: 'not_re_reviewed', round } when the task was sent back after
 // its last finalized round (same rule as `crew release record`), { kind: 'dismissed', round, n, dismissed } when every kept finding of the
-// latest round was dismissed (or judged by the refuter, with at least one dismissed), or null when nothing is missing.
+// latest round was dismissed , or null when nothing is missing.
 // `rule`: review.enforce is not off. Only then does a round with no findings that was never finalized count as no review (the rule check needs it);
 // with the rule off the gap is what it was before the rule existed.
 function reviewGap(taskDir, projectId, taskId, rule = true) {
@@ -126,17 +126,15 @@ function reviewGap(taskDir, projectId, taskId, rule = true) {
   return finalized ? notReReviewed(taskDir, finalized, projectId, taskId) : (rule ? { kind: 'none' } : null);
 }
 
-// Every kept finding of the round is dismissed, or has a refuter verdict while at least one is dismissed -> { kind: 'dismissed', ... } or null.
+// Every kept finding of the round is dismissed -> { kind: 'dismissed', ... } or null.
 function closedByDismissals(taskDir, projectId, taskId, round) {
   let kept = [];
   try { kept = review.readArray(review.roundFile(taskDir, round, 'kept.json'), 'findings'); } catch { return null; }
   if (!kept.length) return null;
   const gone = new Set(events.read(projectId)
     .filter((e) => e.type === 'review.finding_dismissed' && e.task === taskId && e.data && e.data.round === round).map((e) => e.data.finding));
-  let judged = new Set();
-  try { judged = new Set(review.readArray(review.roundFile(taskDir, round, 'refutations.json'), 'refutations').map((r) => r && r.id)); } catch { /* none */ }
   const dismissed = kept.filter((f) => gone.has(f.id)).length;
-  if (!dismissed || !kept.every((f) => gone.has(f.id) || judged.has(f.id))) return null;
+  if (!dismissed || dismissed !== kept.length) return null;
   return { kind: 'dismissed', round, n: kept.length, dismissed };
 }
 

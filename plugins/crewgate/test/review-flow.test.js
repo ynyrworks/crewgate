@@ -242,9 +242,20 @@ test('accept still refuses when one kept finding is neither dismissed nor judged
   const r = acceptJson(repo, t.id);
   assert.equal(r.code, 1);
   assert.match(r.err, /2 finding\(s\) that did not go through the refuter/);
-  // judged by the refuter (not finalized) and the other dismissed: decided
+  // judged by the refuter (not finalized) and the other dismissed: still needs finalize
   assert.equal(submitIn(repo, t, [{ id: 'f3', verdict: 'refuted', evidence: 'src/x.js:1 handled' }], '--round', '1', '--kind', 'refutations').code, 0);
+  assert.equal(acceptJson(repo, t.id).code, 1, 'a kept finding that is not dismissed means the round needs finalize');
+  assert.equal(run(repo, 'review', 'finalize', t.id).code, 0);
   assert.equal(acceptJson(repo, t.id).code, 0);
+});
+
+test('accept refuses a round with one dismissed finding and one refuter-upheld major', skip, () => {
+  const { repo, t } = filtered();
+  assert.equal(run(repo, 'review', 'keep', t.id, 'f3', '--reason', 'real').code, 0);
+  assert.equal(run(repo, 'review', 'dismiss', t.id, 'f1', '--reason', 'fine here').code, 0);
+  assert.equal(submitIn(repo, t, [{ id: 'f3', verdict: 'upheld', evidence: 'src/x.js:1 real' }], '--round', '1', '--kind', 'refutations').code, 0);
+  const r = acceptJson(repo, t.id);
+  assert.equal(r.code, 1, 'an upheld finding must not pass silently');
 });
 
 test('a dismissal of an earlier round does not close the latest round', skip, () => {
