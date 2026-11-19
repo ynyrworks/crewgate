@@ -304,6 +304,19 @@ crew plan show 0-14
   <img alt="辦公室：工作階段化為像素風角色坐在辦公桌前" src="images/office-light-zh-TW.png" width="100%">
 </picture>
 
+## 比較改動前後的使用情形
+
+`scripts/collect-usage-data.js` 會複製一台機器的 Crewgate 資料，讓兩次蒐集（改動前後，或兩台機器）可以比較。要量測的改動前先跑一次，使用一陣子後再跑一次。它只讀取，不改動任何東西。
+
+```
+node scripts/collect-usage-data.js [--out DIR] [--since 2026-10-01] [--no-transcripts]
+node scripts/collect-usage-data.js --stats [--json] [FOLDER...]
+```
+
+- **蒐集什麼：** 資料夾的 `projects/`、`projects.json`、`config.json`（不含 `accounts.json`、`sessions`、`cache`、`bin`）；每個已登記專案的 `.crew/plans`、`.crew/LESSONS.md`、`.claude/crew.json`；以及提到 Crewgate 的 Claude Code 對話紀錄。對話紀錄含完整對話文字：複製前會先印出這點和總大小，`--no-transcripts` 可略過。
+- **比較兩次：** `--stats` 只從資料算出計畫要比的數字（因 `no_user_turn` 被拒的回答、各關卡的 `gate.missing`、合併關卡問了多少次與 yes/no、偏離詢問與各類回答、沒有定稿審查輪就被驗收或退回後沒有後續輪就被驗收的任務、教訓、計畫），分機器並加總。`--stats FOLDER...` 讀先前蒐集的資料夾（壓縮檔先解開），所以兩台機器的蒐集可以在同一台上比較。第一次蒐集的例子：合併關卡問 275 次、yes 259 次；`no_user_turn` 拒絕 34 次；`gate.missing` 78 次；450 個已驗收任務中 175 個沒有審查輪。
+- **輸出不可提交：** `.gitignore` 已有 `crewgate-data-*`，且除非給 `--out`，腳本不會寫進 git 工作樹內。
+
 ## 隱私與安全
 
 - **只在本機。** 看板只綁定 `127.0.0.1`，會拒絕不符的 `Host` 標頭，不送 CORS 標頭，所有寫入都要帶每次啟動產生的
