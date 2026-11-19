@@ -21,6 +21,10 @@ What running this work costs the user's machine: what will run, how many process
 "Light: tests only" is a normal answer. A load or stress test must state its process count (at most
 half the CPU cores) and a time limit, and every process must end by itself. Review compares this
 section with what the diff really does.
+Visible to the user: nothing
+(required line; `crew task create` warns without it. Write `nothing`, or list what the run shows on the user's screen:
+windows, notifications, sound, a reboot or shutdown prompt, changes to real drivers, services, registry or system settings.
+Tests and checks must use fakes for all of these.)
 
 # Acceptance
 How "done" is checked, as commands and observable results:
@@ -38,7 +42,8 @@ related earlier task `t-...`. Decisions already made and why.
 - State the boundary as a list of paths. Vague scope is the main cause of regressions outside it.
 - Put acceptance in commands the worker can run. "Works well" is not acceptance.
 - Name the tests that must keep passing under "Must not regress".
-- Say what the work costs the machine under "Machine impact"; a load test needs a count and a time limit.
+- Say what the work costs the machine under "Machine impact"; a load test needs a count and a time limit. Always add the `Visible to the user:` line.
+- An investigation brief (`--role investigate`) uses the same sections: Goal is the question to answer; Scope is what may be read and what may be run (no edits to project files, no commits); Acceptance is a report with the root cause or the answer, the evidence (file:line, command and output), what was ruled out and how, and what stays unknown.
 - Point to line ranges instead of pasting code; the worker reads the files itself.
 - Examples in a brief use documentation addresses only (192.0.2.x) and no real hostnames or secrets.
 - One task, one reviewable change. If the brief needs "and also", make two tasks.
@@ -59,6 +64,7 @@ If the store format must change, stop and report; do not migrate data.
 
 # Machine impact
 Light: tests only, one full `npm test`; no load test.
+Visible to the user: nothing
 
 # Acceptance
 - `npm test` passes with new tests for `--done` (some done, none done, empty store)
@@ -73,9 +79,7 @@ src/commands/list.js:12-40 builds the output. The store returns items with a `do
 `crew task create` prints a ready prompt. It contains, in this order: the `crew-task: <id>` marker
 line (hooks use it to link the subagent to the task), a `crew-cli:` line (how the worker calls
 `crew`), the task title, the brief path, the worktree and branch, allowed/forbidden paths, the
-no-push/no-network reminder and the report instructions with the language and size cap. Pass it to
-the Agent tool unchanged. When re-dispatching after a send-back, append your note:
-
-```
-Send-back note (round 2): <what to fix, with file:line>. Fix only this, re-run the checks, report again.
-```
+no-push/no-network and no-`git stash` reminder and the report instructions with the language and size cap. Pass it to
+the Agent tool unchanged, as a new Agent call. `crew task show <id> --prompt` prints it again at any time. `crew task send-back`
+prints the complete prompt for the re-dispatch: the same prompt followed by `Send-back round <n> of <max>: <your note>`. Never
+write a dispatch prompt by hand.

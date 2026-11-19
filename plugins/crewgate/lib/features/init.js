@@ -11,13 +11,17 @@ const common = require('./common');
 const { detectChecks } = require('./stack');
 
 const TEMPLATES = path.join(common.PLUGIN_ROOT, 'templates');
-const AGENTS = ['crew-worker', 'crew-reviewer', 'crew-refuter'];
-const ROLE_OF = { 'crew-worker': 'worker', 'crew-reviewer': 'reviewer', 'crew-refuter': 'refuter' };
+const AGENTS = ['crew-worker', 'crew-reviewer', 'crew-refuter', 'crew-investigator'];
+const ROLE_OF = { 'crew-worker': 'worker', 'crew-reviewer': 'reviewer', 'crew-refuter': 'refuter', 'crew-investigator': 'investigate' };
 
 const LANGUAGE_NAME = { en: 'English', 'zh-TW': 'Traditional Chinese (繁體中文)' };
 const HEADINGS = {
   en: ['Branch & commits', 'What changed and why', 'Tests run', 'Assumptions & unfinished', 'Needs real-environment check'],
   'zh-TW': ['分支與提交', '改了什麼與原因', '測試', '假設與未完成', '需要實機確認'],
+};
+const INVESTIGATE_HEADINGS = {
+  en: ['Answer', 'Evidence', 'Ruled out', 'Still unknown'],
+  'zh-TW': ['結論', '證據', '排除項目', '仍不明之處'],
 };
 
 function template(rel) { return fs.readFileSync(path.join(TEMPLATES, rel), 'utf8'); }
@@ -52,6 +56,7 @@ function renderAgent(name, cfg) {
     language_name: LANGUAGE_NAME[lang],
     report_max_tokens: cfg.limits.report_max_tokens,
     report_headings: HEADINGS[lang].map((h) => `## ${h}`).join('\n'),
+    investigate_headings: INVESTIGATE_HEADINGS[lang].map((h) => `## ${h}`).join('\n'),
     categories: cfg.review.categories.join(', '),
     min_confidence: cfg.review.min_confidence,
   });
