@@ -110,16 +110,6 @@ function scopedLines(sc) {
   ];
 }
 
-// The reviewer and refuter prompts live in features/review.js: the tool rules go in before the save line, the refusal fallback after it,
-// and the final-message line becomes the "otherwise" case.
-function withToolRules(text) {
-  return text.split('\n').flatMap((line) => {
-    if (line.startsWith('Save ')) return [...pr.TOOL_RULES, line, pr.SAVE_FALLBACK];
-    if (line.startsWith('Your final message must only')) return [`Otherwise your${line.slice('Your'.length)}`];
-    return [line];
-  }).join('\n');
-}
-
 function externalPrompt(c, round, sc) {
   const range = common.branchRange(c.proj.path, c.task.branch);
   if (!range) throw new CrewError('wf.review.noDiff', { id: c.task.id });
@@ -224,10 +214,10 @@ function doRun(ctx, a) {
     fallback = res.fallback;
   }
   const role = c.cfg.roles.reviewer || {};
-  const prompt = [withToolRules(rv.reviewerInstructions({
+  const prompt = [rv.reviewerInstructions({
     task: c.task, briefPath: path.join(c.dir, 'brief.md'), reviewPath: path.join(c.wt, '.crew', 'REVIEW.md'),
     diffCmd: sc ? diffCommand(c, sc.from) : diffCommand(c), categories: c.cfg.review.categories, round, rawPath, cli: common.cliCommand(),
-  })), ...(sc ? scopedLines(sc) : [])].join('\n');
+  }), ...(sc ? scopedLines(sc) : [])].join('\n');
   // the verdicts of a scoped round come back inside the submitted JSON: `review submit` needs the earlier ids to tell them from findings
   const scopeFile = rv.roundFile(c.dir, round, 'scope.json');
   if (sc) json.save(scopeFile, { prev_round: sc.prevRound, from: sc.from, ids: sc.findings.map((f) => f.id) });
@@ -265,7 +255,7 @@ function doSubmit(ctx, a) {
   if (split) json.save(vPath, split.verdicts);
   ctx.emit({ round, kind: a.kind, count: items.length, file, ...(split ? { verdicts: split.verdicts, verdicts_path: vPath } : {}) }, [
     ctx.t('wf.review.submitted', { n: items.length, kind: a.kind, round }),
-    ...(split ? [ctx.t('wf.review.verdictsSaved', { name: 'reviewer', n: split.verdicts.length, path: vPath }), ...split.verdicts.map((v) => ctx.t('wf.review.verdictLine', v))] : []),
+    ...(split ? [ctx.t('wf.review.verdictsSavedClaude', { name: 'reviewer', n: split.verdicts.length, path: vPath }), ...split.verdicts.map((v) => ctx.t('wf.review.verdictLine', v))] : []),
   ]);
 }
 
@@ -355,10 +345,10 @@ function doFilter(ctx, a) {
       fallback = eng.onFail(c.proj.id, c.cfg, { role: 'refuter', name: engine, fail: res.fail, round, scope: 'task', task: c.task.id });
       L.push(ctx.t('wf.review.engineFallback', { name: fallback.engine, reason: fallback.reason }));
     }
-    const prompt = withToolRules(rv.refuterInstructions({
+    const prompt = rv.refuterInstructions({
       task: c.task, briefPath: path.join(c.dir, 'brief.md'), reviewPath: path.join(c.wt, '.crew', 'REVIEW.md'),
       diffCmd: diffCommand(c), keptPath, round, cli: common.cliCommand(),
-    }));
+    });
     L.push(ctx.t('wf.review.refuteNext', { agent: role.agent || 'crew-refuter', model: role.model || 'sonnet' }), '--- prompt ---', prompt, '--- end ---');
     const refuter = { subagent_type: role.agent || 'crew-refuter', model: role.model || 'sonnet', prompt, kept_path: keptPath };
     if (fallback) refuter.fallback = fallback;
@@ -377,7 +367,11 @@ function doFinalize(ctx, a) {
   let refs = [];
   if (kept.length) {
     const file = a.refFile || rv.roundFile(c.dir, round, 'refutations.json');
-    if (!a.refFile && !fs.existsSync(file)) throw new CrewError('wf.review.noRefutations', { round, n: kept.length, id: c.task.id });
+    if (!a.refFile && !fs.existsSync(file)) {
+      // exit 2 as before the review-flow change, but only the one-line message: the usage text would bury the missing command
+      ctx.err(`${ctx.t('cli.errorPrefix')}${ctx.t('wf.review.noRefutations', { round, n: kept.length, id: c.task.id })}`);
+      return 2;
+    }
     refs = rv.readArray(file, 'refutations').map(rv.sanitizeRefutation);
   }
   const { findings, dropped, problems } = rv.applyRefutations(kept, refs);
@@ -516,8 +510,8 @@ function run(argv, ctx) {
   const sub = argv[0];
   if (!Object.prototype.hasOwnProperty.call(SPECS, sub)) throw new UsageError('wf.review.usage');
   const a = parse(argv.slice(1), SPECS[sub]);
-  ({ run: doRun, submit: doSubmit, filter: doFilter, finalize: doFinalize, show: doShow, keep: doKeep, dismiss: doDismiss, followup: doFollowup })[sub](ctx, a);
-  return 0;
+  const code = ({ run: doRun, submit: doSubmit, filter: doFilter, finalize: doFinalize, show: doShow, keep: doKeep, dismiss: doDismiss, followup: doFollowup })[sub](ctx, a);
+  return code === 2 ? 2 : 0;
 }
 
 module.exports = {

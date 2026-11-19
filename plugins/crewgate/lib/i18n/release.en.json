@@ -21,6 +21,7 @@
   "release.stale": "NOT RE-REVIEWED: the task was returned again after the last finalized review round (round {round}); its last changes were not re-reviewed.",
   "release.readNote": "Read by the orchestrator instead of a review (--read-by-orchestrator): {note}",
   "release.counts": "(raw {raw}, kept {kept}, upheld {upheld}, refuted {refuted}, uncertain {uncertain}, dismissed {dismissed})",
+  "release.keptByOrchestrator": "(of the kept ones, {n} put back by the orchestrator with `crew review keep`)",
   "release.roundHead": "Round {round}: {n} finding(s) survived.",
   "release.roundZero": "Round {round}: 0 findings survived.",
   "release.roundOpen": "Round {round}: not finalized.",

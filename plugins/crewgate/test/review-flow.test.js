@@ -68,6 +68,20 @@ test('the printed reviewer and refuter prompts of a task review carry the tool r
   assert.ok(filter.refuter.prompt.indexOf('piping it to') < filter.refuter.prompt.indexOf('If saving is refused'));
 });
 
+test('the prompt builders add the tool rules and the save fallback themselves (no line matching in the command)', () => {
+  const rv = require('../lib/features/review');
+  const pr = require('../lib/core/plan-review');
+  const task = { id: 't-1' };
+  const base = { task, briefPath: 'b', reviewPath: 'r', diffCmd: 'git -C x diff', keptPath: 'k', categories: ['correctness'], round: 1, rawPath: 'raw', cli: 'crew' };
+  const texts = [
+    rv.reviewerInstructions(base), rv.refuterInstructions(base),
+    pr.reviewerPrompt({ slug: 's', round: 1, packetPath: 'p', rawPath: 'raw', scope: null, max: 4, cli: 'crew' }),
+    pr.refuterPrompt({ slug: 's', round: 1, packetPath: 'p', keptPath: 'k', cli: 'crew' }),
+  ];
+  texts.forEach((t, i) => { hasRules(t, `builder ${i}`); for (const re of SAVE) assert.match(t, re); });
+  assert.deepEqual(pr.TOOL_RULES, rv.TOOL_RULES);
+});
+
 test('the printed reviewer and refuter prompts of a plan review carry the tool rules and the save fallback', skip, () => {
   const repo = u.initRepo();
   const planFile = path.join(repo, '.crew', 'plans', 'demo.md');
@@ -246,7 +260,7 @@ test('a dismissal of an earlier round does not close the latest round', skip, ()
 test('finalize with no refutations says in one line which command is missing', skip, () => {
   const { repo, t } = filtered();
   const r = run(repo, 'review', 'finalize', t.id);
-  assert.notEqual(r.code, 0);
+  assert.equal(r.code, 2, 'a missing step is a usage error, as before the review-flow change');
   assert.equal(r.err.split('\n').length, 1);
   assert.match(r.err, new RegExp(`crew review submit ${t.id} --round 1 --kind refutations`));
 });
@@ -290,6 +304,9 @@ test('--since-last-round with the Claude reviewer: one prompt, verdicts saved fr
   const dir = findingsDir(repo, t.id);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, '2.raw.json'), 'utf8')).map((f) => f.id), ['f2']);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, '2.verdicts.json'), 'utf8')).map((v) => v.id), ['f1']);
+  const again = run(repo, 'review', 'submit', t.id, '--round', '2', '--file', u.writeFile(h.tmpDir(), 's2.json', JSON.stringify([{ id: 'f1', verdict: 'not addressed', evidence: 'src/x.js:1 still wrong' }])));
+  assert.match(again.out, /Reviewer reviewer gave a verdict on 1 earlier finding/);
+  assert.ok(!/Engine/.test(again.out), 'the Claude path does not say engine');
   assert.match(run(repo, 'review', 'submit', t.id, '--round', '2', '--file', path.join(h.tmpDir(), 'none.json')).err, /./, 'a missing file is still an error');
   run(repo, 'review', 'filter', t.id);
   const show = run(repo, 'review', 'show', t.id, '--round', '2');

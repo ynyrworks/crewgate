@@ -80,13 +80,7 @@ const SCHEMA_TEXT = [
   'Report only what matters; return [] when the plan is fine.',
 ].join('\n');
 
-// What every reviewer and refuter prompt says about tools: the first command of recorded runs was held for approval (a compound `cat a; cat b`).
-const TOOL_RULES = [
-  'Open the listed files with the Read tool, not with cat, head or type.',
-  'Run one command per Bash call: no ;, && or pipes between commands that read different files.',
-  'Call git with -C <path> (git -C <path> diff ...) instead of changing directory first.',
-];
-const SAVE_FALLBACK = 'If saving is refused, end with the JSON array as the whole final message and nothing else; the orchestrator saves it with --file or --json.';
+const { TOOL_RULES, SAVE_FALLBACK } = rv;
 
 function reviewerPrompt({ slug, round, packetPath, rawPath, scope, max, cli }) {
   return [

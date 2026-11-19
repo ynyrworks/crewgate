@@ -282,6 +282,7 @@
   "wf.review.sinceFallback": "--since-last-round：之前沒有任何一輪記錄過分支頂端，所以這一輪審查完整差異。",
   "wf.review.verdictLine": "  先前的發現 {id}：{verdict}  {evidence}",
   "wf.review.verdictsSaved": "引擎 {name} 對 {n} 筆先前的發現給了裁決，已存成 {path}",
+  "wf.review.verdictsSavedClaude": "審查者 {name} 對 {n} 筆先前的發現給了裁決，已存成 {path}",
   "wf.review.keepReapplied": "依你用 review keep 的決定，再次保留：{ids}",
   "wf.review.noRefutations": "第 {round} 輪有 {n} 筆保留的發現，但還沒有反駁結果。請先跑反駁者，再用這個指令存下它的裁決：crew review submit {id} --round {round} --kind refutations（或給 --refutations-file）。",
   "wf.review.keepFinalized": "第 {round} 輪已經定案；keep 只能用在最新、尚未定案的一輪。",

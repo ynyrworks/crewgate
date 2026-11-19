@@ -303,6 +303,15 @@ const SCHEMA_TEXT = [
   'Report only problems backed by file:line evidence. Return [] when there is nothing worth reporting.',
 ].join('\n');
 
+// What every reviewer and refuter prompt says about tools and about saving, shared by the task and plan prompts: the first command of
+// recorded runs was held for approval (a compound `cat a; cat b`), and a refused save lost the findings.
+const TOOL_RULES = [
+  'Open the listed files with the Read tool, not with cat, head or type.',
+  'Run one command per Bash call: no ;, && or pipes between commands that read different files.',
+  'Call git with -C <path> (git -C <path> diff ...) instead of changing directory first.',
+];
+const SAVE_FALLBACK = 'If saving is refused, end with the JSON array as the whole final message and nothing else; the orchestrator saves it with --file or --json.';
+
 function reviewerInstructions({ task, briefPath, reviewPath, diffCmd, categories, round, rawPath, cli }) {
   return [
     `crew-task: ${task.id}`,
@@ -312,8 +321,10 @@ function reviewerInstructions({ task, briefPath, reviewPath, diffCmd, categories
     `Allowed categories: ${categories.join(', ')}.`,
     'If the brief has a "Machine impact" section, read it and report as machine-impact any work whose real cost differs from what it states (many processes, no time limit, something left running, a window opened, a changed process priority). A brief without that section has nothing to compare.',
     SCHEMA_TEXT,
+    ...TOOL_RULES,
     `Save the array by piping it to: ${cli} review submit ${task.id} --round ${round}  (JSON on stdin; it is stored as ${rawPath}).`,
-    'Your final message must only say how many findings you saved.',
+    SAVE_FALLBACK,
+    'Otherwise your final message must only say how many findings you saved.',
   ].join('\n');
 }
 
@@ -325,13 +336,15 @@ function refuterInstructions({ task, briefPath, reviewPath, diffCmd, keptPath, r
     'Try to DISPROVE each finding using only those sources: is the claim false, already handled elsewhere in the diff, out of scope, or covered by the rules?',
     'Output a JSON array with one element per finding: { "id": "<finding id>", "verdict": "upheld|refuted|uncertain", "evidence": "file:line and one sentence" }.',
     'Use "refuted" only with concrete evidence; use "uncertain" when you cannot decide.',
+    ...TOOL_RULES,
     `Save it by piping it to: ${cli} review submit ${task.id} --round ${round} --kind refutations  (JSON on stdin).`,
-    'Your final message must only say how many verdicts you saved.',
+    SAVE_FALLBACK,
+    'Otherwise your final message must only say how many verdicts you saved.',
   ].join('\n');
 }
 
 module.exports = {
   SEVERITIES, VERIFIED_BY, VERDICTS, MAX_DIFF_BYTES, findingsDir, latestRound, roundFile, readArray,
   validateFinding, normSnippet, fingerprint, fingerprintOf, snippetDigest, sanitizeFinding, sanitizeFindings, sanitizeRefutation, ledgerFile, readLedger, appendLedger, snippetPresent,
-  SCHEMA_TEXT, matchLedger, filterFindings, applyRefutations, extractJsonArray, reviewerInstructions, refuterInstructions,
+  SCHEMA_TEXT, TOOL_RULES, SAVE_FALLBACK, matchLedger, filterFindings, applyRefutations, extractJsonArray, reviewerInstructions, refuterInstructions,
 };

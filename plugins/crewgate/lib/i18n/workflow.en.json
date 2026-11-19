@@ -282,6 +282,7 @@
   "wf.review.sinceFallback": "--since-last-round: no earlier round has a recorded branch tip, so this round reviews the full diff.",
   "wf.review.verdictLine": "  Earlier finding {id}: {verdict}  {evidence}",
   "wf.review.verdictsSaved": "Engine {name} gave a verdict on {n} earlier finding(s), stored as {path}",
+  "wf.review.verdictsSavedClaude": "Reviewer {name} gave a verdict on {n} earlier finding(s), stored as {path}",
   "wf.review.keepReapplied": "Kept again, as you decided with review keep: {ids}",
   "wf.review.noRefutations": "Round {round} has {n} kept finding(s) and no refutations yet. Run the refuter, then save its verdicts with: crew review submit {id} --round {round} --kind refutations (or pass --refutations-file).",
   "wf.review.keepFinalized": "Round {round} is already finalized; keep only works on the latest round that is not finalized.",

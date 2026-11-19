@@ -109,6 +109,7 @@ function describeRound(dir, round) {
     finalized: final !== null,
     raw: raw ? raw.length : 0,
     kept: kept ? kept.length : 0,
+    kept_by_orchestrator: (kept || []).filter((f) => f && f.kept_by === 'orchestrator').length,
     ...verdicts,
     dismissed: filtered.filter((d) => d && d.reason === 'dismissed').length,
     findings: (final || []).map((f) => ({
@@ -240,7 +241,8 @@ function renderTask(L, tr, k) {
   else if (k.review.kind === 'stale') L.push(`- **${tr('release.stale', { round: k.review.round })}**`);
   if (k.review.read_note) L.push(`- ${tr('release.readNote', { note: one(k.review.read_note, 300) })}`);
   for (const r of k.rounds) {
-    const counts = tr('release.counts', { raw: r.raw, kept: r.kept, upheld: r.upheld, refuted: r.refuted, uncertain: r.uncertain, dismissed: r.dismissed });
+    const counts = tr('release.counts', { raw: r.raw, kept: r.kept, upheld: r.upheld, refuted: r.refuted, uncertain: r.uncertain, dismissed: r.dismissed })
+      + (r.kept_by_orchestrator ? ` ${tr('release.keptByOrchestrator', { n: r.kept_by_orchestrator })}` : '');
     if (!r.finalized) { L.push(`- ${tr('release.roundOpen', { round: r.round })} ${counts}`); continue; }
     L.push(`- ${tr(r.findings.length ? 'release.roundHead' : 'release.roundZero', { round: r.round, n: r.findings.length })} ${counts}`);
     for (const f of r.findings) {
