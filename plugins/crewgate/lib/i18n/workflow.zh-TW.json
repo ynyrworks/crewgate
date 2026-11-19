@@ -270,6 +270,9 @@
   "wf.task.rule.tailRead": "請自己讀過之後，用 --read-by-orchestrator \"<讀了什麼>\" 接受。",
   "wf.task.rule.tailFix": "請執行 crew review run {id} --since-last-round，再執行 crew review filter 並定案。",
   "wf.task.rule.tailNone": "請執行 crew review run {id}，再執行 crew review filter 並定案。",
+  "wf.task.rule.tailFull": "第 {round} 輪開始時沒有記錄分支頂端（該輪早於此版本），所以無法計算修正的大小。請做一輪一般的完整差異審查：執行 crew review run {id}，再執行 crew review filter 並定案。",
   "wf.task.rule.recorded": "已記錄：統籌自己讀過（{lines} 行）：{note}",
-  "wf.review.noPrevTip": "任務 {id} 之前沒有記錄過分支頂端的審查輪次，--since-last-round 無法判斷改了什麼。請不加此選項執行 crew review run，做完整差異的一輪。"
+  "wf.review.sinceFallback": "--since-last-round：之前沒有任何一輪記錄過分支頂端，所以這一輪審查完整差異。",
+  "wf.review.verdictLine": "  先前的發現 {id}：{verdict}  {evidence}",
+  "wf.review.verdictsSaved": "引擎 {name} 對 {n} 筆先前的發現給了裁決，已存成 {path}"
 }

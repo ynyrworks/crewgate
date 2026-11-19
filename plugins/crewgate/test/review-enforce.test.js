@@ -213,11 +213,66 @@ test('review run records the branch tip, and --since-last-round diffs from it an
   assert.ok(!JSON.parse(full.out).prompt.includes('not addressed'), 'the default round is still the full diff');
 });
 
-test('--since-last-round with no earlier round that has a recorded tip is refused', skip, () => {
+const findingsDir = (repo, id) => path.join(require('../lib/core/paths').taskDir(project.findByCwd(repo).id, id), 'findings');
+
+test('--since-last-round with no earlier round that has a recorded tip falls back to the full diff, with one line saying why', skip, () => {
   const { repo, t } = setup();
-  const r = run(repo, 'review', 'run', t.id, '--since-last-round');
+  const text = h.crew(['--lang', 'en', 'review', 'run', t.id, '--since-last-round', '--round', '1'], repo).out;
+  assert.equal(text.split('\n').filter((l) => /no earlier round has a recorded branch tip/.test(l)).length, 1);
+  const r = h.crew(['--lang', 'en', '--json', 'review', 'run', t.id, '--since-last-round', '--round', '1'], repo);
+  assert.equal(r.code, 0, r.err);
+  const d = JSON.parse(r.out);
+  assert.equal(d.scope_note, 'full_diff');
+  assert.ok(!d.prompt.includes('not addressed'), 'no scoped lines');
+  assert.match(d.prompt, /diff \S+ feat\/x/);
+});
+
+test('fix after a send-back, last round has no recorded tip: the refusal says to run a normal full-diff round, and that round works', skip, () => {
+  const { repo, t } = sentBackAfterReview({ 'src/x.js': 'a\nb\nc\nd\n' });
+  fs.unlinkSync(path.join(findingsDir(repo, t.id), '1.tip.json'));
+  const r = accept(repo, t.id, '--read-by-orchestrator', NOTE);
   assert.notEqual(r.code, 0);
-  assert.match(r.err, /no earlier review round with a recorded branch tip/);
+  assert.match(r.err, /No branch tip was recorded for review round 1/);
+  assert.match(r.err, /crew review run \S+, then/);
+  assert.ok(!r.err.includes('--since-last-round'), 'it does not point to the dead end');
+  const scoped = h.crew(['--lang', 'en', '--json', 'review', 'run', t.id, '--since-last-round'], repo);
+  assert.equal(scoped.code, 0, scoped.err);
+  finalizeRound(repo, t);
+  assert.equal(accept(repo, t.id).code, 0);
+});
+
+test('--since-last-round with an external engine: verdicts come back inside the JSON, stored and printed apart from new findings', skip, () => {
+  const { repo, t } = setup();
+  run(repo, 'review', 'run', t.id);
+  u.crewIn(['review', 'submit', t.id, '--round', '1'], repo, JSON.stringify([u.finding('f1', { file: 'src/x.js', line: 1, snippet: 'a' })]));
+  run(repo, 'review', 'filter', t.id);
+  commit(repo, { 'src/x.js': 'a\nb\nc\nd\n' }, 'fix');
+  const scratch = h.tmpDir();
+  const payload = u.writeFile(scratch, 'out.json', JSON.stringify([
+    { id: 'f1', verdict: 'not addressed', evidence: 'src/x.js:1 still wrong' },
+    u.finding('f2', { file: 'src/x.js', line: 4, snippet: 'd' }),
+  ]));
+  const script = u.writeFile(scratch, 'fake.js', [
+    "const fs = require('fs'); let i = '';",
+    "process.stdin.on('data', (d) => { i += d; });",
+    "process.stdin.on('end', () => { fs.writeFileSync(process.argv[3], i); console.log('```json\\n' + fs.readFileSync(process.argv[2], 'utf8') + '\\n```'); });",
+  ].join('\n'));
+  const promptFile = path.join(scratch, 'prompt.txt');
+  fs.mkdirSync(path.dirname(require('../lib/core/paths').configFile()), { recursive: true });
+  fs.writeFileSync(require('../lib/core/paths').configFile(), JSON.stringify({ version: 1, engines: { fake: { command: process.execPath, args: [script, payload, promptFile] } } }));
+  const r = h.crew(['--lang', 'en', '--json', 'review', 'run', t.id, '--since-last-round', '--engine', 'fake'], repo);
+  assert.equal(r.code, 0, r.err);
+  const d = JSON.parse(r.out);
+  assert.equal(d.count, 1, 'only the new finding is a finding');
+  assert.deepEqual(d.verdicts, [{ id: 'f1', verdict: 'not addressed', evidence: 'src/x.js:1 still wrong' }]);
+  const dir = findingsDir(repo, t.id);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, '2.raw.json'), 'utf8')).map((f) => f.id), ['f2']);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, '2.verdicts.json'), 'utf8')).map((v) => v.id), ['f1']);
+  const prompt = fs.readFileSync(promptFile, 'utf8');
+  assert.match(prompt, /"verdict": "addressed\|not addressed"/);
+  assert.ok(!prompt.includes('one line each'), 'the engine prompt does not ask for text verdict lines');
+  const text = h.crew(['--lang', 'en', 'review', 'run', t.id, '--since-last-round', '--engine', 'fake', '--round', '2'], repo).out;
+  assert.match(text, /Earlier finding f1: not addressed/);
 });
 
 // ---------------------------------------------------------------- 6. release record

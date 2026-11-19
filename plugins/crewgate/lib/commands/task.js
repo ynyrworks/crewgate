@@ -128,10 +128,12 @@ function reviewRule(proj, cfg, task, taskDir, gap, readBy) {
   }
   let counted = null;
   let docs = false;
+  let tipUnknown = false;
   if (gap.kind === 'not_re_reviewed') {
     const tip = (json.readJson(review.roundFile(taskDir, gap.round, 'tip.json'), {}).data || {}).tip;
     const now = common.branchTip(proj.path, task.branch);
-    if (/^[0-9a-f]{7,64}$/.test(tip || '') && now) counted = common.changedLines(proj.path, tip, now);
+    tipUnknown = !/^[0-9a-f]{7,64}$/.test(tip || '');
+    if (!tipUnknown && now) counted = common.changedLines(proj.path, tip, now);
   } else {
     const tips = tasks.list(proj.id, { state: 'accepted' }).concat(tasks.list(proj.id, { state: 'merged' })).filter((t) => t.id !== task.id && t.scope_tip).map((t) => t.scope_tip);
     const r = common.scopeRange(proj.path, task.branch, tips, task.scope_base || '');
@@ -148,7 +150,7 @@ function reviewRule(proj, cfg, task, taskDir, gap, readBy) {
     return { met: true, data: { review_rule: { applied, ...base, note } } };
   }
   const size = lines === null ? 'wf.task.rule.sizeUnknown' : docs ? 'wf.task.rule.docsOnly' : 'wf.task.rule.size';
-  const tail = small || docs ? 'wf.task.rule.tailRead' : kind === 'fix' ? 'wf.task.rule.tailFix' : 'wf.task.rule.tailNone';
+  const tail = small || docs ? 'wf.task.rule.tailRead' : kind === 'fix' && tipUnknown ? 'wf.task.rule.tailFull' : kind === 'fix' ? 'wf.task.rule.tailFix' : 'wf.task.rule.tailNone';
   return { met: false, data: { review_rule: { applied: 'none', ...base } }, unmet: { what: kind === 'fix' ? 'wf.task.rule.whatFix' : 'wf.task.rule.whatNone', size, tail, round: gap.round, lines, files: base.files, max } };
 }
 
@@ -474,8 +476,8 @@ function run(argv, ctx) {
         const u = rule.unmet;
         const text = [
           ctx.t(cfg.review.enforce === 'block' ? 'wf.task.rule.refused' : 'wf.task.rule.warned', { id: a.id, mode: cfg.review.enforce, what: ctx.t(u.what, { round: u.round }) }),
-          ctx.t(u.size, { lines: u.lines, files: u.files, max: u.max }),
-          ctx.t(u.tail, { id: a.id }),
+          ...(u.tail === 'wf.task.rule.tailFull' ? [] : [ctx.t(u.size, { lines: u.lines, files: u.files, max: u.max })]),
+          ctx.t(u.tail, { id: a.id, round: u.round }),
         ].join(' ');
         if (cfg.review.enforce === 'block') throw new CrewError('wf.task.ruleUnmet', { text });
         ruleLine = text;

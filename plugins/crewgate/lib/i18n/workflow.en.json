@@ -270,6 +270,9 @@
   "wf.task.rule.tailRead": "Read it yourself, then accept with --read-by-orchestrator \"<what was read>\".",
   "wf.task.rule.tailFix": "Run crew review run {id} --since-last-round, then crew review filter and finalize.",
   "wf.task.rule.tailNone": "Run crew review run {id}, then crew review filter and finalize.",
+  "wf.task.rule.tailFull": "No branch tip was recorded for review round {round} (it started before this version), so the size of the fix cannot be counted. Run a normal full-diff round: crew review run {id}, then crew review filter and finalize.",
   "wf.task.rule.recorded": "Recorded: read by the orchestrator ({lines} line(s)): {note}",
-  "wf.review.noPrevTip": "Task {id} has no earlier review round with a recorded branch tip, so --since-last-round cannot say what changed. Run crew review run without it for a full-diff round."
+  "wf.review.sinceFallback": "--since-last-round: no earlier round has a recorded branch tip, so this round reviews the full diff.",
+  "wf.review.verdictLine": "  Earlier finding {id}: {verdict}  {evidence}",
+  "wf.review.verdictsSaved": "Engine {name} gave a verdict on {n} earlier finding(s), stored as {path}"
 }

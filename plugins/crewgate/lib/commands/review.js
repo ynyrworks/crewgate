@@ -80,7 +80,8 @@ function recordTip(c, round) {
   if (tip) json.save(rv.roundFile(c.dir, round, 'tip.json'), { tip, at: new Date().toISOString() });
 }
 
-// For --since-last-round: the previous round that has a recorded tip, and its findings. -> { from, prevRound, findings }
+// For --since-last-round: the previous round that has a recorded tip, and its findings. -> { from, prevRound, findings },
+// or null when no earlier round has a recorded tip (rounds started before tips were recorded): the round then reviews the full diff.
 function scopedSince(c, round) {
   for (let r = round - 1; r >= 1; r--) {
     const tip = String(json.readJson(rv.roundFile(c.dir, r, 'tip.json'), {}).data.tip || '');
@@ -91,19 +92,22 @@ function scopedSince(c, round) {
     }
     return { from: tip, prevRound: r, findings };
   }
-  throw new CrewError('wf.review.noPrevTip', { id: c.task.id });
+  return null;
 }
 
 // Extra reviewer text for a scoped round: a verdict per earlier finding, new problems only in the fix diff.
-function scopedLines(sc) {
+// `asJson`: the engine path, where the whole reply is one JSON array; the verdicts then travel inside it.
+function scopedLines(sc, asJson) {
   const list = sc.findings.map((f) => `- ${f.id} [${f.severity}] ${f.file}:${f.line}  ${clean(f.claim || '', 200)}`);
   return [
     `This is a scoped re-review. The diff is only what changed since round ${sc.prevRound} started (from commit ${sc.from}), not the whole task.`,
-    `For each finding of round ${sc.prevRound} listed below, give a verdict "addressed" or "not addressed" (one line each: <id>: addressed|not addressed, with file:line evidence).`,
+    asJson
+      ? `For each finding of round ${sc.prevRound} listed below, add one entry to the JSON array: { "id": "<earlier finding id>", "verdict": "addressed|not addressed", "evidence": "file:line" }. These verdict entries are not new findings and carry no other fields; new findings keep the schema above and have no "verdict" field.`
+      : `For each finding of round ${sc.prevRound} listed below, give a verdict "addressed" or "not addressed" (one line each: <id>: addressed|not addressed, with file:line evidence).`,
     'Report new problems found in the fix diff only; do not repeat the findings below as new ones and do not review code the fix did not touch.',
     `Findings of round ${sc.prevRound}:`,
     ...(list.length ? list : ['- (none)']),
-    'Put the verdicts in your final message, one line per finding, after saying how many new findings you saved.',
+    ...(asJson ? [] : ['Put the verdicts in your final message, one line per finding, after saying how many new findings you saved.']),
   ];
 }
 
@@ -125,7 +129,7 @@ function externalPrompt(c, round, sc) {
     `Allowed categories: ${c.cfg.review.categories.join(', ')}.`,
     rv.SCHEMA_TEXT,
     'Reply with the JSON array only.',
-    ...(sc ? scopedLines(sc).slice(0, -1) : []),
+    ...(sc ? scopedLines(sc, true) : []),
     '', '## Brief', f, brief.trim(), f,
     '', '## Review rules', f, rules.trim(), f,
     '', '## Diff', f, diff.trimEnd(), f, note,
@@ -167,9 +171,16 @@ function runEngine(c, name, round, sc) {
   if (res.fail) {
     return { fallback: eng.onFail(c.proj.id, c.cfg, { role: 'reviewer', name, fail: res.fail, round, scope: 'task', task: c.task.id }) };
   }
-  const safe = rv.sanitizeFindings(res.list, true);
+  // with --since-last-round the array holds verdict entries for earlier findings next to the new findings: keep them apart
+  const ids = new Set(sc ? sc.findings.map((f) => f.id) : []);
+  const isVerdict = (e) => !!e && typeof e === 'object' && ids.has(e.id) && /^(not addressed|addressed)$/i.test(String(e.verdict || '').trim());
+  const verdicts = res.list.filter(isVerdict).map((e) => ({
+    id: clean(String(e.id), 40), verdict: /^not/i.test(String(e.verdict).trim()) ? 'not addressed' : 'addressed', evidence: clean(String(e.evidence || ''), 300),
+  }));
+  const safe = rv.sanitizeFindings(res.list.filter((e) => !isVerdict(e)), true);
   json.save(rv.roundFile(c.dir, round, 'raw.json'), safe);
-  return { list: safe };
+  if (sc) json.save(rv.roundFile(c.dir, round, 'verdicts.json'), verdicts);
+  return { list: safe, verdicts: sc ? verdicts : null };
 }
 
 function doRun(ctx, a) {
@@ -179,14 +190,18 @@ function doRun(ctx, a) {
   if (engine !== 'claude') eng.check(engine);
   const round = nextRound(c, a);
   const sc = a.sinceLast ? scopedSince(c, round) : null;
+  const sinceNote = a.sinceLast && !sc ? ctx.t('wf.review.sinceFallback') : '';
   recordTip(c, round);
   const rawPath = rv.roundFile(c.dir, round, 'raw.json');
   let fallback = null;
   if (engine !== 'claude') {
     const res = runEngine(c, engine, round, sc);
     if (res.list) {
-      ctx.emit({ engine, round, raw_path: rawPath, count: res.list.length }, [
+      const vPath = rv.roundFile(c.dir, round, 'verdicts.json');
+      ctx.emit({ engine, round, raw_path: rawPath, count: res.list.length, ...(res.verdicts ? { verdicts: res.verdicts, verdicts_path: vPath } : {}), ...(sinceNote ? { scope_note: 'full_diff' } : {}) }, [
+        ...(sinceNote ? [sinceNote] : []),
         ctx.t('wf.review.engineDone', { name: engine, n: res.list.length, path: rawPath }),
+        ...(res.verdicts ? [ctx.t('wf.review.verdictsSaved', { name: engine, n: res.verdicts.length, path: vPath }), ...res.verdicts.map((v) => ctx.t('wf.review.verdictLine', v))] : []),
         ctx.t('wf.review.thenFilter', { id: c.task.id }),
       ]);
       return;
@@ -200,7 +215,9 @@ function doRun(ctx, a) {
   }), ...(sc ? scopedLines(sc) : [])].join('\n');
   const data = { engine, round, raw_path: rawPath, subagent_type: role.agent || 'crew-reviewer', model: role.model || 'sonnet', prompt };
   if (fallback) data.fallback = fallback;
+  if (sinceNote) data.scope_note = 'full_diff';
   ctx.emit(data, [
+    ...(sinceNote ? [sinceNote] : []),
     ...(fallback ? [ctx.t('wf.review.engineFallback', { name: fallback.engine, reason: fallback.reason })] : []),
     ctx.t('wf.review.dispatch', { agent: data.subagent_type, model: data.model, round }),
     ctx.t('wf.review.rawAt', { path: rawPath }),
