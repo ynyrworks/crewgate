@@ -85,13 +85,24 @@ test('plan skill: exists, under its limit, trigger phrases and commands', () => 
   for (const c of ['plan new', 'plan part', 'plan add', 'plan clarify', 'plan finalize', '--gate', 'plan adopt', '--by assumed', 'plan.interview', 'plan.review', 'plan.enforce', 'Not doing'.toLowerCase()]) {
     assert.ok(text.toLowerCase().includes(c.toLowerCase()), c);
   }
-  for (const c of ['(assumed)', '(user)', 'Never change it without their answer', 'No CLI command does this', '`ask`', '`off`', 'ask the user']) {
+  for (const c of ['(assumed)', '(user)', 'No second reply, no hand edit', 'lists each `(assumed)` line', '`ask`', '`off`', 'ask the user']) {
     assert.ok(text.replace(/\s+/g, ' ').toLowerCase().includes(c.toLowerCase()), c);
   }
   // fixes from the plan skill test report
-  for (const c of ['--add', '--by decision', 'two replies are needed', 'In every case', 'Only when the user or the task says', 'if unsure, ask', 'One decision per question', 'If they asked only for a plan', 'start it', 'Without Crewgate, just do it', 'ask the user about a plan review']) {
+  for (const c of ['--add', '--by decision', 'That one yes approves the plan and confirms the assumptions', 'In every case', 'Only when the user or the task says', 'if unsure, ask', 'One decision per question', 'If they asked only for a plan', 'start it', 'Without Crewgate, just do it', 'ask the user about a plan review']) {
     assert.ok(text.replace(/\s+/g, ' ').includes(c), c);
   }
+  // the interview as a decision tree, plain chat text, the builder read-through and the new CLI behaviour
+  for (const c of ['the frontier', 'Stop only when the frontier is empty', 'There is no cap', 'Do not use a question widget or picker', 'Builder read-through', 'Facts are your job', 'end the interview at any time', '--quote "<their words>"', 'do not ask "shall I start"', '`gates.plan_covers_merge`', 'closes it with no gate']) {
+    assert.ok(text.replace(/\s+/g, ' ').includes(c), c);
+  }
+  for (const m of text.matchAll(/`references\/([\w.-]+\.md)`/g)) {
+    if (m[1] === 'review-pipeline.md') continue; // the crew skill's file
+    assert.ok(fs.existsSync(path.join(ROOT, 'skills', 'plan', 'references', m[1])), m[1]);
+  }
+  assert.ok(read('skills', 'plan', 'references', 'questions.md').includes('Recommended:'));
+  assert.ok(read('skills', 'plan', 'references', 'read-through.md').includes('--by decision'));
+  for (const c of ['5 questions', 'Do not ask for comfort']) assert.ok(!text.replace(/\s+/g, ' ').includes(c), `gone: ${c}`);
   assert.ok(read('skills', 'crew', 'references', 'commands.md').includes('[--add]'));
 });
 
@@ -105,9 +116,9 @@ test('skills: small fix via crew, one decision per question, plan.review ask is 
   assert.ok(!plan.includes('outside one, just do it'));
   const sec4 = plan.slice(plan.indexOf('## 4. Finalizing'), plan.indexOf('## 5. Settings'));
   assert.ok(sec4.includes('if `plan.review` is `ask` and the size is medium or large, ask the user about a plan review'));
-  assert.ok(sec4.includes('one decision per question'), 'section 4');
+  assert.ok(sec4.includes('one question as in section 2'), 'section 4');
   const drift = plan.slice(plan.indexOf('## When work drifts'), plan.indexOf('## 6.'));
-  assert.ok(drift.includes('one decision per question'), 'drift');
+  assert.ok(drift.includes('one question as in section 2'), 'drift');
   assert.ok(!crew.includes('(about 3 steps or more) run a **plan review**'));
   assert.ok(crew.includes('Follow `plan.review`'));
   assert.ok(crew.includes('a small fix the user asks for is still a crew task, even in those files'));
