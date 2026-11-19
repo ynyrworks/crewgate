@@ -83,14 +83,20 @@ function emptyCounts() {
   };
 }
 
-// When a finalized round (N.json) was finalized: the "review round N" event when there is one; else, for a collected folder, the time
+// Whether a finalized round (N.json) was finalized after the last send-back (at index sentIdx in taskEvs, time sentTs) -> true, false,
+// or null when unknown. With the round's finalize event (review.finalized, written by crew review finalize, or the older
+// "review round N" task.reviewed) the order of the event log decides, as in crew task accept. Without one: for a collected folder, the time
 // recorded in its summary.json at collection (rec); else, for live data only (rec null), the file's time. A copy's file times say nothing,
 // so for a collected folder with neither an event nor a record the time is unknown (null).
-function finalizedAt(taskEvs, round, file, rec, key) {
-  const hit = taskEvs.filter((e) => e.type === 'task.reviewed' && dataOf(e).note === `review round ${round}`);
-  if (hit.length) return Date.parse(hit[hit.length - 1].ts);
-  if (rec) { const t = Date.parse(rec[key]); return Number.isNaN(t) ? null : t; }
-  try { return fs.statSync(file).mtimeMs; } catch { return null; }
+function finalizedAfter(taskEvs, round, sentIdx, sentTs, file, rec, key) {
+  for (let i = taskEvs.length - 1; i >= 0; i--) {
+    const e = taskEvs[i];
+    const d = dataOf(e);
+    if ((e.type === 'review.finalized' && Number(d.round) === round) || (e.type === 'task.reviewed' && d.note === `review round ${round}`)) return i > sentIdx;
+  }
+  let t = null;
+  if (rec) { t = Date.parse(rec[key]); if (Number.isNaN(t)) t = null; } else { try { t = fs.statSync(file).mtimeMs; } catch { t = null; } }
+  return t === null ? null : t > sentTs;
 }
 
 function countProject(c, projectDir, rec) {
@@ -120,7 +126,7 @@ function countProject(c, projectDir, rec) {
       case 'plan.closed': c.plans.closed++; break;
       default: break;
     }
-    if (e.task && typeof e.task === 'string' && e.type.startsWith('task.')) {
+    if (e.task && typeof e.task === 'string' && (e.type.startsWith('task.') || e.type === 'review.finalized')) {
       if (!byTask.has(e.task)) byTask.set(e.task, []);
       byTask.get(e.task).push(e);
     }
@@ -132,12 +138,12 @@ function countProject(c, projectDir, rec) {
     let rounds = [];
     try { rounds = fs.readdirSync(findings).map((n) => /^(\d+)\.json$/.exec(n)).filter(Boolean).map((m) => Number(m[1])); } catch { /* none */ }
     if (!rounds.length) { c.tasks_accepted_no_review_round++; }
-    const sent = tevs.filter((e) => e.type === 'task.sent_back').map((e) => Date.parse(e.ts)).filter((n) => !Number.isNaN(n));
-    if (sent.length) {
-      const last = Math.max(...sent);
-      const times = rounds.map((r) => finalizedAt(tevs, r, path.join(findings, `${r}.json`), rec, `${path.basename(projectDir)}/${id}/${r}`));
-      if (times.some((t) => t !== null && t > last)) continue;
-      if (times.some((t) => t === null)) c.tasks_accepted_send_back_unknown++;
+    const sentIdx = tevs.map((e, i) => (e.type === 'task.sent_back' && !Number.isNaN(Date.parse(e.ts)) ? i : -1)).filter((i) => i >= 0);
+    if (sentIdx.length) {
+      const last = Math.max(...sentIdx.map((i) => Date.parse(tevs[i].ts)));
+      const after = rounds.map((r) => finalizedAfter(tevs, r, sentIdx[sentIdx.length - 1], last, path.join(findings, `${r}.json`), rec, `${path.basename(projectDir)}/${id}/${r}`));
+      if (after.some((a) => a === true)) continue;
+      if (after.some((a) => a === null)) c.tasks_accepted_send_back_unknown++;
       else c.tasks_accepted_after_send_back_no_later_round++;
     }
   }

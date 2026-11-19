@@ -24,8 +24,7 @@ const reviewed = (f, args) => {
   const i = args[0] === 'task' ? args.indexOf('accept') : -1;
   if (i < 0 || !args[i + 1]) return;
   const dir = path.join(require('../lib/core/paths').taskDir(f.pid, args[i + 1]), 'findings');
-  fs.mkdirSync(dir, { recursive: true });
-  for (const name of ['1.raw.json', '1.json']) if (!fs.existsSync(path.join(dir, name))) fs.writeFileSync(path.join(dir, name), '[]');
+  if (!fs.existsSync(path.join(dir, '1.json'))) h.finalizedRound(f.pid, args[i + 1]);
 };
 const run = (f, args) => { reviewed(f, args); return crew(args, f.repo, f.env); };
 const evs = (f, ...t) => events.read(f.pid, { types: t });

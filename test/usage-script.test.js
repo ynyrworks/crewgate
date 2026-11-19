@@ -193,3 +193,24 @@ test('--stats on a collected folder uses the recorded round times, not the copy 
   assert.equal(u.tasks_accepted_send_back_unknown, 2);
   assert.match(run(['--stats', out], { cwd }).out, /round time unknown[^\n]*\s2\b/);
 });
+
+// Rounds finalized by crew review finalize carry a review.finalized event: its place in the log decides, not the file time.
+test('--stats: the review.finalized event decides whether a round came after the send-back, whatever the file time says', () => {
+  const stats = (lines, mtime) => {
+    const home = tmp('ug-home-');
+    const pdir = path.join(home, 'projects', 'p1');
+    fs.mkdirSync(path.join(pdir, 'tasks', 't7', 'findings'), { recursive: true });
+    fs.writeFileSync(path.join(pdir, 'events.jsonl'), `${lines.join('\n')}\n`);
+    const f = path.join(pdir, 'tasks', 't7', 'findings', '1.json');
+    fs.writeFileSync(f, '[]');
+    fs.utimesSync(f, new Date(T(mtime)), new Date(T(mtime)));
+    return JSON.parse(run(['--stats', '--json'], { env: { CREWGATE_HOME: home }, cwd: tmp('ug-cwd-') }).out).total;
+  };
+  // finalized after the send-back (same millisecond, later in the log), file time before it: a later round
+  const after = stats([ev('task.sent_back', { ts: T('02') }, 't7'), ev('review.finalized', { ts: T('02'), round: 1 }, 't7'), ev('task.accepted', { ts: T('03') }, 't7')], '01');
+  assert.equal(after.tasks_accepted_after_send_back_no_later_round, 0);
+  assert.equal(after.tasks_accepted_send_back_unknown, 0);
+  // finalized before the send-back, file time after it: no later round
+  const before = stats([ev('review.finalized', { ts: T('01'), round: 1 }, 't7'), ev('task.sent_back', { ts: T('02') }, 't7'), ev('task.accepted', { ts: T('03') }, 't7')], '05');
+  assert.equal(before.tasks_accepted_after_send_back_no_later_round, 1);
+});

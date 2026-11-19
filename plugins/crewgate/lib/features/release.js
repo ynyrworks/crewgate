@@ -118,17 +118,15 @@ function describeRound(dir, round) {
   };
 }
 
-// When a round was finalized: the "review round N" event when there is one, else the file's modification time.
-function finalizedAt(dir, round, taskEvs) {
-  const hit = taskEvs.filter((e) => e.type === 'task.reviewed' && e.data && e.data.note === `review round ${round}`);
-  if (hit.length) return Date.parse(lastOf(hit).ts);
-  try { return fs.statSync(rv.roundFile(dir, round, 'json')).mtimeMs; } catch { return 0; }
-}
-
-// The rule behind the "not re-reviewed" flag, shared with `crew task accept`: the task was sent back after
-// the given finalized round was finalized.
+// The rule behind the "not re-reviewed" flag, shared with `crew task accept`: the task returned (task.returned) after the given
+// finalized round was finalized. The finalize is the round's review.finalized event (or the older "review round N" event) and
+// "after" is its place in the event log, so no two clocks are compared. A round with neither event (written before them) falls
+// back to the round file's modification time against the return's timestamp.
 function returnedAfterRound(dir, round, taskEvs) {
-  const at = finalizedAt(dir, round, taskEvs);
+  const i = rv.finalizedIndex(taskEvs, round);
+  if (i >= 0) return taskEvs.slice(i + 1).some((e) => e.type === 'task.returned');
+  let at = 0;
+  try { at = fs.statSync(rv.roundFile(dir, round, 'json')).mtimeMs; } catch { /* no file: any return counts */ }
   return taskEvs.some((e) => e.type === 'task.returned' && Date.parse(e.ts) > at);
 }
 

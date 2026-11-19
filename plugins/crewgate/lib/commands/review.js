@@ -384,7 +384,7 @@ function doFinalize(ctx, a) {
     refs = rv.readArray(file, 'refutations').map(rv.sanitizeRefutation);
   }
   const { findings, dropped, problems } = rv.applyRefutations(kept, refs);
-  json.save(rv.roundFile(c.dir, round, 'json'), findings);
+  rv.saveFinalized(c.proj.id, c.task.id, c.dir, round, findings);
   let prior = [];
   try { prior = rv.readArray(rv.roundFile(c.dir, round, 'filtered.json'), 'filtered'); } catch { /* none yet */ }
   json.save(rv.roundFile(c.dir, round, 'filtered.json'), prior.filter((d) => d.reason !== 'refuted').concat(dropped));

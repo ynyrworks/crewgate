@@ -207,7 +207,7 @@ test('merge is refused when the merge gate is never; events are recorded', () =>
   const events = require('../lib/core/events');
   const project = require('../lib/core/project');
   const types = events.read(project.findByCwd(repo).id).filter((e) => e.task === t.id).map((e) => e.type);
-  assert.deepEqual(types, ['task.created', 'task.dispatched', 'task.returned', 'task.reviewed', 'task.accepted', 'task.merged']);
+  assert.deepEqual(types, ['task.created', 'task.dispatched', 'task.returned', 'review.finalized', 'task.reviewed', 'task.accepted', 'task.merged']);
 });
 
 test('accept warns about blocker/major findings that are still listed', () => {
@@ -215,12 +215,8 @@ test('accept warns about blocker/major findings that are still listed', () => {
   const t = u.createTask(repo);
   run(repo, 'task', 'report', t.id, '--report-file', u.reportFiles().report);
   const project = require('../lib/core/project');
-  const paths = require('../lib/core/paths');
-  const dir = path.join(paths.taskDir(project.findByCwd(repo).id, t.id), 'findings');
-  fs.mkdirSync(dir, { recursive: true });
-  const list = JSON.stringify([u.finding('f1'), u.finding('f2', { severity: 'nit', category: 'nit' })]);
-  fs.writeFileSync(path.join(dir, '1.raw.json'), list);   // a finalized round: the review rule is met
-  fs.writeFileSync(path.join(dir, '1.json'), list);
+  const list = [u.finding('f1'), u.finding('f2', { severity: 'nit', category: 'nit' })];
+  h.finalizedRound(project.findByCwd(repo).id, t.id, list);   // a finalized round: the review rule is met
   const show = run(repo, 'task', 'show', t.id);
   assert.match(show.out, /Findings, round 1: 2/);
   const r = u.crewJson(['task', 'accept', t.id], repo);
