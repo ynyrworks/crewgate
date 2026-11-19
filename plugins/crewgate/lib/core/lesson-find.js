@@ -24,7 +24,7 @@ function find(entries, retired, { words = [], globs = [], limit = 5 } = {}) {
 // Words in the text that look like a file: contain a slash, or end in .ext.
 function fileNames(text) {
   const out = [];
-  for (const raw of String(text).split(/[\s,;()[\]"'`<>]+/)) {
+  for (const raw of String(text).split(/[\s,;()[\]"'`<>‘-‟　-〿぀-ヿ㐀-䶿一-鿿＀-￯]+/)) {
     const t = raw.replace(/^\.\//, '').replace(/[.:]+$/, '');
     if (t && (t.includes('/') || /\.[A-Za-z0-9]{1,8}$/.test(t))) out.push(t.replace(/[\\]/g, '/'));
   }

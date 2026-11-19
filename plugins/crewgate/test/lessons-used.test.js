@@ -52,6 +52,14 @@ test('find: --paths matches a file named in the lesson text', () => {
   assert.deepEqual(find(repo, '--paths', 'docs/*.txt').data, []);
 });
 
+test('find: --paths finds a path stuck to CJK characters or full-width punctuation', () => {
+  const repo = u.initRepo();
+  add(repo, 'zh-gates', D(1), '修改 lib/core/gates.js，要先跑測試');
+  add(repo, 'zh-hooks', D(2), '在plugins/crewgate/hooks/hooks.json裡設定');
+  assert.deepEqual(find(repo, '--paths', 'lib/core/**').data.map((x) => x.key), ['zh-gates']);
+  assert.deepEqual(find(repo, '--paths', 'plugins/**/hooks.json').data.map((x) => x.key), ['zh-hooks']);
+});
+
 test('suggest: mechanical candidates carry a hint, judgement ones do not', () => {
   const repo = u.initRepo();
   for (const d of [1, 2, 3]) {
