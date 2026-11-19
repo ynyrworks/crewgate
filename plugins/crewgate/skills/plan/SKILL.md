@@ -34,7 +34,8 @@ Skip this section when `plan.interview` is `off` (still write the plan) or the s
 - **Ask in rounds.** A round asks every question whose prerequisites are settled (the frontier), then waits.
   Recompute the frontier from the answers; a question that depends on an open one waits for a later round.
 - **Stop only when the frontier is empty**: every branch visited, nothing silently assumed. There is no cap.
-- **Facts are your job.** Look up what code, docs, config or tools can answer, without blocking the round.
+- **Facts are your job.** Look up what code, docs, config or tools can answer: look it up yourself or send a read-only subagent, and ask the rest of the frontier meanwhile;
+  only the questions that depend on that fact wait.
   A domain question the user cannot answer goes to research (`references/questions.md`), never back to them.
 - The user can end the interview at any time by saying so: record each open decision `--by assumed` (below).
 - **Format**: number each question, give it a short bold title, then the question, then on its own line the
