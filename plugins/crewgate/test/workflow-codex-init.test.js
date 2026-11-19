@@ -20,6 +20,7 @@ test('init --engine codex renders reviewer/refuter agents and a new AGENTS.md; n
   const by = Object.fromEntries(r.data.files.map((f) => [f.file, f.action]));
   assert.equal(by['.codex/agents/crew-reviewer.toml'], 'created');
   assert.equal(by['.codex/agents/crew-refuter.toml'], 'created');
+  assert.equal(by['.codex/agents/crew-investigator.toml'], 'created');
   assert.equal(by['AGENTS.md'], 'created');
   assert.ok(!fs.existsSync(path.join(repo, '.codex', 'agents', 'crew-worker.toml')));
   const toml = read(repo, '.codex/agents/crew-reviewer.toml');

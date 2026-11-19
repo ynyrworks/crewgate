@@ -1,6 +1,6 @@
 'use strict';
 
-// Codex side of `crew init --engine codex` (experimental): custom agents for the read-only roles in
+// Codex side of `crew init --engine codex` (experimental): custom agents for the read-only roles (reviewer, refuter, investigator) in
 // .codex/agents/*.toml, rendered from the same templates as the Claude copies, and a marked pointer
 // block in AGENTS.md. Never clobbers: existing agent files are kept (unless --force, then backed up)
 // and only the text between the markers of AGENTS.md is ever replaced. The worker role has no Codex
@@ -12,7 +12,7 @@ const json = require('../core/json');
 const init = require('./init');
 const common = require('./common');
 
-const CODEX_AGENTS = ['crew-reviewer', 'crew-refuter'];
+const CODEX_AGENTS = ['crew-reviewer', 'crew-refuter', 'crew-investigator'];
 const BEGIN = '<!-- crewgate:begin -->';
 const END = '<!-- crewgate:end -->';
 

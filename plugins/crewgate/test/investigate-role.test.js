@@ -183,3 +183,16 @@ test('doctor reports a missing investigator copy as a warning, not a failure', (
   assert.match(row, /crew-investigator\.md/);
   assert.ok(r.code === 0 || r.code === 1, `doctor exit ${r.code}`);
 });
+
+test('task show --prompt prints the full send-back note, as send-back did (note over 500 characters)', () => {
+  const repo = u.initRepo();
+  const t = create(repo).data.task;
+  assert.equal(run(repo, 'task', 'report', t.id, '--report-file', u.reportFiles().report).code, 0);
+  const note = `${'long note line. '.repeat(60)}END-MARK`;
+  assert.ok(note.length > 800);
+  const r = u.crewJson(['task', 'send-back', t.id, '--note', note], repo);
+  assert.equal(r.code, 0, r.err);
+  assert.ok(r.data.prompt.includes('END-MARK'));
+  const shown = u.crewJson(['task', 'show', t.id, '--prompt'], repo);
+  assert.equal(shown.data.prompt, r.data.prompt);
+});

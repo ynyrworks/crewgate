@@ -7,6 +7,7 @@ const ROLE_BY_TYPE = {
   'crew-worker': 'worker', worker: 'worker',
   'crew-reviewer': 'reviewer', reviewer: 'reviewer',
   'crew-refuter': 'refuter', refuter: 'refuter',
+  'crew-investigator': 'investigator', investigator: 'investigator',
 };
 
 // "crewgate:Crew-Reviewer" -> "crew-reviewer". Empty input gives `fallback` (default 'general-purpose').
@@ -16,7 +17,7 @@ function bareName(type, fallback = 'general-purpose') {
   return s.split(':').pop().toLowerCase() || fallback;
 }
 
-// worker | reviewer | refuter | other
+// worker | reviewer | refuter | investigator | other
 function roleOf(type) {
   return ROLE_BY_TYPE[bareName(type, '')] || 'other';
 }

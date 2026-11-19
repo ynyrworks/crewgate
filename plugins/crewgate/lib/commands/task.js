@@ -460,7 +460,9 @@ function run(argv, ctx) {
     if (a.prompt) {
       const briefPath = path.join(paths.taskDir(proj.id, cur.id), 'brief.md');
       const back = cur.returns > 0 ? [...(cur.history || [])].reverse().find((h) => h.state === 'dispatched') : null;
-      const prompt = back ? resendPrompt(cur, cfg, briefPath, back.note, max) : dispatchPrompt(cur, cfg, briefPath);
+      const noteFile = path.join(paths.taskDir(proj.id, cur.id), 'send-back-note.txt');
+      const full = back && fs.existsSync(noteFile) ? fs.readFileSync(noteFile, 'utf8') : null;
+      const prompt = back ? resendPrompt(cur, cfg, briefPath, full === null ? back.note : full, max) : dispatchPrompt(cur, cfg, briefPath);
       return ctx.emit({ id: cur.id, prompt, subagent_type: (cfg.roles[cur.role] || {}).agent || (isInvestigation(cur) ? 'crew-investigator' : 'crew-worker') }, prompt);
     }
     const d = showData(ctx, proj, cur);
@@ -501,6 +503,8 @@ function run(argv, ctx) {
       }
       throw e;
     }
+    // the history note is cleaned and cut; keep the full note so `task show --prompt` prints what send-back printed
+    json.saveRaw(path.join(paths.taskDir(proj.id, task.id), 'send-back-note.txt'), note);
     const prompt = resendPrompt(task, cfg, path.join(paths.taskDir(proj.id, task.id), 'brief.md'), note, max);
     ctx.emit({ task, returns: task.returns, max, prompt }, [ctx.t('wf.task.sentBack', { id: task.id, n: task.returns, max }), '--- prompt ---', prompt, '--- end ---']);
   } else if (sub === 'accept') {
