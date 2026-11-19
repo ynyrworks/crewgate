@@ -30,6 +30,7 @@ test('init --engine codex renders reviewer/refuter agents and a new AGENTS.md; n
   assert.ok(toml.includes('You are a crew reviewer'));
   assert.ok(!/^model\s*=/m.test(toml), 'no Claude model name in a Codex agent');
   const md = read(repo, 'AGENTS.md');
+  assert.match(md, /Reviewer, refuter and investigator subagents/);
   assert.ok(md.includes(BEGIN) && md.includes(END));
   assert.ok(md.includes('crew task run'));
 });

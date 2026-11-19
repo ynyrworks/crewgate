@@ -58,6 +58,7 @@
   "wf.task.merged": "任務 {id} 已記錄為合併（沒有執行任何 git 指令）。",
   "wf.task.mergeNever": ".claude/crew.json 把合併關卡設為 \"never\"；請勿合併此任務",
   "wf.task.cancelled": "任務 {id} 已取消。",
+  "wf.task.run.investigate": "任務 {id} 是調查任務；請派給 crew-investigator 代理，不要用 task run",
   "wf.task.run.claude": "task run 用來啟動外部引擎（例如 codex）；Claude worker 請用 Agent 工具派出",
   "wf.task.run.badState": "任務 {id} 目前是 {state}；只有 created 或 dispatched 的任務可以執行",
   "wf.task.run.planDraft": "任務 {id} 屬於計畫 {slug}，而該計畫仍是草稿（plan.enforce=block），所以沒有啟動 worker。必須先由使用者核准計畫：執行 crew plan finalize {slug}，使用者在對話中回覆後再執行 crew plan finalize {slug} --gate <gate id>。",

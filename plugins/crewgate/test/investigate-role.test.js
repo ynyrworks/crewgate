@@ -196,3 +196,11 @@ test('task show --prompt prints the full send-back note, as send-back did (note 
   const shown = u.crewJson(['task', 'show', t.id, '--prompt'], repo);
   assert.equal(shown.data.prompt, r.data.prompt);
 });
+
+test('task run refuses an investigation task before any engine starts', skip, () => {
+  const repo = u.initRepo();
+  const t = create(repo, { args: ['--role', 'investigate'] }).data.task;
+  const r = run(repo, 'task', 'run', t.id, '--engine', 'codex');
+  assert.notEqual(r.code, 0);
+  assert.match(r.err, /investigation.*crew-investigator/);
+});
