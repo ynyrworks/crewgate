@@ -448,10 +448,11 @@ function contentHash(text) {
 }
 // What the user approved: the title, goal, ## Not doing, ## Done when, and each step's text and nesting. Not the box, the comment,
 // the state line, ## Drift or ## Clarified, and not a proposed [?] step or a rejected one (a plan review's proposal is not part of the plan until accepted).
-function approvedHash(text) {
+function approvedHash(text, withRejected) {
   const doc = parse(text);
   // a proposal is not part of the plan, whether it is open ([?]) or was rejected (marked rejected): deciding it changes nothing approved
-  const steps = doc.nodes.filter((n) => n.box !== '?' && !n.meta.rejected).map((n) => [n.depth, n.text]);
+  // withRejected: the formula of records written before that, which kept rejected proposals
+  const steps = doc.nodes.filter((n) => n.box !== '?' && (withRejected || !n.meta.rejected)).map((n) => [n.depth, n.text]);
   return crypto.createHash('sha256').update(JSON.stringify([doc.title, doc.goal, doc.notDoing, doc.doneWhen, steps])).digest('hex');
 }
 function fileApprovedHash(root, slug) {
@@ -465,7 +466,12 @@ function changedSinceApproved(root, projectId, slug) {
   const cur = fileApprovedHash(root, slug);
   if (!cur) return false;
   if (!rec.approved) { writeRecord(projectId, slug, { approved: cur }); return false; }
-  return cur !== rec.approved;
+  if (cur === rec.approved) return false;
+  // a record kept with the old formula (rejected proposals counted): a match is still approved; store the new hash
+  let old = null;
+  try { old = approvedHash(fs.readFileSync(planFile(root, checkSlug(slug)), 'utf8'), true); } catch { /* ignore */ }
+  if (old && old === rec.approved) { writeRecord(projectId, slug, { approved: cur }); return false; }
+  return true;
 }
 function approveNow(root, projectId, slug) {
   const cur = fileApprovedHash(root, slug);

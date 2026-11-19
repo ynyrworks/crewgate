@@ -101,7 +101,7 @@ test('on: the same plan is asked too, with the assumed lines listed; the one yes
   assert.doesNotMatch(text(f), /\(assumed\)/);
 });
 
-test('off at ask, on at answer: the conversion follows the ask; asked under on is not converted', () => {
+test('asked under off, answered under on: the assumed lines are still converted and the plan reads unchanged', () => {
   const f = fixture('off');
   draft(f);
   const a = ask(f);

@@ -164,7 +164,7 @@ function answer(root, projectId, slug, gateId, reply, text, answerOpts) {
 // every session's of the project when the session is not known (what commands/gate.js passes to gates.answer).
 function covered(root, projectId, slug, kind, session) {
   const last = events.read(projectId, { types: ['plan.drift_answered'] })
-    .filter((e) => e.data && e.data.slug === slug && e.data.kind === kind).pop();
+    .filter((e) => e.data && e.data.slug === slug && e.data.kind === kind && e.data.via !== 'instruction').pop(); // a quoted-instruction add is not an answered question
   if (!last) return false;
   const sess = require('../hooks/session');
   let prompts;

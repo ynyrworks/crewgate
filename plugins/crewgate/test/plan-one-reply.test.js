@@ -133,6 +133,34 @@ test('reject and rm of a [?] proposal on a final plan leave changedSinceApproved
   assert.equal(changed(f), false, 'after rm');
 });
 
+test('a plan finalized with a rejected [~] proposal under the old hash formula still reads unchanged, and its record is rewritten', () => {
+  const f = fixture();
+  finalPlan(f);
+  assert.equal(run(f, ['plan', 'add', 'p', 'Maybe this', '--proposed']).code, 0);
+  assert.equal(run(f, ['plan', 'reject', 'p', 'n2', '--note', 'superseded']).code, 0);
+  const doc = plans.parse(text(f));
+  const steps = doc.nodes.filter((n) => n.box !== '?').map((n) => [n.depth, n.text]);
+  const old = require('node:crypto').createHash('sha256').update(JSON.stringify([doc.title, doc.goal, doc.notDoing, doc.doneWhen, steps])).digest('hex');
+  assert.notEqual(old, plans.fileApprovedHash(f.repo, 'p'));
+  plans.writeRecord(f.pid, 'p', { approved: old });
+  assert.equal(changed(f), false);
+  assert.equal(plans.readRecord(f.pid, 'p').approved, plans.fileApprovedHash(f.repo, 'p'));
+  // a real change is still seen
+  fs.writeFileSync(planPath(f), text(f).replace('Write the code', 'Write other code'));
+  plans.writeRecord(f.pid, 'p', { approved: old });
+  assert.equal(changed(f), true);
+});
+
+test('add --origin user --quote does not answer the drift question: a second top-level add without a quote in the same turn still stops', () => {
+  const f = fixture();
+  finalPlan(f);
+  say(f, 'Please also write the docs page for it');
+  assert.equal(run(f, ['plan', 'add', 'p', 'Write the docs page', '--origin', 'user', '--quote', 'write the DOCS page']).code, 0);
+  const r = run(f, ['plan', 'add', 'p', 'Another thing', '--origin', 'user']);
+  assert.notEqual(r.code, 0);
+  assert.doesNotMatch(text(f), /Another thing/);
+});
+
 // ---------------------------------------------------------------- 5. finished plans close themselves out
 test('the last open step done: one line says the plan is complete; close done needs no gate; parked still asks', () => {
   const f = fixture();
