@@ -63,7 +63,7 @@ flowchart TD
     R3 --> A{"You see what survived"}
     A -- "Send back" --> W
     A -- "Accept" --> SC{{"CHECK scope:<br/>changed files against --allow and --deny"}}
-    SC --> GM{{"GATES merge and push: your reply, each time"}}
+    SC --> GM{{"GATES push: your reply, each time;<br/>merge: your reply or the approved plan"}}
     GM --> REC["Merge, release record, push"]
     X1["New step on a final plan"] -.-> DQ
     X2["Final plan text no longer matches<br/>what you approved"] -.-> DQ
@@ -368,9 +368,11 @@ and record your answer with `crew gate answer`. `gates.enforce` decides when cre
 A push, PR or merge under a `never` gate is denied before it runs in all three modes, and no approval lifts it. Codex sessions
 only record it and tell the model afterwards.
 
+An approved plan covers the local merge of its accepted tasks while the plan is unchanged since you approved it (`gates.plan_covers_merge`, default `true`); push, PR, remote hosts, installs and downloads ask every time. One yes covers one action. An unused yes counts for 30 minutes, and after that while it is the latest answer of its gate and task, up to 12 hours. Under an `ask` gate, a push, PR or merge written in the same command as `gate answer`, `task accept`, `plan finalize --gate` or `plan drift --gate` is denied in every mode, because a refused answer could not stop it.
+
 `gates.require_user_turn` (default `true`) adds one rule to all three modes: a hand-recorded approval counts only if you sent
 a message in the asking session between its `gate ask` and its `gate answer yes` (judged once, when the answer is recorded; where the session id is unknown, as in the Codex CLI, a message in any session of the project counts, which is weaker). That stops the model from asking and approving in one go; it
-does not stop it from answering "yes" after you wrote something unrelated. All three modes are best-effort interception, not a
+does not stop it from answering "yes" after you wrote something unrelated. Your own words count too: when your message already names the action ("merge it"), the model runs `gate ask` and then `gate answer <id> yes --quote "<your words>"` in the same turn, and the yes is refused unless those words are in that message. An answer you give in a question widget counts as a message. All three modes are best-effort interception, not a
 hard stop: detection reads the command of the Bash and PowerShell tools, including one wrapped in `bash -c`, `eval`, `powershell -c`,
 `cmd /c`, `npx` or an inline `git -c alias.x=y`. A script that pushes, a configured alias, a variable (`$GIT push`) or a push by
 another tool is not seen, and a hook that crashes or times out lets the command through. For a hard stop use branch protection on

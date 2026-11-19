@@ -61,6 +61,26 @@ test('crew skill: frontmatter, size, sub-commands and every reference exists', (
   }
 });
 
+test('crew skill: language, closing status line, keep going, approvals, review after a send-back, commands read', () => {
+  const s = read('skills', 'crew', 'SKILL.md').replace(/\s+/g, ' ');
+  for (const needle of [
+    'Write every message to the user in the project language', 'turns started by a task notification', 'reload this skill',
+    'exactly one status line, last in the message', 'Waiting for you:', 'Nothing needed from you:', 'never bundle it with a second question',
+    '**Keep going.**', 'without waiting to be told', 'an empty frontier',
+    'yes --quote "<their words>"` in the same turn', 'plain chat text', 'question widget', '`gates.plan_covers_merge`',
+    'Push, PR, remote hosts, installs and downloads ask every time', 'One yes covers one action', '30 minutes', '12 hours',
+    'The hook denies a push, PR or merge chained in the same command', '`head`/`tail`',
+    'A fix made after a send-back gets another review round', '20 changed lines or fewer', 'documentation only',
+    '`crew <group> --help`', 'Never guess options', '--scope once|always --reason', 'todo|doing|done|waiting|parked',
+    'never write the prompt by hand', 'Count running workers before every dispatch or re-dispatch',
+  ]) assert.ok(s.includes(needle), needle);
+  const gates = read('skills', 'crew', 'references', 'lessons-and-gates.md').replace(/\s+/g, ' ');
+  for (const needle of ['The user-turn rule', '--quote', 'user_turn: "instruction"', 'Waiting for you: merge', 'gates.enforce']) assert.ok(gates.includes(needle), needle);
+  assert.ok(read('skills', 'crew', 'references', 'review-pipeline.md').includes('The round after a send-back'));
+  const cmds = read('skills', 'crew', 'references', 'commands.md');
+  for (const needle of ['--quote', 'gates.plan_covers_merge', '--under', 'is a split', 'needs no gate']) assert.ok(cmds.includes(needle), needle);
+});
+
 test('every CLI sub-command named in the skill references exists in the command modules', () => {
   const { loadGroup } = require('../lib/core/cli');
   const files = ['SKILL.md', path.join('references', 'commands.md'), path.join('references', 'review-pipeline.md')];
