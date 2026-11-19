@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.26.0 — 2026-11-19
+
+The review rule is now enforced by `crew task accept` instead of only being written in the skill, and the review pipeline, briefs, lessons and CLI stumbles found in the usage data of 0.25 are fixed. Real-run checks for this version were only half done, because the Claude Code CLI on the test machine was not logged in (see "Not verified / known limits").
+
+### New
+
+- `crew task accept` enforces the review rule (`review.enforce`, default `block`). A task that was sent back after its last finalized review round, with no later finalized round, is refused. A task with no finalized round at all is refused too. Both pass when the change is small (`review.small_fix_lines`, default 20 lines, added plus removed) or, for a task with no round, only documentation (`review.docs_globs`, default `*.md`, `*.txt`, `docs/**`), and you give `--read-by-orchestrator "<what was read>"`. The accept event records which rule applied (`review_rule`). `remind` accepts, prints the same message as a warning and records `review.rule_unmet`; `off` does nothing.
+- Scoped re-review: `crew review run <task> --since-last-round` reviews only the diff since the previous round started, lists the earlier findings, and asks for a verdict ("addressed" or "not addressed") on each, plus new problems in the fix only. The verdicts are stored per round and shown by `crew review show`. When the earlier round has no recorded start, it reviews the full diff and says so in one line.
+- Review pipeline: every reviewer and refuter prompt and agent file carries three tool rules (open files with the Read tool, one command per Bash call, `git -C <path>`). Findings and verdicts can be saved three ways: on stdin, `--file`, or `--json '<array>'` (also for `crew plan review submit`); if saving is refused, the subagent ends with the JSON array as its whole final message and you save that message. `crew review keep <task> <finding-id> --reason "..."` puts a finding the filter dropped back among the kept ones. A finding kept after the refuter answered sets the old verdicts aside, so the refuter judges the updated list. `crew review finalize` with no refutations saved names the command to save them.
+- `crew review dismiss` uses `--scope once` when none is given, and says so; `--scope always` keeps it dismissed for later tasks. A round whose every kept finding is dismissed counts as decided at accept, with no finalize or `--skip-refuter` (`closed_by: dismissals`).
+- Investigation tasks: `crew task create --role investigate` makes a read-only task for one question. The new `crew-investigator` agent reads, searches and runs commands, changes no project file, makes no commit (and uses no `git stash`), stops after three failed hypotheses, and reports with the sections Answer, Evidence, Ruled out and Still unknown. `crew task accept` takes it with no scope check and no review rule, and refuses it if its branch or worktree has changes. `crew task run` refuses it.
+- Briefs: Machine impact has a line `Visible to the user:` (`nothing`, or windows, notifications, sound, reboot or shutdown prompts, changes to real drivers, services, registry or system settings); `crew task create` warns when it is missing. Worker rules now say that checks must never show a window, play a sound, send a notification, ask for a reboot or touch real system settings, and that `git stash` is not used (the stash list is shared by every worktree).
+- `crew task send-back` prints the complete re-dispatch prompt, followed by `Send-back round <n> of <max>: <your note>`. `crew task show <id> --prompt` prints a task's dispatch prompt at any time.
+- Scope check: the tip of the task's branch is recorded at the first dispatch and used first at accept, also for a task accepted after its branch was merged while HEAD is ahead of main. This fixes the 0.25 limit. A recorded start that the branch was reset or rebased past is not used; a note says the older guess applied.
+- Lessons: SessionStart adds one line with the number of lessons ready to show you. `crew lesson find <words...> [--paths <glob>...] [--limit N]` brings back the recorded lessons that match the work at hand. `crew lesson suggest` adds a hint to a candidate that reads as mechanical (a command, file pattern, option or banned call): offer an automatic check before a rule.
+- CLI: `crew <group> help` and `crew help <group>` print what `--help` prints. Output piped to `head` or `tail` no longer crashes `crew`, and a closed pipe never turns a failure into success (an unknown option still exits 2). Free-text values that start with "-" are accepted in `plan part|add|edit`, `log add`, `need add`, `work set` and `mr set`; a real unknown option still errors.
+- `scripts/collect-usage-data.js` copies one machine's Crewgate data for before/after comparison, and `--stats` prints the numbers the plan compares ([docs/GUIDE.md](docs/GUIDE.md), "Comparing usage before and after a change"). The collected folders (`crewgate-data-*`) are git-ignored.
+
+### Changed
+
+- The drift stop messages for an out-of-scope file at accept, a changed plan text at accept and a changed plan text at task start now have the three labelled parts (expected, found, why it matters). This finishes what 0.25 did for the drift question.
+- Skill text: the exact `review dismiss` argument form, every dispatch and re-dispatch is a new Agent call with the printed prompt, lessons are shown at a pause and searched before a brief, and a bounded number of own tool rounds on one failing check before an investigation task.
+
+### Upgrade
+
+- Nothing to run, but accepting changes. A task accepted after a send-back with no later round, or with no review at all, is now refused unless it is small or documentation only and you say what you read (`--read-by-orchestrator`). For the old behaviour set `review.enforce` to `remind` (accept with a warning) or `off` in `.claude/crew.json`.
+- Tasks in flight when a project upgrades have review rounds with no recorded start: a fix after a send-back then needs a normal full-diff round. A task dispatched by an older version has no recorded scope start and uses the 0.25 rule.
+- Project copies of the agent files (`.claude/agents`) are written by `crew init`, and `crew doctor` warns when they are stale. The new `crew-investigator` file and the tool rules for the reviewer and refuter reach a project through them.
+
+### Not verified / known limits
+
+- Real-run checks for this version were only half done: the Claude Code CLI on the test machine was not logged in, so no model ran ([PLUGIN-FACTS.md](docs/PLUGIN-FACTS.md), "Real-run checks for 0.26"). Not seen in a real run: whether a real reviewer or refuter subagent gets through its first commands with the new prompts and saves its own findings; the verdicts of a scoped re-review with a real reviewer; a real investigator being linked to its task and denied `git commit` by the hook.
+- Confirmed in real runs of the CLI (same section): the review rule's refusals and the `--read-by-orchestrator` path, and the lesson line at session start. A fix over 20 lines (the `--since-last-round` message) was not run.
+- The question-widget reply of 0.25 is still not verified.
+- A refuter verdict written as a synonym of "upheld" (for example "confirmed") is treated as a bad entry and the finding stays uncertain.
+- The board shows the investigator as its own role; the board itself was not changed and this was not checked.
+- `crew lesson find --paths` was confirmed by tests only; the lessons of the projects it was tried on rarely name files.
+- The scope start is recorded at the first dispatch; a task dispatched by an older version has none and uses the 0.25 rule.
+- Tasks in flight when a project upgrades have review rounds with no recorded start: a fix after a send-back then needs a full round.
+- The usage statistics were not rerun after real use of this version, so there is no before/after table yet.
+
 ## 0.25.0 — 2026-11-19
 
 Your own words now count as approval, an approved plan covers its local merges, and the plan questions stop where nothing has really drifted. This comes from the usage data of two machines (462 tasks, 108 session transcripts): the merge gate was answered yes 259 of 275 times, 34 gate answers were refused although you had spoken, and 78 pushes or merges had no recorded approval.

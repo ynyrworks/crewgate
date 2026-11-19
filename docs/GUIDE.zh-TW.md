@@ -125,6 +125,12 @@ commit，絕不 push。審查員讀 diff、任務書與 `.crew/REVIEW.md`，回�
    理論上的競態等型態會降為瑣碎意見。
 3. *反駁*：反駁員試著推翻剩下的發現。你只會看到判定為成立或不確定的。
 
+**驗收時的審查規則（0.26）。** `crew task accept` 會拒絕「被退回後沒有更晚的定案審查輪次」的任務，也拒絕完全沒有定案輪次的任務；除非改動很小（`review.small_fix_lines`，預設 20 行）或只有文件（`review.docs_globs`），且統籌說明自己讀了什麼：`--read-by-orchestrator "<讀了什麼>"`。要退回舊行為有兩條路：把 `review.enforce` 設成 `remind`（接受，但印出警告並記錄）或 `off`。被退回之後，`crew review run <task> --since-last-round` 只審修正的部分。
+
+**調查任務（0.26）。** `crew task create --role investigate` 建立唯讀的任務，用來回答一個問題（根本原因、比較）。`crew-investigator` 代理人以報告回答（Answer、Evidence、Ruled out、Still unknown），不改專案檔案、不 commit；驗收時不做範圍檢查與審查規則，`crew task run` 會拒絕它。
+
+**任務書。** 「機器影響」還要說明這次執行會在使用者畫面上出現什麼：一行 `Visible to the user: nothing`（或列出視窗、通知、音效、重開機提示、對真實系統設定的更動）。缺少時 `crew task create` 會警告。
+
 **Hook。** 同一支腳本（`scripts/crew-hook.js`）處理 SessionStart、UserPromptSubmit、PreToolUse、PostToolUse、
 SubagentStart/Stop、Stop、PreCompact 與 SessionEnd。它們透過 `crew-task:` 標記把派出去的子代理對應到任務；統籌自己
 改程式時提醒（或依設定直接擋下）；不帶範圍讀超大檔案時提醒；記錄 `git push`、`git merge` 與建立 PR，並對照核准關卡檢查；有已回報卻未審查的工作時提醒；
@@ -189,6 +195,7 @@ claude --plugin-dir crewgate/plugins/crewgate
 | `limits.orchestrator_edit` | 統籌自己改程式時：`off`、`warn` 或 `block`。 |
 | `limits.max_parallel_workers`、`limits.max_returns_before_takeover` | 同時實作者數與退回次數上限。 |
 | `review.min_confidence`、`review.report_inference`、`review.nit_cap` | 過濾的嚴格程度。 |
+| `review.enforce`、`review.small_fix_lines`、`review.docs_globs` | `crew task accept` 的審查規則：`block`（預設）、`remind` 或 `off`；多小算小修正；哪些檔案算文件。 |
 | `lessons.promote_after_days`、`lessons.rules_cap` | 經驗何時成為候選、規則最多幾條。 |
 
 修改程式裡的設定結構後，請執行 `node scripts/gen-config-docs.js` 重新產生對照表；已提交的檔案若過期，測試會失敗。
