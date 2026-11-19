@@ -330,7 +330,7 @@ test('one yes per action: two pushes in one command with one yes leave the secon
   assert.equal(events.read(g.pid, { types: 'git.push' }).filter((e) => e.data.approved_by).length, 3);
 });
 
-test('a yes belongs to its task: a yes asked for another task does not cover a merge; its own task and a task-less action do', () => {
+test('a yes belongs to its task: a yes for another task does not cover a merge or push of a task branch; its own task and a task-less yes do', () => {
   const f = fixture({ enforce: 'block' });
   const t1 = taskAt(f, 'feat/t1', 'accepted');
   const t2 = taskAt(f, 'feat/t2', 'accepted');
@@ -344,4 +344,19 @@ test('a yes belongs to its task: a yes asked for another task does not cover a m
   const g = fixture({ enforce: 'block' });
   approveFor(g, 'merge');
   assert.equal(pre(g, 'git merge feat/other', 'y3').out, '{}');
+  // a task-less yes covers a task-branch merge, once
+  const h = fixture({ enforce: 'block' });
+  taskAt(h, 'feat/t1', 'accepted');
+  approveFor(h, 'merge');
+  assert.equal(pre(h, 'git merge feat/t1', 'y4').out, '{}');
+  assert.equal(post(h, 'git merge feat/t1', 'y4').out, '{}');
+  assert.equal(decision(pre(h, 'git merge feat/t1', 'y5')), 'deny');
+  // ... and a task-branch push; a yes for another task does not
+  const p = fixture({ enforce: 'block' });
+  taskAt(p, 'feat/t1', 'accepted');
+  const o = taskAt(p, 'feat/t2', 'accepted');
+  approveFor(p, 'push', o.id);
+  assert.equal(decision(pre(p, 'git push origin feat/t1', 'y6')), 'deny');
+  approveFor(p, 'push');
+  assert.equal(pre(p, 'git push origin feat/t1', 'y7').out, '{}');
 });

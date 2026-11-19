@@ -63,10 +63,10 @@ function throwaway(fh, dir) {
   return own === '0';
 }
 
-// A `git merge` run in a linked worktree that is not a task worktree of the project (a scratch check-out) is not a merge into a
-// branch that matters when that worktree has a detached HEAD or a throwaway branch (see throwaway()): it records nothing and
-// reminds nothing. The session's own work tree counts as a project worktree, so a merge there is gated like one in the main
-// checkout. Marks f.ignore on such a detected command. Only looks at `git merge`; any doubt leaves it counted.
+// Which `git merge` commands are ignored (f.ignore = true: nothing recorded, no reminder): only a plain `git merge` run in a linked
+// worktree that is not a task worktree of the project and that is not the session's own work tree, when that worktree has a
+// detached HEAD or a throwaway branch (see throwaway()). Merges in the main checkout, in a task worktree, in the session's own
+// work tree (gated like the main checkout) and in any worktree whose branch matters stay gated. Any doubt leaves it counted.
 function markTemp(fh, f, sessionCwd) {
   if (!f || f.type !== 'git.merge' || !f.data || f.data.command !== 'git merge') return f;
   try {
@@ -140,7 +140,7 @@ function taskOfItem(taskList, d) {
 // { missing: [{ gate, command, text }], by: Map gate -> "plan:<slug>" | "gate:<id>", items: Map gate -> one entry per detected action
 // (null = not covered) } (by: what covers the first covered action of a gate that is not missing).
 // One yes covers one action: a command line with more pushes (or merges not covered by a plan) than unused yeses leaves the extra ones
-// uncovered, and the gate missing. An action whose branch belongs to a task needs a yes asked for that task.
+// uncovered, and the gate missing. An action whose branch belongs to task T is covered by a yes asked for T or for no task (never by a yes for another task); an action of no task by any yes.
 // Config unreadable = nothing missing (the modes are unknown). Events unreadable =
 // nothing missing, unless o.failClosed (gates.enforce block): an approval that cannot be seen does not count.
 function check(h, wanted, o = {}) {
@@ -172,7 +172,7 @@ function check(h, wanted, o = {}) {
     const per = items.map((d) => {
       const t = taskOfItem(taskList || [], d);
       const free = pool.filter((y) => !picked.has(y));
-      const y = t ? free.find((x) => x.task === t) : (free.find((x) => !x.task) || free[0]);
+      const y = t ? (free.find((x) => x.task === t) || free.find((x) => !x.task)) : (free.find((x) => !x.task) || free[0]);
       if (!y) return null;
       picked.add(y);
       return `gate:${y.data.id}`;

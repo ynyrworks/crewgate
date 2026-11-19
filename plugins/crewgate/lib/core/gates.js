@@ -142,7 +142,7 @@ function answer(projectId, gateId, reply, note, opts = {}) {
 // With opts.requireUserTurn (config gates.require_user_turn, default true) a hand-recorded yes also needs the
 // verdict `data.user_turn` true, 'project' or 'instruction' that answer() stored when it was recorded; the automatic yes
 // of an `auto` gate does not, and an older event without the field counts as unknown, so it is not valid.
-// opts.out, when given, receives `by` ("gate:<id>") of the approval that was found (the oldest usable one).
+// usableYeses returns every such yes, oldest first (events are read oldest first); hasApproval says whether there is one.
 function usableYeses(projectId, gate, session, now = Date.now(), opts = {}) {
   const need = opts.requireUserTurn === true;
   const answers = events.read(projectId, { types: 'gate.answered', since: now - APPROVAL_MAX_AGE_MS })
@@ -160,12 +160,8 @@ function usableYeses(projectId, gate, session, now = Date.now(), opts = {}) {
   });
 }
 
-// opts.task: the task the action belongs to; then only a yes asked for that task counts (a yes without a task covers an action
-// without one, and, as before, any action when no task is given).
 function hasApproval(projectId, gate, session, now = Date.now(), opts = {}) {
-  const usable = usableYeses(projectId, gate, session, now, opts).find((y) => !opts.task || y.task === opts.task);
-  if (usable && opts.out) opts.out.by = `gate:${usable.data.id}`;
-  return !!usable;
+  return usableYeses(projectId, gate, session, now, opts).length > 0;
 }
 
 // Which gate a detected git/PR command falls under (event types come from hooks/gitcmd.js).
