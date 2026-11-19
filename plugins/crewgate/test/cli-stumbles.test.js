@@ -59,17 +59,24 @@ test('a closed pipe on stdout ends crew without a stack trace and with exit 0', 
 });
 
 test('a closed pipe never turns a failure into success: unknown option still exits 2, no stack trace', async () => {
+  const evidence = `${h.tmpDir()}/stream-errors.log`;
   for (let round = 0; round < 3; round++) {
     const r = await new Promise((resolve) => {
-      const c = spawn(process.execPath, [h.BIN, 'plan', 'show', 'big', '--bogus'], { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
+      // CREWGATE_STREAM_ERROR_LOG (honoured only with CREWGATE_TEST=1) leaves the code of each stream error where the closed pipes cannot hide it
+      const env = { ...process.env, CREWGATE_TEST: '1', CREWGATE_STREAM_ERROR_LOG: evidence };
+      const c = spawn(process.execPath, [h.BIN, 'plan', 'show', 'big', '--bogus'], { cwd: repo, env, stdio: ['ignore', 'pipe', 'pipe'] });
       let out = '';
+      let err = '';
       // the reader closes both pipes before the command writes its error
       c.stdout.destroy();
       c.stderr.destroy();
       c.stdout.on('data', (d) => { out += d; });
-      c.on('close', (code) => resolve({ code, out }));
+      c.stderr.on('data', (d) => { err += d; });
+      c.on('close', (code, signal) => resolve({ code, signal, out, err }));
     });
-    assert.equal(r.code, 2);
+    const seen = fs.existsSync(evidence) ? fs.readFileSync(evidence, 'utf8') : '(no stream error recorded)';
+    assert.equal(r.code, 2, `round ${round}: exit code ${r.code}, signal ${r.signal}, stderr read: ${JSON.stringify(r.err)}, stream error codes seen by the child:
+${seen}`);
     assert.equal(r.out, '');
   }
   // a reader that closes after the first line of a failing command's stderr
