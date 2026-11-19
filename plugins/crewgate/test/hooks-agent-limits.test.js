@@ -104,3 +104,21 @@ test('hook: a failure of the check lets the command through', () => {
   const r = pre(f, sub(f, 'git checkout x', 'crew-reviewer', { tool_input: { command: 5 } }));
   assert.equal(r.out, '{}');
 });
+
+test('investigator: read-only like the reviewer; kill by image name, endless loops and tree-changing git are denied', () => {
+  for (const c of ['taskkill /IM chrome.exe /F', 'pkill node', 'node -e "while(true){}"', 'while true; do :; done',
+    'git commit -m x', 'git stash', 'git checkout main', 'git reset --hard']) {
+    assert.ok(limits.scan(c, 'crew-investigator'), c);
+  }
+  for (const c of ['git diff', 'git log --oneline', 'taskkill /PID 123 /F']) assert.equal(limits.scan(c, 'crew-investigator'), null, c);
+  assert.equal(limits.limited('crew-investigator'), true);
+  assert.equal(limits.scan('git commit -m x', 'crew-worker'), null);
+  assert.equal(limits.scan('git commit -m x', 'general-purpose'), null);
+  assert.ok(limits.scan('pkill node', 'crew-worker'));
+});
+
+test('hook: an investigator subagent is denied git commit', () => {
+  const f = H.fixture();
+  H.start(f);
+  assert.equal(decision(pre(f, sub(f, 'git commit -am x', 'crewgate:crew-investigator'))), 'deny');
+});

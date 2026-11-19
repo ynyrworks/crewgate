@@ -40,6 +40,10 @@ In Codex there is no `$ARGUMENTS`: take the sub-command from what the user said,
 - You may edit files matching `limits.orchestrator_edit_allow` in the config (default: `**/*.md`,
   `docs/**`, `.claude/**`, `.crew/**`). Those edits are your own records (plans, briefs, notes, docs you write as orchestrator); a small fix the user asks for is still a crew task, even in those files.
   Everything else is delegated, even a one-line fix. If a hook warns that you edited code, stop and delegate.
+- Work that produces no change (a question about behaviour, a root cause, a comparison, a reproduction) is an **investigation task**
+  (`crew task create --role investigate`, agent `crew-investigator`, no branch or worktree), not your own work. When you have spent
+  three of your own tool rounds on one failing check without progress, create an investigation task instead of a fourth round.
+  One fix task follows only after its report names a root cause.
 - Keep your own context small: read the worker report and the diff stat first
   (`crew task show`), open source files only for flagged hunks and only with line ranges. Never
   read the packet in full unless the report says the detail you need is there.
@@ -85,27 +89,31 @@ In Codex there is no `$ARGUMENTS`: take the sub-command from what the user said,
    one (`crew plan accept|reject`). You may skip it for a plan the user dictated step by step.
 3. **Brief each piece.** Write a brief file with exactly six sections: Goal, Scope (allowed and
    forbidden files), Must not regress (and who fixes out-of-scope fallout), Machine impact (what runs, how many
-   processes, for how long; "Light: tests only" is fine), Acceptance (commands and
+   processes, for how long; "Light: tests only" is fine; plus a `Visible to the user:` line: `nothing`, or the windows,
+   notifications, sound, reboot prompts or changes to real drivers, services or system settings the run causes), Acceptance (commands and
    observable behaviour), Context (paths and line ranges, never pasted dumps). Template and a worked
    example: `references/brief-template.md`. Workers run on the user's machine while they use it: never ask for a
    load or stress test without a process count (at most half the CPU cores) and a time limit after which each
-   process ends by itself.
+   process ends by itself. An investigation brief uses the same six sections: Goal is the question, Scope is what may be read and run
+   (no edits, no commits), Acceptance is a report with the root cause or answer, the evidence, what was ruled out and what stays unknown.
 4. **Create the task.** `crew task create --title "..." --brief-file brief.md --branch feat/x
    --worktree <path> --allow "src/**" --deny "docs/**" [--plan <slug>:<node>]` (`--plan` links the new task to a
    plan step; a task already created is linked with `crew plan link <slug> <node> <task-id>`). It refuses an incomplete brief, prints the
-   task id, the exact `crew-task: <id>` marker line and a ready Agent prompt. Keep that prompt: every dispatch of the task uses it.
+   task id, the exact `crew-task: <id>` marker line and a ready Agent prompt. `crew task show <id> --prompt` prints it again at any time (after a compaction too).
 5. **Create the worktree and branch** (the CLI does not run git for you):
    `git worktree add <path> -b feat/x` from the main checkout. Use a sibling folder, never a path
    inside the repo.
 6. **Dispatch.** (Codex orchestrator: see `references/codex.md`.) Call the Agent tool with `subagent_type` from the task output (`crew-worker`; if the tool does not know that name, as after `crew init` in a running session, use `crewgate:crew-worker`, and the same for the reviewer and refuter), the
    printed prompt (it contains the marker line, which links the subagent to the task), and
    `run_in_background: true` for anything that takes more than a minute.
+   Every dispatch and re-dispatch is a new Agent call with the printed prompt; never write a worker prompt by hand, and never resume
+   an earlier worker by message, except to let one continue after a limit cut it off.
    Count running workers before every dispatch or re-dispatch: never more than `max_parallel_workers`.
    A worker you send back counts, and the hook only warns. At the limit, wait until a task returns.
    If the dispatch is denied for CPU load (`limits.dispatch_max_cpu`), do not retry in a tight loop: wait for a
    worker's notification, or for the test run or other load to end, then dispatch again.
 7. **When a worker returns** (the background notification arrives; the stop hooks only show the user a reminder, they tell you nothing):
-   `crew task show <id>`. You get the state, return count, the capped report, the diff stat of the
+   `crew task show <id>` (an investigation: read its report, then `crew task accept <id>`; no review). You get the state, return count, the capped report, the diff stat of the
    branch and the packet path. If the report is invalid or missing, the worker did not finish: send
    it back (step 9). If it ran a load test or a long-running process, check yourself that nothing is left: a
    worker's "nothing left" is a claim. Stop what is left by pid, after checking its command line, and tell the user.
@@ -118,8 +126,8 @@ In Codex there is no `$ARGUMENTS`: take the sub-command from what the user said,
    `crew review followup <id> <finding-id> --done-when "..."`, which adds a `[?]` step next to the task's plan
    step. It counts only once accepted. If it does not serve the plan's goal, use `--plan <other>` or just tell the user.
 9. **Decide.**
-   - Real problems: `crew task send-back <id> --note "<what to fix, file:line>"`. Re-dispatch with the prompt
-     `crew task create` printed plus the send-back note; never write the prompt by hand. Record why with `crew lesson add` (kind `send-back`)
+   - Real problems: `crew task send-back <id> --note "<what to fix, file:line>"`. `send-back` prints the complete prompt (the create prompt plus the note
+     and round number): a new Agent call with it unchanged; never write the prompt by hand or message the old worker. Record why with `crew lesson add` (kind `send-back`)
      when the cause is something a rule could prevent.
    - When `send-back` refuses (limit `max_returns_before_takeover` reached) it tells you to take the
      task over: do the remaining fix yourself in the task's worktree, say so to the user, and keep

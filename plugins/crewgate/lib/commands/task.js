@@ -34,7 +34,7 @@ const SPECS = {
     },
   },
   list: { positionals: [], options: { '--state': { dest: 'state', choices: STATES } } },
-  show: { positionals: [{ name: 'id' }], options: {} },
+  show: { positionals: [{ name: 'id' }], options: { '--prompt': { dest: 'prompt', flag: true } } },
   report: {
     positionals: [{ name: 'id' }],
     options: { '--report-file': { dest: 'reportFile' }, '--packet-file': { dest: 'packetFile' } },
@@ -53,24 +53,38 @@ merge: { positionals: [{ name: 'id' }], options: NOTE },
 
 const need = (v, name) => { if (!v) throw new UsageError('args.missing', { name }); return v; };
 
+const isInvestigation = (task) => task.role === 'investigate';
+
 function dispatchPrompt(task, cfg, briefPath) {
   const lang = LANGUAGE_NAME[cfg.language] || 'English';
+  const inv = isInvestigation(task);
   const lines = [
     `crew-task: ${task.id}`,
     `crew-cli: ${common.cliCommand()}`,
-    `You are the crew worker for task ${task.id}: ${task.title}`,
+    `You are the crew ${inv ? 'investigator' : 'worker'} for task ${task.id}: ${task.title}`,
     `Read your brief first: ${briefPath}`,
   ];
-  if (task.worktree || task.branch) lines.push(`Work only in worktree ${task.worktree || '(the worktree you were started in)'} on branch ${task.branch || '(current branch)'}.`);
+  if (task.worktree || task.branch) lines.push(`${inv ? 'Read only in' : 'Work only in'} worktree ${task.worktree || '(the worktree you were started in)'} on branch ${task.branch || '(current branch)'}.`);
   if (task.scope.allow.length) lines.push(`Allowed paths: ${task.scope.allow.join(', ')}`);
   if (task.scope.deny.length) lines.push(`Forbidden paths: ${task.scope.deny.join(', ')}`);
+  lines.push(inv
+    ? 'Read-only: change no project file and make no commit; write only your report and packet. No network, no downloads, no remote hosts. Do not use `git stash`; the stash list is shared by every worktree.'
+    : 'Commit to your branch; never push. No network, no downloads, no remote hosts. Do not use `git stash`; the stash list is shared by every worktree.');
   lines.push(
-    'Commit to your branch; never push. No network, no downloads, no remote hosts.',
     `When done, write the report in ${lang} (max ${cfg.limits.report_max_tokens} tokens) and a packet file with the details, then run:`,
     `  <crew-cli> task report ${task.id} --report-file <report.md> --packet-file <packet.md>`,
   );
   return lines.join('\n');
 }
+
+// The prompt of a re-dispatch: the create prompt, then the send-back note with its round number.
+function resendPrompt(task, cfg, briefPath, note, max) {
+  return `${dispatchPrompt(task, cfg, briefPath)}\n\nSend-back round ${task.returns} of ${max}: ${note}`;
+}
+
+// A Machine impact section must say what the run shows on the user's screen; the line `Visible to the user:` is the statement.
+const VISIBLE_RE = /visible to the user\s*[:：]|對使用者可見\s*[:：]|使用者看得到\s*[:：]/i;
+const lacksVisible = (brief) => !VISIBLE_RE.test((tasks.validateBrief(brief).sections.machine_impact) || '');
 
 // Latest finalized findings of a task -> { round, total, by_severity, items } or null.
 function findingsSummary(taskDir) {
@@ -370,6 +384,26 @@ function scopeOnAccept(ctx, proj, cfg, id, a) {
   return { ...none, after: () => evAppend(proj, 'task.scope_widened', id, { reason: clean(a.widen, 500), files: files.slice(0, 50), gate: a.gate }, session) };
 }
 
+// `crew task accept` of an investigation (role investigate): it has no diff, so neither the scope check nor the review rule applies.
+// What it must not have is a change to the project: commits on its branch or changes in its worktree refuse the accept.
+function acceptInvestigation(ctx, proj, cfg, task, a, opts) {
+  const lines = [];
+  const files = [];
+  if (task.branch) {
+    const got = changedFiles(proj.path, task.branch, proj, task.id);
+    if (got.files) files.push(...got.files);
+    else if (got.failed !== 'no-commits' && got.failed !== 'no-branch') lines.push(ctx.t('wf.task.scopeCheckFailed', { id: task.id, reason: ctx.t(`wf.task.scopeWhy.${got.failed}`, { branch: got.branch || '-', repo: got.repo }) }));
+  }
+  if (task.worktree && fs.existsSync(task.worktree)) {
+    const out = common.git(['status', '--porcelain', '-z'], task.worktree);
+    for (const e of (out || '').split('\0').filter(Boolean)) if (!files.includes(e.slice(3))) files.push(e.slice(3));
+  }
+  if (files.length) throw new CrewError('wf.task.acceptInvestigationChanged', { id: task.id, files: listFiles(files) });
+  const done = tasks.transition(proj.id, task.id, 'accepted', { ...opts, note: a.note || '' });
+  ctx.emit({ task: done, investigation: true }, [ctx.t('wf.task.accepted', { id: done.id }), ctx.t('wf.task.acceptedInvestigation'), ...lines]);
+  return 0;
+}
+
 function run(argv, ctx) {
   const sub = argv[0];
   if (!Object.prototype.hasOwnProperty.call(SPECS, sub)) throw new UsageError('wf.task.usage');
@@ -415,9 +449,10 @@ function run(argv, ctx) {
     const busy = tasks.list(proj.id, { state: 'dispatched' }).length;
     const data = {
       task, marker: `crew-task: ${task.id}`, brief_path: briefPath, cli: common.cliCommand(), prompt,
-      subagent_type: roleCfg.agent || 'crew-worker', model: roleCfg.model || 'sonnet',
+      subagent_type: roleCfg.agent || (isInvestigation(task) ? 'crew-investigator' : 'crew-worker'), model: roleCfg.model || 'sonnet',
       in_flight: busy, max_parallel_workers: cfg.limits.max_parallel_workers,
       ...(planRef ? { plan: planRef } : {}),
+      ...(lacksVisible(brief) ? { warnings: ['machine_impact_visible'] } : {}),
     };
     const L = [
       ctx.t('wf.task.created', { id: task.id }),
@@ -427,20 +462,32 @@ function run(argv, ctx) {
     ];
     if (planRef) L.splice(1, 0, ctx.t('plan.taskLinked', planRef));
     if (unlinked && unlinked.warn) L.splice(1, 0, ctx.t('plan.driftUnlinkedWarn', { slugs: unlinked.slugs.join(', '), slug: unlinked.slugs[0] }));
+    if (data.warnings) L.splice(1, 0, ctx.t('wf.task.visibleWarn'));
     if (busy >= cfg.limits.max_parallel_workers) L.push(ctx.t('wf.task.parallelWarn', { n: busy, max: cfg.limits.max_parallel_workers }));
     ctx.emit(data, L);
   } else if (sub === 'run') {
     const timeoutS = a.timeout === undefined ? codexrun.DEFAULT_TIMEOUT_S : a.timeout;
     if (!(timeoutS >= 1)) throw new UsageError('args.badChoice', { name: '--timeout', choices: '>= 1' });
     if (a.engine === 'claude') throw new UsageError('wf.task.run.claude');
-    return codexrun.runCodex(ctx, proj, cfg, tasks.load(proj.id, a.id), { engine: a.engine, model: a.model || '', timeoutS, workTree: ctx.workTree() });
+    const toRun = tasks.load(proj.id, a.id);
+    if (isInvestigation(toRun)) throw new UsageError('wf.task.run.investigate', { id: toRun.id });
+    return codexrun.runCodex(ctx, proj, cfg, toRun, { engine: a.engine, model: a.model || '', timeoutS, workTree: ctx.workTree() });
   } else if (sub === 'list') {
     const rows = tasks.list(proj.id, a.state ? { state: a.state } : {});
     ctx.emit(rows, rows.length
       ? rows.map((t) => `${t.id}  ${t.state.padEnd(10)}  ${ctx.t('wf.task.returnsOf', { n: t.returns, max })}  ${t.title}`)
       : [ctx.t('wf.task.empty')]);
   } else if (sub === 'show') {
-    const d = showData(ctx, proj, tasks.load(proj.id, a.id));
+    const cur = tasks.load(proj.id, a.id);
+    if (a.prompt) {
+      const briefPath = path.join(paths.taskDir(proj.id, cur.id), 'brief.md');
+      const back = cur.returns > 0 ? [...(cur.history || [])].reverse().find((h) => h.state === 'dispatched') : null;
+      const noteFile = path.join(paths.taskDir(proj.id, cur.id), 'send-back-note.txt');
+      const full = back && fs.existsSync(noteFile) ? fs.readFileSync(noteFile, 'utf8') : null;
+      const prompt = back ? resendPrompt(cur, cfg, briefPath, full === null ? back.note : full, max) : dispatchPrompt(cur, cfg, briefPath);
+      return ctx.emit({ id: cur.id, prompt, subagent_type: (cfg.roles[cur.role] || {}).agent || (isInvestigation(cur) ? 'crew-investigator' : 'crew-worker') }, prompt);
+    }
+    const d = showData(ctx, proj, cur);
     ctx.emit(d, showLines(ctx, d, max));
   } else if (sub === 'report') {
     need(a.reportFile, '--report-file');
@@ -449,7 +496,7 @@ function run(argv, ctx) {
     const cur = tasks.load(proj.id, a.id);
     if (!['created', 'dispatched', 'returned'].includes(cur.state)) throw new CrewError('wf.task.reportState', { id: cur.id, state: cur.state });
     // validate first so a bad report never moves the task
-    const v = tasks.validateReport(report, { maxTokens: cfg.limits.report_max_tokens });
+    const v = tasks.validateReport(report, { maxTokens: cfg.limits.report_max_tokens, role: cur.role });
     if (!v.ok) {
       const err = new CrewError('task.reportInvalid', {
         problems: v.errors.map((e) => (e.code === 'too_long' ? `too long (${e.tokens} > ${e.max} tokens)` : `${e.code.replace('_', ' ')}: ${e.section}`)).join('; '),
@@ -478,8 +525,13 @@ function run(argv, ctx) {
       }
       throw e;
     }
-    ctx.emit({ task, returns: task.returns, max }, ctx.t('wf.task.sentBack', { id: task.id, n: task.returns, max }));
+    // the history note is cleaned and cut; keep the full note so `task show --prompt` prints what send-back printed
+    json.saveRaw(path.join(paths.taskDir(proj.id, task.id), 'send-back-note.txt'), note);
+    const prompt = resendPrompt(task, cfg, path.join(paths.taskDir(proj.id, task.id), 'brief.md'), note, max);
+    ctx.emit({ task, returns: task.returns, max, prompt }, [ctx.t('wf.task.sentBack', { id: task.id, n: task.returns, max }), '--- prompt ---', prompt, '--- end ---']);
   } else if (sub === 'accept') {
+    const asked = tasks.load(proj.id, a.id);
+    if (isInvestigation(asked)) return acceptInvestigation(ctx, proj, cfg, asked, a, opts);
     const changedWarn = planChangedOnAccept(ctx, proj, cfg, a.id);
     const taskDir = paths.taskDir(proj.id, a.id);
     const gap = reviewGap(taskDir, proj.id, a.id, cfg.review.enforce !== 'off');
@@ -552,9 +604,9 @@ module.exports = {
   summary: { en: 'Create, track, review-gate and merge delegated tasks', 'zh-TW': '建立、追蹤、驗收與合併分派出去的任務' },
   usage: {
     en: [
-      '  crew task create --title T --brief-file F [--role worker] [--branch B] [--worktree W] [--allow G] [--deny G] [--plan SLUG:NODE | --outside-plan "reason"]',
+      '  crew task create --title T --brief-file F [--role worker|investigate] [--branch B] [--worktree W] [--allow G] [--deny G] [--plan SLUG:NODE | --outside-plan "reason"]',
       '  crew task list [--state S]',
-      '  crew task show <id>',
+      '  crew task show <id> [--prompt]',
       '  crew task report <id> --report-file F [--packet-file F]   (used by the worker)',
       '  crew task send-back <id> --note "..."',
       '  crew task accept <id> [--note "..."] [--skip-refuter "reason"] [--read-by-orchestrator "what was read"] [--widen "reason" [--gate ID]]   (the reason is needed when a review round was not finalized; --read-by-orchestrator accepts a small fix after a send-back, or a documentation-only or small task with no review, that the orchestrator read (review.enforce); --widen takes files outside the scope after the user agrees)',
@@ -563,9 +615,9 @@ module.exports = {
       '  crew task run <id> [--engine codex] [--timeout 1800] [--model M]   (run a Codex CLI worker in the task worktree)',
     ].join('\n'),
     'zh-TW': [
-      '  crew task create --title T --brief-file F [--role worker] [--branch B] [--worktree W] [--allow G] [--deny G] [--plan SLUG:NODE | --outside-plan "reason"]',
+      '  crew task create --title T --brief-file F [--role worker|investigate] [--branch B] [--worktree W] [--allow G] [--deny G] [--plan SLUG:NODE | --outside-plan "reason"]',
       '  crew task list [--state S]',
-      '  crew task show <id>',
+      '  crew task show <id> [--prompt]',
       '  crew task report <id> --report-file F [--packet-file F]   （worker 使用）',
       '  crew task send-back <id> --note "..."',
       '  crew task accept <id> [--note "..."] [--skip-refuter "原因"] [--read-by-orchestrator "讀了什麼"] [--widen "原因" [--gate ID]]   （審查輪次沒有定案時必須說明原因；--read-by-orchestrator 用來接受統籌自己讀過的、被退回後的小修正，或沒有審查的純文件／小任務（review.enforce）；--widen 在使用者同意後接受範圍外的檔案）',

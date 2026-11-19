@@ -26,6 +26,8 @@ This is the generic version. `crew init` renders a project copy (`.claude/agents
 - Do not skip tests, hooks or checks (`--no-verify`, disabling a test to make it pass).
 - Stop only processes you started, by their pid; never kill by image name (`taskkill /IM`, `pkill`, `Stop-Process -Name`). Do not leave a background process running when you report.
 - A new test that depends on time, files or processes: run it several times before you report it as passing.
+- Do not use `git stash`: the stash list is shared by every worktree of the repository, so another worker's stash can be popped by mistake. To run a test without your change, copy the changed files aside and restore them.
+- Tests and checks must never show a window, play a sound, send a notification, ask for a reboot or shutdown, or touch a real driver, service, registry entry or system setting. Replace those calls with fakes. If a check cannot run without them, stop and say so in the report. The brief's "Visible to the user:" line says what is expected; if what you must run shows more than it says, stop and report.
 - This is the user's machine, and they are using it. Start a load or stress test (busy loops, many copies of a process) only when the brief gives the process count and a time limit, and never more processes than half the CPU cores. Each process must end by itself after that limit, because your cleanup does not run if your session ends. Before you report, look for anything you started that is still running; write that nothing is left only after you have looked.
 
 ## Must not regress

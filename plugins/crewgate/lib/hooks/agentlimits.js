@@ -2,17 +2,17 @@
 
 // What a crew subagent must not run, decided from the command line (best effort: a command that cannot be
 // recognised passes, and so does any failure of this check).
-//   reviewer / refuter: a git command that changes a working tree, the index, history or the branch list.
-//   worker, reviewer, refuter: killing processes by image name (taskkill /IM, Stop-Process -Name, pkill, killall).
-//   worker, reviewer, refuter also: an inline loop with no end (node -e, python -c, powershell, a bash while true,
+//   reviewer / refuter / investigator: a git command that changes a working tree, the index, history or the branch list.
+//   worker, reviewer, refuter, investigator: killing processes by image name (taskkill /IM, Stop-Process -Name, pkill, killall).
+//   worker, reviewer, refuter, investigator also: an inline loop with no end (node -e, python -c, powershell, a bash while true,
 //   yes > /dev/null, stress without a time limit) and a shell loop that starts more background copies than half the
 //   CPU cores. A script or a file is never read, and nothing here limits a process once it runs.
 const os = require('os');
 const G = require('./gitcmd');
 
 const MAX_DEPTH = 3;
-const ROLES = new Set(['crew-worker', 'crew-reviewer', 'crew-refuter']);
-const READ_ONLY = new Set(['crew-reviewer', 'crew-refuter']);
+const ROLES = new Set(['crew-worker', 'crew-reviewer', 'crew-refuter', 'crew-investigator']);
+const READ_ONLY = new Set(['crew-reviewer', 'crew-refuter', 'crew-investigator']);
 const GIT_CHANGES = new Set(['checkout', 'switch', 'reset', 'merge', 'rebase', 'commit', 'stash', 'clean', 'restore',
   'cherry-pick', 'push', 'pull', 'revert', 'am']);
 const BRANCH_EDIT = /^(-[dDmMcCfu]|--(delete|move|copy|force|set-upstream-to|unset-upstream|edit-description)(=.*)?)$/;

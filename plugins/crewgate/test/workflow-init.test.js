@@ -26,7 +26,7 @@ test('init creates every file, registers the project and prints a summary', () =
   assert.equal(r.code, 0, r.err);
   const files = r.data.files.map((f) => f.file).sort();
   assert.deepEqual(files, [
-    '.claude/agents/crew-refuter.md', '.claude/agents/crew-reviewer.md', '.claude/agents/crew-worker.md',
+    '.claude/agents/crew-investigator.md', '.claude/agents/crew-refuter.md', '.claude/agents/crew-reviewer.md', '.claude/agents/crew-worker.md',
     '.claude/crew.json', '.crew/LESSONS.md', '.crew/REVIEW.md', '.crew/dismissed.jsonl',
   ]);
   assert.ok(r.data.files.every((f) => f.action === 'created'));
@@ -84,7 +84,7 @@ test('init --force backs up every replaced file, keeps config values and the dis
   assert.ok(worker.includes('delete branches'));
   // the backup of an agent file holds the old text
   const bk = fs.readdirSync(path.join(repo, '.claude', 'agents')).filter((n) => n.includes('.bak-'));
-  assert.equal(bk.length, 3);
+  assert.equal(bk.length, 4);
 });
 
 test('init --lang zh-TW sets the language and the report headings', () => {

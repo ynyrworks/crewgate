@@ -20,6 +20,7 @@ test('init --engine codex renders reviewer/refuter agents and a new AGENTS.md; n
   const by = Object.fromEntries(r.data.files.map((f) => [f.file, f.action]));
   assert.equal(by['.codex/agents/crew-reviewer.toml'], 'created');
   assert.equal(by['.codex/agents/crew-refuter.toml'], 'created');
+  assert.equal(by['.codex/agents/crew-investigator.toml'], 'created');
   assert.equal(by['AGENTS.md'], 'created');
   assert.ok(!fs.existsSync(path.join(repo, '.codex', 'agents', 'crew-worker.toml')));
   const toml = read(repo, '.codex/agents/crew-reviewer.toml');
@@ -29,6 +30,7 @@ test('init --engine codex renders reviewer/refuter agents and a new AGENTS.md; n
   assert.ok(toml.includes('You are a crew reviewer'));
   assert.ok(!/^model\s*=/m.test(toml), 'no Claude model name in a Codex agent');
   const md = read(repo, 'AGENTS.md');
+  assert.match(md, /Reviewer, refuter and investigator subagents/);
   assert.ok(md.includes(BEGIN) && md.includes(END));
   assert.ok(md.includes('crew task run'));
 });

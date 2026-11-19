@@ -1,6 +1,6 @@
 'use strict';
 
-// Codex side of `crew init --engine codex` (experimental): custom agents for the read-only roles in
+// Codex side of `crew init --engine codex` (experimental): custom agents for the read-only roles (reviewer, refuter, investigator) in
 // .codex/agents/*.toml, rendered from the same templates as the Claude copies, and a marked pointer
 // block in AGENTS.md. Never clobbers: existing agent files are kept (unless --force, then backed up)
 // and only the text between the markers of AGENTS.md is ever replaced. The worker role has no Codex
@@ -12,7 +12,7 @@ const json = require('../core/json');
 const init = require('./init');
 const common = require('./common');
 
-const CODEX_AGENTS = ['crew-reviewer', 'crew-refuter'];
+const CODEX_AGENTS = ['crew-reviewer', 'crew-refuter', 'crew-investigator'];
 const BEGIN = '<!-- crewgate:begin -->';
 const END = '<!-- crewgate:end -->';
 
@@ -46,7 +46,7 @@ function agentsBlock(lang) {
     '- `.crew/REVIEW.md`: what counts as a real review finding. `.crew/LESSONS.md`: lessons recorded so far.',
     '- Orchestrator playbook: the `crew` skill of the crewgate plugin (`skills/crew/SKILL.md`).',
     `- CLI: \`${cli} <group> <action>\` (\`task\`, \`review\`, \`lesson\`, \`need\`, \`handoff\`, \`doctor\`). It writes under \`~/.crewgate\`, which the default workspace-write sandbox blocks: approve those calls or run with a wider sandbox.`,
-    '- Workers: run `crew task run <id> --engine codex`; do not spawn a Codex subagent to implement (subagents share this sandbox and cannot commit). Reviewer and refuter subagents are defined in `.codex/agents/`.',
+    '- Workers: run `crew task run <id> --engine codex`; do not spawn a Codex subagent to implement (subagents share this sandbox and cannot commit). Reviewer, refuter and investigator subagents are defined in `.codex/agents/`.',
     '- Never push, open a pull request, merge, install or download unless the matching gate in `.claude/crew.json` is `auto` or the user said yes for that exact action.',
     END,
   ];
@@ -59,7 +59,7 @@ function agentsBlock(lang) {
     '- `.crew/REVIEW.md`：什麼算真正的審查發現；`.crew/LESSONS.md`：已記錄的教訓。',
     '- 統籌劇本：crewgate 外掛的 `crew` skill（`skills/crew/SKILL.md`）。',
     `- 命令列：\`${cli} <group> <action>\`（\`task\`、\`review\`、\`lesson\`、\`need\`、\`handoff\`、\`doctor\`）。它會寫入 \`~/.crewgate\`，預設的 workspace-write 沙盒會擋：請核准這些呼叫，或改用較寬的沙盒。`,
-    '- Worker：用 `crew task run <id> --engine codex`；不要派 Codex 子代理去實作（子代理與本工作階段共用沙盒，無法 commit）。審查與反駁子代理定義在 `.codex/agents/`。',
+    '- Worker：用 `crew task run <id> --engine codex`；不要派 Codex 子代理去實作（子代理與本工作階段共用沙盒，無法 commit）。審查、反駁與調查子代理定義在 `.codex/agents/`。',
     '- 除非 `.claude/crew.json` 對應的關卡是 `auto`，或使用者對該動作明確說可以，否則不推送、不開 PR、不合併、不安裝、不下載。',
     END,
   ];
