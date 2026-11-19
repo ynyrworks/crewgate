@@ -25,9 +25,10 @@ The review rule is now enforced by `crew task accept` instead of only being writ
 
 ### Upgrade
 
-- Nothing to run, but accepting changes. A task accepted after a send-back with no later round, or with no review at all, is now refused unless it is small or documentation only and you say what you read (`--read-by-orchestrator`). For the old behaviour set `review.enforce` to `remind` (accept with a warning) or `off` in `.claude/crew.json`.
+- Run `crew init --force` in each project to refresh the agent copies (it backs up the old files first). This version changes the agent files: new worker rules, the three tool rules for the reviewer and refuter, and the new `crew-investigator`. Copies in `.claude/agents` take priority over the plugin's own agents, so in a project set up earlier most of the new rules do not apply until the copies are refreshed. Until then `crew doctor` warns: "agent copies differ from what this plugin version would generate: <files>. The cause can be an older plugin version or a local edit. Copies in .claude/agents take priority over the plugin's own agents; run `crew init --force` to refresh them (the old files are backed up first)."
+- Open a new session after updating the plugin; the new hooks (the lesson line at session start) load only in a new session.
+- Accepting changes. A task accepted after a send-back with no later round, or with no review at all, is now refused unless it is small or documentation only and you say what you read (`--read-by-orchestrator`). For the old behaviour set `review.enforce` to `remind` (accept with a warning) or `off` in `.claude/crew.json`.
 - Tasks in flight when a project upgrades have review rounds with no recorded start: a fix after a send-back then needs a normal full-diff round. A task dispatched by an older version has no recorded scope start and uses the 0.25 rule.
-- Project copies of the agent files (`.claude/agents`) are written by `crew init`, and `crew doctor` warns when they are stale. The new `crew-investigator` file and the tool rules for the reviewer and refuter reach a project through them.
 
 ### Not verified / known limits
 
