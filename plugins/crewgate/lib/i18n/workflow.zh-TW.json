@@ -261,5 +261,21 @@
   "release.checkJob": "  job {name}：{status}{conclusion}",
   "release.checkNone": "{commit} 沒有任何 workflow run。請先推送並等 CI。",
   "release.checkPending": "仍在進行中：等 CI 跑完再執行一次。",
-  "release.checkFailed": "失敗：不要合併或打這個提交的 tag。"
+  "release.checkFailed": "失敗：不要合併或打這個提交的 tag。",
+  "wf.task.ruleUnmet": "{text}",
+  "wf.task.rule.refused": "任務 {id} 未被接受（review.enforce={mode}）：{what}。",
+  "wf.task.rule.warned": "警告：任務 {id} 在未符合審查規則下被接受（review.enforce={mode}）：{what}。",
+  "wf.task.rule.whatFix": "任務在第 {round} 輪審查定案後被退回，之後的修正沒有重新審查",
+  "wf.task.rule.whatNone": "任務沒有任何定案的審查輪次",
+  "wf.task.rule.size": "改動共 {lines} 行、{files} 個檔案；小改動上限為 {max} 行（review.small_fix_lines）。",
+  "wf.task.rule.docsOnly": "只改了文件檔案（{lines} 行、{files} 個檔案）。",
+  "wf.task.rule.sizeUnknown": "無法計算改動的大小（沒有分支、該輪開始時沒有記錄分支頂端，或 git 失敗）。",
+  "wf.task.rule.tailRead": "請自己讀過之後，用 --read-by-orchestrator \"<讀了什麼>\" 接受。",
+  "wf.task.rule.tailFix": "請執行 crew review run {id} --since-last-round，再執行 crew review filter 並定案。",
+  "wf.task.rule.tailNone": "請執行 crew review run {id}，再執行 crew review filter 並定案。",
+  "wf.task.rule.tailFull": "第 {round} 輪開始時沒有記錄分支頂端（該輪早於此版本），所以無法計算修正的大小。請做一輪一般的完整差異審查：執行 crew review run {id}，再執行 crew review filter 並定案。",
+  "wf.task.rule.recorded": "已記錄：統籌自己讀過（{lines} 行）：{note}",
+  "wf.review.sinceFallback": "--since-last-round：之前沒有任何一輪記錄過分支頂端，所以這一輪審查完整差異。",
+  "wf.review.verdictLine": "  先前的發現 {id}：{verdict}  {evidence}",
+  "wf.review.verdictsSaved": "引擎 {name} 對 {n} 筆先前的發現給了裁決，已存成 {path}"
 }

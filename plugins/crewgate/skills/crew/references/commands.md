@@ -26,7 +26,7 @@ a send-back goes back to `dispatched`.
 - `crew task show <id>`: state, returns, capped report, diff stat, packet path, latest findings summary.
 - `crew task report <id> --report-file F [--packet-file F]`: the worker's call; validates sections and the size cap.
 - `crew task send-back <id> --note "..."`: refused at `max_returns_before_takeover` (records a takeover lesson).
-- `crew task accept <id> [--note] [--skip-refuter "reason"] [--widen "reason" [--gate <id> [--quote WORDS]]]` (`--widen` accepts files outside the task's scope after the user agrees; for a task with no plan) (refused while the latest review round has findings that were not finalized, unless a reason is given; the reason goes into the event), `crew task merge <id> [--note]` (records only, runs no git merge; refused if `gates.merge` is
+- `crew task accept <id> [--note] [--skip-refuter "reason"] [--read-by-orchestrator "what was read"] [--widen "reason" [--gate <id> [--quote WORDS]]]` (`--widen` accepts files outside the task's scope after the user agrees; for a task with no plan) (refused while the latest review round has findings that were not finalized, unless a reason is given; the reason goes into the event; with review.enforce=block also refused for a fix after a send-back that was not re-reviewed and for an unreviewed task that is neither documentation only nor small unless --read-by-orchestrator applies, see references/review-pipeline.md), `crew task merge <id> [--note]` (records only, runs no git merge; refused if `gates.merge` is
   `never`; also records `git.merge` with the real branch when git shows it merged into HEAD), `crew task cancel <id> [--note]`.
 - `crew task run <id> [--engine codex] [--timeout 1800] [--model M]`: runs the Codex CLI as the worker in the task's worktree (created from HEAD when missing), then commits as the repository user (trailer `Co-Authored-By: Codex`), files report and packet and moves the task to `returned`. Failure (bad output, timeout, non-zero exit, no changes): nothing committed, `task.failed` event, a need, task stays `dispatched`. Log: `codex.log` in the task folder.
 
@@ -52,7 +52,7 @@ A plan is a tree of steps in `.crew/plans/<slug>.md` (slug `[a-z0-9-]{1,40}`, at
 - Events: `plan.created`, `plan.node_added` (with origin), `plan.node_changed`, `plan.review_started`, `plan.review_finalized` (counts), `plan.proposal_accepted`, `plan.proposal_rejected` (ids only, never text).
 
 ## Review
-- `crew review run <task> [--engine claude|<name>] [--round N]` (an engine failure falls back to the Claude reviewer dispatch unless `roles.reviewer.fallback` is `none`)
+- `crew review run <task> [--engine claude|<name>] [--since-last-round] [--round N]` (records the branch tip the round starts from; `--since-last-round` limits the diff to the changes since the previous round started; an engine failure falls back to the Claude reviewer dispatch unless `roles.reviewer.fallback` is `none`)
 - `crew review submit <task> [--round N] [--kind findings|refutations] [--file F]` (JSON on stdin without `--file`)
 - `crew review filter <task> [--round N]` (with `roles.refuter.engine` set it runs the engine and saves the refutations; on engine failure it prints the Claude refuter dispatch)
 - `crew review finalize <task> [--refutations-file F] [--round N]`

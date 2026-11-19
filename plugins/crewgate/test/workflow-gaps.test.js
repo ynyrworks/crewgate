@@ -63,12 +63,12 @@ function mergedTaskRepo() {
   const task = u.createTask(repo, { branch: 'feat/gap' });
   h.git(repo, 'checkout', '-q', '-b', 'feat/gap');
   fs.writeFileSync(path.join(repo, 'new.txt'), 'x\n');
-  h.git(repo, 'add', '.');
+  h.git(repo, 'add', 'new.txt');
   h.git(repo, 'commit', '-q', '-m', 'work');
   h.git(repo, 'checkout', '-q', '-');
   const f = u.reportFiles();
   assert.equal(h.crew(['task', 'report', task.id, '--report-file', f.report], repo).code, 0);
-  assert.equal(h.crew(['task', 'accept', task.id], repo).code, 0);
+  assert.equal(h.crew(['task', 'accept', task.id, '--read-by-orchestrator', 'read the one-line change'], repo).code, 0);   // small task: review.enforce asks for this
   return { repo, task };
 }
 

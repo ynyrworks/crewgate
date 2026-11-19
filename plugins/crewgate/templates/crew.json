@@ -69,6 +69,13 @@
     "downgrade_to_nit": [
       "theoretical-race",
       "style"
+    ],
+    "enforce": "block",
+    "small_fix_lines": 20,
+    "docs_globs": [
+      "*.md",
+      "*.txt",
+      "docs/**"
     ]
   },
   "plan": {

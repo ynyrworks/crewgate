@@ -18,7 +18,7 @@ const pr = require('../core/plan-review');
 
 const ROUND = { '--round': { dest: 'round', int: true } };
 const SPECS = {
-  run: { positionals: [{ name: 'task' }], options: { '--engine': { dest: 'engine' }, ...ROUND } },
+  run: { positionals: [{ name: 'task' }], options: { '--engine': { dest: 'engine' }, '--since-last-round': { dest: 'sinceLast', flag: true }, ...ROUND } },
   submit: {
     positionals: [{ name: 'task' }],
     options: { '--kind': { dest: 'kind', choices: ['findings', 'refutations'], default: 'findings' }, '--file': { dest: 'file' }, ...ROUND },
@@ -59,9 +59,9 @@ function baseDirs(c) {
   return out;
 }
 
-function diffCommand(c) {
+function diffCommand(c, from) {
   const r = common.branchRange(c.proj.path, c.task.branch);
-  if (r) return `git -C ${q(c.proj.path)} diff ${r.base} ${r.branch}`;
+  if (r) return `git -C ${q(c.proj.path)} diff ${from || r.base} ${r.branch}`;
   return `git diff   (run it in ${c.task.worktree || 'the task worktree'}; compare the task branch with its base)`;
 }
 
@@ -74,10 +74,47 @@ function currentRound(c, opts, suffix) {
 }
 
 // ---------------------------------------------------------------- run
-function externalPrompt(c, round) {
+// The branch tip a round started from is stored beside its findings (<round>.tip.json); `crew task accept` and --since-last-round read it.
+function recordTip(c, round) {
+  const tip = common.branchTip(c.proj.path, c.task.branch);
+  if (tip) json.save(rv.roundFile(c.dir, round, 'tip.json'), { tip, at: new Date().toISOString() });
+}
+
+// For --since-last-round: the previous round that has a recorded tip, and its findings. -> { from, prevRound, findings },
+// or null when no earlier round has a recorded tip (rounds started before tips were recorded): the round then reviews the full diff.
+function scopedSince(c, round) {
+  for (let r = round - 1; r >= 1; r--) {
+    const tip = String(json.readJson(rv.roundFile(c.dir, r, 'tip.json'), {}).data.tip || '');
+    if (!/^[0-9a-f]{7,64}$/.test(tip)) continue;
+    let findings = [];
+    for (const suffix of ['json', 'kept.json', 'raw.json']) {
+      try { findings = rv.readArray(rv.roundFile(c.dir, r, suffix), 'findings'); break; } catch { /* try the next file */ }
+    }
+    return { from: tip, prevRound: r, findings };
+  }
+  return null;
+}
+
+// Extra reviewer text for a scoped round: a verdict per earlier finding, new problems only in the fix diff.
+// `asJson`: the engine path, where the whole reply is one JSON array; the verdicts then travel inside it.
+function scopedLines(sc, asJson) {
+  const list = sc.findings.map((f) => `- ${f.id} [${f.severity}] ${f.file}:${f.line}  ${clean(f.claim || '', 200)}`);
+  return [
+    `This is a scoped re-review. The diff is only what changed since round ${sc.prevRound} started (from commit ${sc.from}), not the whole task.`,
+    asJson
+      ? `For each finding of round ${sc.prevRound} listed below, add one entry to the JSON array: { "id": "<earlier finding id>", "verdict": "addressed|not addressed", "evidence": "file:line" }. These verdict entries are not new findings and carry no other fields; new findings keep the schema above and have no "verdict" field.`
+      : `For each finding of round ${sc.prevRound} listed below, give a verdict "addressed" or "not addressed" (one line each: <id>: addressed|not addressed, with file:line evidence).`,
+    'Report new problems found in the fix diff only; do not repeat the findings below as new ones and do not review code the fix did not touch.',
+    `Findings of round ${sc.prevRound}:`,
+    ...(list.length ? list : ['- (none)']),
+    ...(asJson ? [] : ['Put the verdicts in your final message, one line per finding, after saying how many new findings you saved.']),
+  ];
+}
+
+function externalPrompt(c, round, sc) {
   const range = common.branchRange(c.proj.path, c.task.branch);
   if (!range) throw new CrewError('wf.review.noDiff', { id: c.task.id });
-  let diff = common.git(['diff', range.base, range.branch], c.proj.path, 60000) || '';
+  let diff = common.git(['diff', sc ? sc.from : range.base, range.branch], c.proj.path, 60000) || '';
   let note = '';
   if (Buffer.byteLength(diff) > rv.MAX_DIFF_BYTES) {
     diff = Buffer.from(diff).subarray(0, rv.MAX_DIFF_BYTES).toString('utf8');
@@ -92,6 +129,7 @@ function externalPrompt(c, round) {
     `Allowed categories: ${c.cfg.review.categories.join(', ')}.`,
     rv.SCHEMA_TEXT,
     'Reply with the JSON array only.',
+    ...(sc ? scopedLines(sc, true) : []),
     '', '## Brief', f, brief.trim(), f,
     '', '## Review rules', f, rules.trim(), f,
     '', '## Diff', f, diff.trimEnd(), f, note,
@@ -127,15 +165,22 @@ function refuterEnginePrompt(c, round, kept) {
 }
 
 // -> { list } (sanitized and saved) or { fallback: { engine, reason } } when the engine failed and the role falls back to Claude.
-function runEngine(c, name, round) {
+function runEngine(c, name, round, sc) {
   const engineTxt = rv.roundFile(c.dir, round, 'engine.txt');
-  const res = eng.run({ cwd: c.proj.path, name, input: () => externalPrompt(c, round), engineTxt });
+  const res = eng.run({ cwd: c.proj.path, name, input: () => externalPrompt(c, round, sc), engineTxt });
   if (res.fail) {
     return { fallback: eng.onFail(c.proj.id, c.cfg, { role: 'reviewer', name, fail: res.fail, round, scope: 'task', task: c.task.id }) };
   }
-  const safe = rv.sanitizeFindings(res.list, true);
+  // with --since-last-round the array holds verdict entries for earlier findings next to the new findings: keep them apart
+  const ids = new Set(sc ? sc.findings.map((f) => f.id) : []);
+  const isVerdict = (e) => !!e && typeof e === 'object' && ids.has(e.id) && /^(not addressed|addressed)$/i.test(String(e.verdict || '').trim());
+  const verdicts = res.list.filter(isVerdict).map((e) => ({
+    id: clean(String(e.id), 40), verdict: /^not/i.test(String(e.verdict).trim()) ? 'not addressed' : 'addressed', evidence: clean(String(e.evidence || ''), 300),
+  }));
+  const safe = rv.sanitizeFindings(res.list.filter((e) => !isVerdict(e)), true);
   json.save(rv.roundFile(c.dir, round, 'raw.json'), safe);
-  return { list: safe };
+  if (sc) json.save(rv.roundFile(c.dir, round, 'verdicts.json'), verdicts);
+  return { list: safe, verdicts: sc ? verdicts : null };
 }
 
 function doRun(ctx, a) {
@@ -144,13 +189,19 @@ function doRun(ctx, a) {
   const engine = a.engine || (c.cfg.roles.reviewer || {}).engine || 'claude';
   if (engine !== 'claude') eng.check(engine);
   const round = nextRound(c, a);
+  const sc = a.sinceLast ? scopedSince(c, round) : null;
+  const sinceNote = a.sinceLast && !sc ? ctx.t('wf.review.sinceFallback') : '';
+  recordTip(c, round);
   const rawPath = rv.roundFile(c.dir, round, 'raw.json');
   let fallback = null;
   if (engine !== 'claude') {
-    const res = runEngine(c, engine, round);
+    const res = runEngine(c, engine, round, sc);
     if (res.list) {
-      ctx.emit({ engine, round, raw_path: rawPath, count: res.list.length }, [
+      const vPath = rv.roundFile(c.dir, round, 'verdicts.json');
+      ctx.emit({ engine, round, raw_path: rawPath, count: res.list.length, ...(res.verdicts ? { verdicts: res.verdicts, verdicts_path: vPath } : {}), ...(sinceNote ? { scope_note: 'full_diff' } : {}) }, [
+        ...(sinceNote ? [sinceNote] : []),
         ctx.t('wf.review.engineDone', { name: engine, n: res.list.length, path: rawPath }),
+        ...(res.verdicts ? [ctx.t('wf.review.verdictsSaved', { name: engine, n: res.verdicts.length, path: vPath }), ...res.verdicts.map((v) => ctx.t('wf.review.verdictLine', v))] : []),
         ctx.t('wf.review.thenFilter', { id: c.task.id }),
       ]);
       return;
@@ -158,13 +209,15 @@ function doRun(ctx, a) {
     fallback = res.fallback;
   }
   const role = c.cfg.roles.reviewer || {};
-  const prompt = rv.reviewerInstructions({
+  const prompt = [rv.reviewerInstructions({
     task: c.task, briefPath: path.join(c.dir, 'brief.md'), reviewPath: path.join(c.wt, '.crew', 'REVIEW.md'),
-    diffCmd: diffCommand(c), categories: c.cfg.review.categories, round, rawPath, cli: common.cliCommand(),
-  });
+    diffCmd: sc ? diffCommand(c, sc.from) : diffCommand(c), categories: c.cfg.review.categories, round, rawPath, cli: common.cliCommand(),
+  }), ...(sc ? scopedLines(sc) : [])].join('\n');
   const data = { engine, round, raw_path: rawPath, subagent_type: role.agent || 'crew-reviewer', model: role.model || 'sonnet', prompt };
   if (fallback) data.fallback = fallback;
+  if (sinceNote) data.scope_note = 'full_diff';
   ctx.emit(data, [
+    ...(sinceNote ? [sinceNote] : []),
     ...(fallback ? [ctx.t('wf.review.engineFallback', { name: fallback.engine, reason: fallback.reason })] : []),
     ctx.t('wf.review.dispatch', { agent: data.subagent_type, model: data.model, round }),
     ctx.t('wf.review.rawAt', { path: rawPath }),
@@ -395,7 +448,7 @@ module.exports = {
   summary: { en: 'Review pipeline: find, filter, refute, finalize, dismiss', 'zh-TW': '審查流程：找出、過濾、反駁、定案、駁回' },
   usage: {
     en: [
-      '  crew review run <task> [--engine claude|<name>] [--round N]',
+      '  crew review run <task> [--engine claude|<name>] [--since-last-round] [--round N]   (--since-last-round: review only the changes since the previous round started)',
       '  crew review submit <task> [--round N] [--kind findings|refutations] [--file F]   (JSON on stdin without --file)',
       '  crew review filter <task> [--round N]',
       '  crew review finalize <task> [--refutations-file F] [--round N]',
@@ -404,7 +457,7 @@ module.exports = {
       '  crew review followup <task> <finding-id> --done-when "..." [--text "..."] [--plan SLUG] [--round N]   (proposes the work as a [?] step of the plan)',
     ].join('\n'),
     'zh-TW': [
-      '  crew review run <task> [--engine claude|<名稱>] [--round N]',
+      '  crew review run <task> [--engine claude|<名稱>] [--since-last-round] [--round N]   （--since-last-round：只審上一輪開始之後的改動）',
       '  crew review submit <task> [--round N] [--kind findings|refutations] [--file F]   （沒給 --file 就從標準輸入讀 JSON）',
       '  crew review filter <task> [--round N]',
       '  crew review finalize <task> [--refutations-file F] [--round N]',

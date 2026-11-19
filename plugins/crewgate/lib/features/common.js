@@ -157,6 +157,22 @@ function branchTip(root, branch) {
   return t ? t.trim() : null;
 }
 
+// Lines changed between two commits, added plus removed as `git diff --numstat` counts them (a binary file counts as 1), and
+// the files touched (both paths of a rename). -> { lines, files } or null when git cannot say.
+function changedLines(root, from, to) {
+  const out = git(['diff', '--numstat', '--no-renames', '-z', from, to], root);
+  if (out === null) return null;
+  let lines = 0;
+  const files = [];
+  for (const rec of out.split('\0').filter(Boolean)) {
+    const m = /^(\d+|-)\t(\d+|-)\t([\s\S]*)$/.exec(rec);
+    if (!m) continue;
+    lines += m[1] === '-' ? 1 : Number(m[1]) + Number(m[2]);
+    files.push(m[3]);
+  }
+  return { lines, files };
+}
+
 function slug(s, max = 40) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, max).replace(/-+$/, '');
 }
@@ -172,5 +188,5 @@ function cliCommand() { return `node "${CLI_PATH}"`; }
 
 module.exports = {
   PLUGIN_ROOT, CLI_PATH, readText, readStdin, parseJsonText, today, checkDate, splitList, git,
-  checkBranch, branchRange, scopeRange, branchTip, slug, fence, cliCommand,
+  checkBranch, branchRange, scopeRange, branchTip, changedLines, slug, fence, cliCommand,
 };
