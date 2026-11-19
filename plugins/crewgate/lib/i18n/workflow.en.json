@@ -257,5 +257,18 @@
   "release.checkJob": "  job {name}: {status}{conclusion}",
   "release.checkNone": "No workflow run exists for {commit}. Push it and wait for CI.",
   "release.checkPending": "Still pending: wait for CI to finish, then run this again.",
-  "release.checkFailed": "Failed: do not merge or tag this commit."
+  "release.checkFailed": "Failed: do not merge or tag this commit.",
+  "wf.task.ruleUnmet": "{text}",
+  "wf.task.rule.refused": "Task {id} was not accepted (review.enforce={mode}): {what}.",
+  "wf.task.rule.warned": "Warning: task {id} was accepted without meeting the review rule (review.enforce={mode}): {what}.",
+  "wf.task.rule.whatFix": "it was sent back after review round {round} was finalized, and the fix since then was not reviewed again",
+  "wf.task.rule.whatNone": "no review round was finalized for it",
+  "wf.task.rule.size": "The change is {lines} line(s) in {files} file(s); a small change is at most {max} line(s) (review.small_fix_lines).",
+  "wf.task.rule.docsOnly": "Only documentation files changed ({lines} line(s) in {files} file(s)).",
+  "wf.task.rule.sizeUnknown": "The size of the change could not be counted (no branch, no tip recorded when the round started, or git failed).",
+  "wf.task.rule.tailRead": "Read it yourself, then accept with --read-by-orchestrator \"<what was read>\".",
+  "wf.task.rule.tailFix": "Run crew review run {id} --since-last-round, then crew review filter and finalize.",
+  "wf.task.rule.tailNone": "Run crew review run {id}, then crew review filter and finalize.",
+  "wf.task.rule.recorded": "Recorded: read by the orchestrator ({lines} line(s)): {note}",
+  "wf.review.noPrevTip": "Task {id} has no earlier review round with a recorded branch tip, so --since-last-round cannot say what changed. Run crew review run without it for a full-diff round."
 }

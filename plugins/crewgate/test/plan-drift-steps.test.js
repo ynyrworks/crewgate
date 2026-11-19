@@ -17,7 +17,7 @@ const sess = require('../lib/hooks/session');
 
 const MODES = ['block', 'remind', 'off'];
 function fixture(enforce = 'block') {
-  const f = H.fixture({ config: { gates: { enforce: 'confirm' }, plan: { enforce }, limits: { dispatch_max_cpu: 100 } } });
+  const f = H.fixture({ config: { gates: { enforce: 'confirm' }, plan: { enforce }, review: { enforce: 'off' }, limits: { dispatch_max_cpu: 100 } } });
   H.start(f);
   f.env = { CLAUDE_CODE_SESSION_ID: f.sid };
   return f;

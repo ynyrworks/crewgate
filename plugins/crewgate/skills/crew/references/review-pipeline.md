@@ -89,8 +89,9 @@ Each `review run` starts a new round (`1.raw.json`, `2.raw.json`, ...); old roun
 When the worker returns from a send-back, run the whole pipeline again: `crew review run <task>` starts the next round on the branch as it is now.
 Before you decide, open the previous round with `crew review show <task> --round <N-1>` and mark each of its findings fixed or still open.
 A finding still open goes into the next send-back note with its id and file:line.
-When you may read a small fix yourself instead of this round: `SKILL.md`, step 9.
-`crew task accept` notes a task whose last changes after a send-back were not re-reviewed, and `crew release record` flags it NOT RE-REVIEWED.
+`crew review run <task> --since-last-round` scopes the round: the prompt's diff runs from the branch tip recorded when the previous round started to the branch tip now, the previous round's findings are listed, and the reviewer gives each one a verdict "addressed" or "not addressed" and reports new problems in the fix diff only. Every `crew review run` records its starting tip in `<round>.tip.json`.
+With `review.enforce` at `block` (the default), `crew task accept` refuses a task sent back after its last finalized round unless a later round was finalized, or the commits since that round start change at most `review.small_fix_lines` lines (added plus removed) and you pass `--read-by-orchestrator "<what was read>"`. A task with no finalized round at all is refused unless every changed file matches `review.docs_globs` or the whole task is that small, again with the flag. The accept event records which rule applied (`review_rule`: `later_round`, `read_by_orchestrator`, `docs_only_read` or `small_read`, with the line count and the note). `remind` accepts and prints the same message as a warning and records `review.rule_unmet`; `off` does nothing.
+`crew task accept` still notes a task whose last changes after a send-back were not re-reviewed, and `crew release record` flags it NOT RE-REVIEWED.
 
 ## Calibrating the reviewer
 

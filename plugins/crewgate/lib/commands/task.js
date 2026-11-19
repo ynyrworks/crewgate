@@ -5,6 +5,8 @@ const path = require('path');
 const { parse } = require('../core/args');
 const { UsageError, CrewError } = require('../core/errors');
 const tasks = require('../core/tasks');
+const json = require('../core/json');
+const glob = require('../hooks/glob');
 const events = require('../core/events');
 const paths = require('../core/paths');
 const { clean } = require('../core/redact');
@@ -38,7 +40,7 @@ const SPECS = {
     options: { '--report-file': { dest: 'reportFile' }, '--packet-file': { dest: 'packetFile' } },
   },
   'send-back': { positionals: [{ name: 'id' }], options: NOTE },
-  accept: { positionals: [{ name: 'id' }], options: { ...NOTE, '--skip-refuter': { dest: 'skipRefuter' }, '--widen': { dest: 'widen' }, '--gate': { dest: 'gate' }, '--quote': { dest: 'quote' } } },
+  accept: { positionals: [{ name: 'id' }], options: { ...NOTE, '--skip-refuter': { dest: 'skipRefuter' }, '--read-by-orchestrator': { dest: 'readBy' }, '--widen': { dest: 'widen' }, '--gate': { dest: 'gate' }, '--quote': { dest: 'quote' } } },
 merge: { positionals: [{ name: 'id' }], options: NOTE },
   cancel: { positionals: [{ name: 'id' }], options: NOTE },
   run: {
@@ -106,6 +108,46 @@ function notReReviewed(taskDir, finalized, projectId, taskId) {
   if (!finalized) return null;
   const mine = events.read(projectId).filter((e) => e.task === taskId);
   return release.returnedAfterRound(taskDir, finalized, mine) ? { kind: 'not_re_reviewed', round: finalized } : null;
+}
+
+// The review rule at accept time (review.enforce). `gap` is reviewGap's answer. -> null when there is nothing to record,
+// else { met, data, unmet }: `data` goes on the accept event, `unmet` names the message parts when the rule is not met.
+// A fix after a send-back (not_re_reviewed) is met when the commits since the last finalized round started change at most
+// review.small_fix_lines lines and the orchestrator says what it read. With no finalized round at all it is met when every file is
+// documentation (review.docs_globs) or the whole task is that small, with the same statement.
+function reviewRule(proj, cfg, task, taskDir, gap, readBy) {
+  const max = cfg.review.small_fix_lines;
+  const note = readBy ? clean(readBy, 300) : '';
+  if (!gap || (gap.kind !== 'not_re_reviewed' && gap.kind !== 'none')) {
+    // a send-back that a later finalized round covered: record that it was (a)
+    const round = review.latestRound(taskDir, 'json');
+    const back = round && !gap && task.returns > 0;
+    return back ? { met: true, data: { review_rule: { applied: 'later_round', round } } } : null;
+  }
+  let counted = null;
+  let docs = false;
+  if (gap.kind === 'not_re_reviewed') {
+    const tip = (json.readJson(review.roundFile(taskDir, gap.round, 'tip.json'), {}).data || {}).tip;
+    const now = common.branchTip(proj.path, task.branch);
+    if (/^[0-9a-f]{7,64}$/.test(tip || '') && now) counted = common.changedLines(proj.path, tip, now);
+  } else {
+    const tips = tasks.list(proj.id, { state: 'accepted' }).concat(tasks.list(proj.id, { state: 'merged' })).filter((t) => t.id !== task.id && t.scope_tip).map((t) => t.scope_tip);
+    const r = common.scopeRange(proj.path, task.branch, tips);
+    if (!r.failed) counted = common.changedLines(proj.path, r.base, r.branch);
+    const ci = process.platform === 'win32' || process.platform === 'darwin';
+    docs = !!counted && counted.files.length > 0 && counted.files.every((f) => glob.matchAny(cfg.review.docs_globs, f, ci));
+  }
+  const lines = counted ? counted.lines : null;
+  const small = lines !== null && lines <= max;
+  const kind = gap.kind === 'none' ? 'no_review' : 'fix';
+  const base = { kind, round: gap.round || null, lines, files: counted ? counted.files.length : null, max };
+  if ((small || docs) && note) {
+    const applied = kind === 'fix' ? 'read_by_orchestrator' : (docs ? 'docs_only_read' : 'small_read');
+    return { met: true, data: { review_rule: { applied, ...base, note } } };
+  }
+  const size = lines === null ? 'wf.task.rule.sizeUnknown' : docs ? 'wf.task.rule.docsOnly' : 'wf.task.rule.size';
+  const tail = small || docs ? 'wf.task.rule.tailRead' : kind === 'fix' ? 'wf.task.rule.tailFix' : 'wf.task.rule.tailNone';
+  return { met: false, data: { review_rule: { applied: 'none', ...base } }, unmet: { what: kind === 'fix' ? 'wf.task.rule.whatFix' : 'wf.task.rule.whatNone', size, tail, round: gap.round, lines, files: base.files, max } };
 }
 
 function diffStat(root, branch) {
@@ -413,6 +455,25 @@ function run(argv, ctx) {
     // Findings nobody tried to refute are what the review exists to catch: going past them takes a stated reason.
     if (gap && gap.kind === 'unfinalized' && !a.skipRefuter) throw new CrewError('wf.task.acceptUnfinalized', { id: a.id, round: gap.round, n: gap.n });
     const skipped = gap && gap.kind === 'unfinalized' ? { review_gap: gap, skip_refuter: a.skipRefuter } : null;
+    let ruleLine = null;
+    let ruleEvent = null;
+    let ruleData = null;
+    if (cfg.review.enforce !== 'off') {
+      const rule = reviewRule(proj, cfg, tasks.load(proj.id, a.id), taskDir, gap, a.readBy);
+      if (rule && rule.met) ruleData = rule.data;
+      else if (rule) {
+        const u = rule.unmet;
+        const text = [
+          ctx.t(cfg.review.enforce === 'block' ? 'wf.task.rule.refused' : 'wf.task.rule.warned', { id: a.id, mode: cfg.review.enforce, what: ctx.t(u.what, { round: u.round }) }),
+          ctx.t(u.size, { lines: u.lines, files: u.files, max: u.max }),
+          ctx.t(u.tail, { id: a.id }),
+        ].join(' ');
+        if (cfg.review.enforce === 'block') throw new CrewError('wf.task.ruleUnmet', { text });
+        ruleLine = text;
+        ruleData = rule.data;
+        ruleEvent = { ...rule.data.review_rule };
+      }
+    }
     if (a.gate !== undefined && a.widen === undefined) throw new UsageError('args.missing', { name: '--widen' });
     if (a.widen !== undefined && !a.widen.trim()) throw new UsageError('args.missing', { name: '--widen' });
     const scope = scopeOnAccept(ctx, proj, cfg, a.id, a);
@@ -422,18 +483,21 @@ function run(argv, ctx) {
         ctx.t('wf.task.widenNext', { id: a.id, gate: scope.asked.gate_id, reason: clean(a.widen, 200) }),
       ]);
     }
-    const task = tasks.transition(proj.id, a.id, 'accepted', { ...opts, note: a.note || '', data: skipped || undefined });
+    const task = tasks.transition(proj.id, a.id, 'accepted', { ...opts, note: a.note || '', data: skipped || ruleData ? { ...skipped, ...ruleData } : undefined });
+    if (ruleEvent) evAppend(proj, 'review.rule_unmet', a.id, ruleEvent);
     if (scope.after) scope.after();
     try { const tip = common.branchTip(proj.path, task.branch); if (tip) tasks.recordScopeTip(proj.id, a.id, tip); } catch { /* ignore */ }
     const open = (findingsSummary(taskDir) || { items: [] }).items.filter((f) => f.severity === 'blocker' || f.severity === 'major');
     const L = [ctx.t('wf.task.accepted', { id: task.id }), ...(changedWarn ? [changedWarn] : []), ...scope.lines];
+    if (ruleLine) L.push(ruleLine);
+    if (ruleData && ruleData.review_rule.note) L.push(ctx.t('wf.task.rule.recorded', { lines: ruleData.review_rule.lines === null ? '?' : ruleData.review_rule.lines, note: ruleData.review_rule.note }));
     if (open.length) L.push(ctx.t('wf.task.acceptedWithFindings', { n: open.length, ids: open.map((f) => f.id).join(', ') }));
     if (gap) {
       if (gap.kind === 'none') L.push(ctx.t('wf.task.acceptedNoReview'));
       else if (gap.kind === 'not_re_reviewed') L.push(ctx.t('wf.task.acceptedNotReReviewed', { round: gap.round }));
       else L.push(ctx.t('wf.task.acceptedUnfinalized', { round: gap.round, n: gap.n }));
     }
-    ctx.emit({ task, open_findings: open, review_gap: gap, ...(skipped ? { skip_refuter: a.skipRefuter } : {}) }, L);
+    ctx.emit({ task, open_findings: open, review_gap: gap, ...(ruleData ? { review_rule: ruleData.review_rule } : {}), ...(skipped ? { skip_refuter: a.skipRefuter } : {}) }, L);
   } else if (sub === 'merge') {
     if (cfg.gates.merge === 'never') throw new CrewError('wf.task.mergeNever');
     const before = tasks.load(proj.id, a.id);
@@ -460,7 +524,7 @@ module.exports = {
       '  crew task show <id>',
       '  crew task report <id> --report-file F [--packet-file F]   (used by the worker)',
       '  crew task send-back <id> --note "..."',
-      '  crew task accept <id> [--note "..."] [--skip-refuter "reason"] [--widen "reason" [--gate ID]]   (the reason is needed when a review round was not finalized; --widen takes files outside the scope after the user agrees)',
+      '  crew task accept <id> [--note "..."] [--skip-refuter "reason"] [--read-by-orchestrator "what was read"] [--widen "reason" [--gate ID]]   (the reason is needed when a review round was not finalized; --read-by-orchestrator accepts a small fix after a send-back, or a documentation-only or small task with no review, that the orchestrator read (review.enforce); --widen takes files outside the scope after the user agrees)',
       '  crew task merge <id> [--note "..."]    (records the merge; it does not run git)',
       '  crew task cancel <id> [--note "..."]',
       '  crew task run <id> [--engine codex] [--timeout 1800] [--model M]   (run a Codex CLI worker in the task worktree)',
@@ -471,7 +535,7 @@ module.exports = {
       '  crew task show <id>',
       '  crew task report <id> --report-file F [--packet-file F]   （worker 使用）',
       '  crew task send-back <id> --note "..."',
-      '  crew task accept <id> [--note "..."] [--skip-refuter "原因"] [--widen "原因" [--gate ID]]   （審查輪次沒有定案時必須說明原因；--widen 在使用者同意後接受範圍外的檔案）',
+      '  crew task accept <id> [--note "..."] [--skip-refuter "原因"] [--read-by-orchestrator "讀了什麼"] [--widen "原因" [--gate ID]]   （審查輪次沒有定案時必須說明原因；--read-by-orchestrator 用來接受統籌自己讀過的、被退回後的小修正，或沒有審查的純文件／小任務（review.enforce）；--widen 在使用者同意後接受範圍外的檔案）',
       '  crew task merge <id> [--note "..."]    （只記錄合併，不執行 git）',
       '  crew task cancel <id> [--note "..."]',
       '  crew task run <id> [--engine codex] [--timeout 1800] [--model M]   (run a Codex CLI worker in the task worktree)',

@@ -124,9 +124,9 @@ In Codex there is no `$ARGUMENTS`: take the sub-command from what the user said,
    - When `send-back` refuses (limit `max_returns_before_takeover` reached) it tells you to take the
      task over: do the remaining fix yourself in the task's worktree, say so to the user, and keep
      the change as small as possible. This is the one case where you edit code.
-   - A fix made after a send-back gets another review round (step 8) before accept. The CLI does not enforce this yet; it is your rule.
-     The one exception: a fix of 20 changed lines or fewer you may read line by line instead, and your report to the user says so.
-   - A task with no review round at all may be accepted only when it is documentation only or 20 changed lines or fewer.
+   - A fix made after a send-back gets another review round (step 8) before accept; `crew task accept` refuses otherwise (`review.enforce`).
+     The one exception: a fix of 20 changed lines or fewer (`review.small_fix_lines`) you may read line by line, and accept with `--read-by-orchestrator "<what you read>"`; your report to the user says so.
+   - A task with no review round at all may be accepted only when it is documentation only or 20 changed lines or fewer, again with `--read-by-orchestrator`; the CLI refuses it otherwise.
    - Clean: `crew task accept <id>`. Finalize the round first, even when you expect to dismiss its
      findings: accept refuses an unfinalized round with findings unless you pass `--skip-refuter "<reason>"`,
      and tell the user when you do.

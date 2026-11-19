@@ -165,6 +165,7 @@ test('send-back honours max_returns_before_takeover from the config', () => {
 
 test('accept, merge and cancel follow the state machine', () => {
   const repo = u.initRepo();
+  u.patchCfg(repo, (c) => { c.review.enforce = 'off'; });
   const t = u.createTask(repo);
   const f = u.reportFiles();
   assert.equal(run(repo, 'task', 'accept', t.id).code, 1, 'cannot accept before it returned');
@@ -185,6 +186,7 @@ test('accept, merge and cancel follow the state machine', () => {
 
 test('merge is refused when the merge gate is never; events are recorded', () => {
   const repo = u.initRepo();
+  u.patchCfg(repo, (c) => { c.review.enforce = 'off'; });
   const t = u.createTask(repo);
   run(repo, 'task', 'report', t.id, '--report-file', u.reportFiles().report);
   run(repo, 'task', 'accept', t.id);
@@ -202,6 +204,7 @@ test('merge is refused when the merge gate is never; events are recorded', () =>
 
 test('accept warns about blocker/major findings that are still listed', () => {
   const repo = u.initRepo();
+  u.patchCfg(repo, (c) => { c.review.enforce = 'off'; });
   const t = u.createTask(repo);
   run(repo, 'task', 'report', t.id, '--report-file', u.reportFiles().report);
   const project = require('../lib/core/project');

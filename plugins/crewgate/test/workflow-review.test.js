@@ -132,6 +132,7 @@ test('extractJsonArray handles plain, fenced and prose-wrapped output', () => {
 // ---------------------------------------------------------------- CLI pipeline
 function setup() {
   const repo = u.initRepo();
+  u.patchCfg(repo, (c) => { c.review.enforce = 'off'; });   // these tests are about the review pipeline; review-enforce.test.js covers the rule
   u.writeFile(repo, 'src/x.js', SRC);
   const t = u.createTask(repo);
   const dir = paths.taskDir(project.findByCwd(repo).id, t.id);
