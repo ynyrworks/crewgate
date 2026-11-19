@@ -19,6 +19,12 @@ function looksLikeOption(a) {
   return !/\s/.test(a.startsWith('--') && eq > 0 ? a.slice(0, eq) : a);
 }
 
+// A single-dash word that no option of the command names, where the next positional slot is free text.
+function isFreeText(a, options, spec, filled) {
+  const p = (spec.positionals || [])[filled];
+  return !!(p && p.text) && !a.startsWith('--') && !namesOption(a, options);
+}
+
 const GLOBALS = ['--json', '--project', '--lang', '--help', '--version'];
 function namesOption(w, options) {
   const eq = w.startsWith('--') ? w.indexOf('=') : -1;
@@ -27,7 +33,8 @@ function namesOption(w, options) {
 }
 
 // spec: {
-//   positionals: [{ name, optional?, int?, choices? }],
+//   positionals: [{ name, optional?, int?, choices?, text? }],   (text: free text; while this slot is the next one open, a single-dash word such as -x
+//     that is not a declared option is the value, not an unknown option; a --word still is one, pass it after "--")
 //   options: { '--name': { dest, int?, choices?, default?, flag?, multi? } }   (multi: repeatable, collects an array)
 //   rest?: name   (collect all extra positionals into an array under this name)
 // }
@@ -41,7 +48,7 @@ function parse(argv, spec) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (!rest && a === '--') { rest = true; continue; }
-    if (!rest && looksLikeOption(a)) {
+    if (!rest && looksLikeOption(a) && !isFreeText(a, options, spec, pos.length)) {
       let name = a;
       let value;
       const eq = a.indexOf('=');
