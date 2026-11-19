@@ -21,6 +21,7 @@
   "release.stale": "未重新審查：最後一次定案的審查輪次（第 {round} 輪）之後任務又被送回；最後的修改沒有重新審查。",
   "release.readNote": "由統籌代替審查閱讀（--read-by-orchestrator）：{note}",
   "release.counts": "（原始 {raw}、保留 {kept}、成立 {upheld}、被反駁 {refuted}、不確定 {uncertain}、已駁回 {dismissed}）",
+  "release.keptByOrchestrator": "（保留的當中，{n} 筆是由調度者用 `crew review keep` 放回的）",
   "release.roundHead": "第 {round} 輪：{n} 筆發現留下。",
   "release.roundZero": "第 {round} 輪：0 筆發現留下。",
   "release.roundOpen": "第 {round} 輪：尚未定案。",

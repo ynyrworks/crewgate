@@ -66,7 +66,7 @@ function fixture() {
   const dirA = writeTask(pid, TID.a, { title: 'Alpha thing', branch: 'feat/a', returns: 1 });
   writeRound(dirA, 1, {
     'raw.json': [finding('f1'), finding('f2'), finding('f3')],
-    'kept.json': [finding('f1'), finding('f2')],
+    'kept.json': [finding('f1'), finding('f2', { kept_by: 'orchestrator', keep_reason: 'real bug' })],
     'refutations.json': [{ id: 'f1', verdict: 'upheld', evidence: 'x' }, { id: 'f2', verdict: 'uncertain', evidence: 'y' }],
     json: [
       finding('f1', { claim: `see ${repo}/src/q.js and ${os.homedir()}/secret-thing`, verdict: 'upheld', line: 7 }),
@@ -173,6 +173,15 @@ test('review rounds: counts, surviving findings, dismissals and skip-refuter rea
   assert.match(md, /- minor test-gap `src\/x\.js:3` second claim \(uncertain\)/);
   assert.match(md, /Dismissed f3 \(once\): nit `src\/x\.js`: style only/);
   assert.match(md, /\*\*Accepted with --skip-refuter, reason\*\*: refuter timed out/);
+});
+
+test('review rounds: findings the orchestrator put back with review keep are counted apart from the filters own keeps', () => {
+  const { repo } = fixture();
+  record(repo, '1.1.0');
+  const md = read(repo);
+  assert.match(md, /Round 1: .*kept 2, .*dismissed 1\) .*1 put back by the orchestrator with `crew review keep`/);
+  assert.ok(!/Round 1: 1 finding.*put back/.test(md));
+  assert.ok(!/Round 1: 0 finding[^\n]*put back/.test(md), 'a round with no orchestrator keep says nothing');
 });
 
 test('flags: returned after the last finalized round, no review, and zero findings stated plainly', () => {

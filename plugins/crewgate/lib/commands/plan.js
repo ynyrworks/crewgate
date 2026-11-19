@@ -55,7 +55,8 @@ const REVIEW_SPECS = {
   run: { positionals: [{ name: 'slug' }], options: { '--node': { dest: 'node' }, '--force': { dest: 'force', flag: true }, '--engine': { dest: 'engine' } } },
   submit: {
     positionals: [{ name: 'slug' }],
-    options: { '--kind': { dest: 'kind', choices: ['findings', 'refutations'], default: 'findings' }, '--file': { dest: 'file' }, ...ROUND },
+    options: { '--kind': { dest: 'kind', choices: ['findings', 'refutations'], default: 'findings' }, '--file': { dest: 'file' }, '--json': { dest: 'jsonText' }, ...ROUND },
+    rest: 'extra',
   },
   filter: { positionals: [{ name: 'slug' }], options: ROUND },
   finalize: { positionals: [{ name: 'slug' }], options: { '--refutations-file': { dest: 'refFile' }, ...ROUND } },
@@ -136,7 +137,7 @@ function reviewRun(argv, ctx) {
       ctx.t('plan.review.thenFilter', { slug: a.slug }),
     ]);
   } else if (sub === 'submit') {
-    const text = a.file ? common.readText(a.file, 'findings') : common.readStdin();
+    const text = pr.submitText(ctx, a);
     if (!text.trim()) throw new CrewError('wf.review.emptyInput');
     const data = common.parseJsonText(text, a.kind);
     const list = Array.isArray(data) ? data : (data && Array.isArray(data.findings) ? data.findings : null);
@@ -395,7 +396,7 @@ module.exports = {
       '  crew plan set SLUG NODE open|done|dropped|accept',
       '  crew plan rm SLUG NODE   (a leaf only)',
       '  crew plan review run SLUG [--node NODE] [--force] [--engine claude|<name>]   (a reviewer criticises the plan; prints the reviewer prompt)',
-      '  crew plan review submit SLUG [--kind findings|refutations] [--round N] [--file F]   (JSON on stdin without --file)',
+      '  crew plan review submit SLUG [--kind findings|refutations] [--round N] [--file F | --json <array>]   (JSON on stdin without --file or --json)',
       '  crew plan review filter SLUG [--round N]   (drops bad, unknown and repeated findings; prints the refuter prompt)',
       '  crew plan review finalize SLUG [--refutations-file F] [--round N]   (survivors become proposed [?] nodes)',
       '  crew plan review show SLUG [--round N]',
@@ -418,7 +419,7 @@ module.exports = {
       '  crew plan set SLUG NODE open|done|dropped|accept',
       '  crew plan rm SLUG NODE   （只能刪葉節點）',
       '  crew plan review run SLUG [--node NODE] [--force] [--engine claude|<名稱>]   （審查者批評計畫；印出審查者提示）',
-      '  crew plan review submit SLUG [--kind findings|refutations] [--round N] [--file F]   （沒給 --file 就從標準輸入讀 JSON）',
+      '  crew plan review submit SLUG [--kind findings|refutations] [--round N] [--file F | --json <array>]   （沒給 --file 或 --json 就從標準輸入讀 JSON）',
       '  crew plan review filter SLUG [--round N]   （濾掉格式不對、找不到節點、重複的發現；印出反駁者提示）',
       '  crew plan review finalize SLUG [--refutations-file F] [--round N]   （留下的發現變成提議中 [?] 節點）',
       '  crew plan review show SLUG [--round N]',

@@ -21,11 +21,13 @@ const SPECS = {
   run: { positionals: [{ name: 'task' }], options: { '--engine': { dest: 'engine' }, '--since-last-round': { dest: 'sinceLast', flag: true }, ...ROUND } },
   submit: {
     positionals: [{ name: 'task' }],
-    options: { '--kind': { dest: 'kind', choices: ['findings', 'refutations'], default: 'findings' }, '--file': { dest: 'file' }, ...ROUND },
+    options: { '--kind': { dest: 'kind', choices: ['findings', 'refutations'], default: 'findings' }, '--file': { dest: 'file' }, '--json': { dest: 'jsonText' }, ...ROUND },
+    rest: 'extra',
   },
   filter: { positionals: [{ name: 'task' }], options: ROUND },
   finalize: { positionals: [{ name: 'task' }], options: { '--refutations-file': { dest: 'refFile' }, ...ROUND } },
   show: { positionals: [{ name: 'task' }], options: ROUND },
+  keep: { positionals: [{ name: 'task' }, { name: 'finding' }], options: { '--reason': { dest: 'reason' }, ...ROUND } },
   dismiss: {
     positionals: [{ name: 'task' }, { name: 'finding' }],
     options: {
@@ -96,18 +98,15 @@ function scopedSince(c, round) {
 }
 
 // Extra reviewer text for a scoped round: a verdict per earlier finding, new problems only in the fix diff.
-// `asJson`: the engine path, where the whole reply is one JSON array; the verdicts then travel inside it.
-function scopedLines(sc, asJson) {
+// The verdicts travel inside the submitted JSON array (engine reply or `review submit`), kept apart from new findings.
+function scopedLines(sc) {
   const list = sc.findings.map((f) => `- ${f.id} [${f.severity}] ${f.file}:${f.line}  ${clean(f.claim || '', 200)}`);
   return [
     `This is a scoped re-review. The diff is only what changed since round ${sc.prevRound} started (from commit ${sc.from}), not the whole task.`,
-    asJson
-      ? `For each finding of round ${sc.prevRound} listed below, add one entry to the JSON array: { "id": "<earlier finding id>", "verdict": "addressed|not addressed", "evidence": "file:line" }. These verdict entries are not new findings and carry no other fields; new findings keep the schema above and have no "verdict" field.`
-      : `For each finding of round ${sc.prevRound} listed below, give a verdict "addressed" or "not addressed" (one line each: <id>: addressed|not addressed, with file:line evidence).`,
+    `For each finding of round ${sc.prevRound} listed below, add one entry to the JSON array: { "id": "<earlier finding id>", "verdict": "addressed|not addressed", "evidence": "file:line" }. These verdict entries are not new findings and carry no other fields; new findings keep the schema above and have no "verdict" field.`,
     'Report new problems found in the fix diff only; do not repeat the findings below as new ones and do not review code the fix did not touch.',
     `Findings of round ${sc.prevRound}:`,
     ...(list.length ? list : ['- (none)']),
-    ...(asJson ? [] : ['Put the verdicts in your final message, one line per finding, after saying how many new findings you saved.']),
   ];
 }
 
@@ -129,7 +128,7 @@ function externalPrompt(c, round, sc) {
     `Allowed categories: ${c.cfg.review.categories.join(', ')}.`,
     rv.SCHEMA_TEXT,
     'Reply with the JSON array only.',
-    ...(sc ? scopedLines(sc, true) : []),
+    ...(sc ? scopedLines(sc) : []),
     '', '## Brief', f, brief.trim(), f,
     '', '## Review rules', f, rules.trim(), f,
     '', '## Diff', f, diff.trimEnd(), f, note,
@@ -164,6 +163,17 @@ function refuterEnginePrompt(c, round, kept) {
   ].join('\n');
 }
 
+// With --since-last-round the array holds verdict entries for earlier findings next to the new findings: keep them apart.
+// -> { rest, verdicts }
+function splitVerdicts(list, earlier) {
+  const ids = new Set(earlier);
+  const isVerdict = (e) => !!e && typeof e === 'object' && ids.has(e.id) && /^(not addressed|addressed)$/i.test(String(e.verdict || '').trim());
+  const verdicts = list.filter(isVerdict).map((e) => ({
+    id: clean(String(e.id), 40), verdict: /^not/i.test(String(e.verdict).trim()) ? 'not addressed' : 'addressed', evidence: clean(String(e.evidence || ''), 300),
+  }));
+  return { rest: list.filter((e) => !isVerdict(e)), verdicts };
+}
+
 // -> { list } (sanitized and saved) or { fallback: { engine, reason } } when the engine failed and the role falls back to Claude.
 function runEngine(c, name, round, sc) {
   const engineTxt = rv.roundFile(c.dir, round, 'engine.txt');
@@ -171,13 +181,8 @@ function runEngine(c, name, round, sc) {
   if (res.fail) {
     return { fallback: eng.onFail(c.proj.id, c.cfg, { role: 'reviewer', name, fail: res.fail, round, scope: 'task', task: c.task.id }) };
   }
-  // with --since-last-round the array holds verdict entries for earlier findings next to the new findings: keep them apart
-  const ids = new Set(sc ? sc.findings.map((f) => f.id) : []);
-  const isVerdict = (e) => !!e && typeof e === 'object' && ids.has(e.id) && /^(not addressed|addressed)$/i.test(String(e.verdict || '').trim());
-  const verdicts = res.list.filter(isVerdict).map((e) => ({
-    id: clean(String(e.id), 40), verdict: /^not/i.test(String(e.verdict).trim()) ? 'not addressed' : 'addressed', evidence: clean(String(e.evidence || ''), 300),
-  }));
-  const safe = rv.sanitizeFindings(res.list.filter((e) => !isVerdict(e)), true);
+  const { rest, verdicts } = splitVerdicts(res.list, sc ? sc.findings.map((f) => f.id) : []);
+  const safe = rv.sanitizeFindings(rest, true);
   json.save(rv.roundFile(c.dir, round, 'raw.json'), safe);
   if (sc) json.save(rv.roundFile(c.dir, round, 'verdicts.json'), verdicts);
   return { list: safe, verdicts: sc ? verdicts : null };
@@ -213,6 +218,10 @@ function doRun(ctx, a) {
     task: c.task, briefPath: path.join(c.dir, 'brief.md'), reviewPath: path.join(c.wt, '.crew', 'REVIEW.md'),
     diffCmd: sc ? diffCommand(c, sc.from) : diffCommand(c), categories: c.cfg.review.categories, round, rawPath, cli: common.cliCommand(),
   }), ...(sc ? scopedLines(sc) : [])].join('\n');
+  // the verdicts of a scoped round come back inside the submitted JSON: `review submit` needs the earlier ids to tell them from findings
+  const scopeFile = rv.roundFile(c.dir, round, 'scope.json');
+  if (sc) json.save(scopeFile, { prev_round: sc.prevRound, from: sc.from, ids: sc.findings.map((f) => f.id) });
+  else fs.rmSync(scopeFile, { force: true });
   const data = { engine, round, raw_path: rawPath, subagent_type: role.agent || 'crew-reviewer', model: role.model || 'sonnet', prompt };
   if (fallback) data.fallback = fallback;
   if (sinceNote) data.scope_note = 'full_diff';
@@ -229,31 +238,91 @@ function doRun(ctx, a) {
 // ---------------------------------------------------------------- submit
 function doSubmit(ctx, a) {
   const c = ctxOf(ctx, a.task);
-  const text = a.file ? common.readText(a.file, 'findings') : common.readStdin();
+  const text = pr.submitText(ctx, a);
   if (!text.trim()) throw new CrewError('wf.review.emptyInput');
   const data = common.parseJsonText(text, a.kind);
   const list = Array.isArray(data) ? data : (data && Array.isArray(data.findings) ? data.findings : null);
   if (!list) throw new CrewError('wf.review.notArray', { what: a.kind });
   const round = a.round || Math.max(1, rv.latestRound(c.dir, 'raw.json'));
-  const safe = a.kind === 'findings' ? rv.sanitizeFindings(list, true) : list.map(rv.sanitizeRefutation);
+  // a scoped round (review run --since-last-round): verdicts on earlier findings are inside the array
+  const scope = a.kind === 'findings' ? json.readJson(rv.roundFile(c.dir, round, 'scope.json'), null).data : null;
+  const split = scope && Array.isArray(scope.ids) ? splitVerdicts(list, scope.ids) : null;
+  const items = split ? split.rest : list;
+  const safe = a.kind === 'findings' ? rv.sanitizeFindings(items, true) : items.map(rv.sanitizeRefutation);
   const file = rv.roundFile(c.dir, round, a.kind === 'findings' ? 'raw.json' : 'refutations.json');
   json.save(file, safe);
-  ctx.emit({ round, kind: a.kind, count: list.length, file }, ctx.t('wf.review.submitted', { n: list.length, kind: a.kind, round }));
+  const vPath = rv.roundFile(c.dir, round, 'verdicts.json');
+  if (split) json.save(vPath, split.verdicts);
+  ctx.emit({ round, kind: a.kind, count: items.length, file, ...(split ? { verdicts: split.verdicts, verdicts_path: vPath } : {}) }, [
+    ctx.t('wf.review.submitted', { n: items.length, kind: a.kind, round }),
+    ...(split ? [ctx.t('wf.review.verdictsSavedClaude', { name: 'reviewer', n: split.verdicts.length, path: vPath }), ...split.verdicts.map((v) => ctx.t('wf.review.verdictLine', v))] : []),
+  ]);
+}
+
+// ---------------------------------------------------------------- keep
+// The orchestrator's `review keep` decisions of a round, stored beside it so that a second `review filter` keeps them. -> [{ id, reason, at }]
+function readKeeps(c, round) {
+  const d = json.readJson(rv.roundFile(c.dir, round, 'keeps.json'), []).data;
+  return Array.isArray(d) ? d : [];
+}
+
+const keptBy = (f, reason) => ({ ...f, kept_by: 'orchestrator', keep_reason: clean(reason, 500) });
+
+function doKeep(ctx, a) {
+  const c = ctxOf(ctx, a.task);
+  need(a.reason, '--reason');
+  const round = currentRound(c, a, 'kept.json');
+  if (fs.existsSync(rv.roundFile(c.dir, round, 'json'))) throw new CrewError('wf.review.keepFinalized', { round });
+  const dropped = rv.readArray(rv.roundFile(c.dir, round, 'filtered.json'), 'filtered');
+  const i = dropped.findIndex((d) => d && d.finding && d.finding.id === a.finding);
+  if (i < 0) throw new CrewError('wf.review.keepUnknown', { id: a.finding, round });
+  if (dropped[i].reason === 'invalid') throw new CrewError('wf.review.keepInvalid', { id: a.finding, detail: dropped[i].detail || '' });
+  const kept = rv.readArray(rv.roundFile(c.dir, round, 'kept.json'), 'kept findings');
+  const item = keptBy(dropped[i].finding, a.reason);
+  kept.push(item);
+  dropped.splice(i, 1);
+  json.save(rv.roundFile(c.dir, round, 'kept.json'), kept);
+  json.save(rv.roundFile(c.dir, round, 'filtered.json'), dropped);
+  const keeps = readKeeps(c, round).filter((k) => k.id !== a.finding).concat({ id: a.finding, reason: item.keep_reason, at: new Date().toISOString() });
+  json.save(rv.roundFile(c.dir, round, 'keeps.json'), keeps);
+  // Verdicts saved before this keep do not cover the finding: set them aside, so finalize asks for the refuter again.
+  const refFile = rv.roundFile(c.dir, round, 'refutations.json');
+  let redo = null;
+  if (fs.existsSync(refFile)) {
+    let covered = false;
+    try { covered = rv.readArray(refFile, 'refutations').some((r) => r && r.id === a.finding); } catch { /* unreadable: redo */ }
+    if (!covered) { redo = `${refFile}.stale`; fs.renameSync(refFile, redo); }
+  }
+  ctx.emit({ round, finding: item, kept_count: kept.length, refutations_set_aside: !!redo }, [
+    ctx.t('wf.review.keptBack', { id: a.finding, round, reason: item.keep_reason }),
+    ...(redo ? [ctx.t('wf.review.keepRedo', { round, file: path.basename(redo) })] : []),
+    ctx.t('wf.review.keepNext', { id: c.task.id, round }),
+  ]);
 }
 
 // ---------------------------------------------------------------- filter
-const brief = (f) => `${f.id} [${f.severity}] ${f.category} ${f.file}:${f.line}  ${clean(f.claim || '', 140)}`;
+const brief =(f) => `${f.id} [${f.severity}] ${f.category} ${f.file}:${f.line}  ${clean(f.claim || '', 140)}`;
 
 function doFilter(ctx, a) {
   const c = ctxOf(ctx, a.task);
   const round = currentRound(c, a, 'raw.json');
   const list = rv.sanitizeFindings(rv.readArray(rv.roundFile(c.dir, round, 'raw.json'), 'raw findings'), false);
   const { kept, dropped } = rv.filterFindings(list, { cfg: c.cfg, ledger: rv.readLedger(c.wt), baseDirs: baseDirs(c) });
+  // findings the orchestrator put back with `review keep` stay kept when the filter runs again
+  const again = [];
+  for (const k of readKeeps(c, round)) {
+    const i = dropped.findIndex((d) => d.reason !== 'invalid' && d.finding && d.finding.id === k.id);
+    if (i < 0) continue;
+    kept.push(keptBy(dropped[i].finding, k.reason));
+    dropped.splice(i, 1);
+    again.push(k.id);
+  }
   json.save(rv.roundFile(c.dir, round, 'filtered.json'), dropped);
   json.save(rv.roundFile(c.dir, round, 'kept.json'), kept);
   const reasons = {};
   for (const d of dropped) reasons[d.reason] = (reasons[d.reason] || 0) + 1;
   const L = [ctx.t('wf.review.filtered', { round, total: list.length, kept: kept.length, dropped: dropped.length })];
+  if (again.length) L.push(ctx.t('wf.review.keepReapplied', { ids: again.join(', ') }));
   if (dropped.length) L.push(ctx.t('wf.review.droppedBy', { reasons: Object.entries(reasons).map(([k, v]) => `${k} ${v}`).join(', ') }));
   for (const d of dropped.filter((x) => x.reason === 'invalid')) L.push(ctx.t('wf.review.invalidEntry', { id: (d.finding && d.finding.id) || '?', detail: d.detail }));
   // the filter works on labels, not on truth: show what it dropped so a true finding is not lost
@@ -307,7 +376,11 @@ function doFinalize(ctx, a) {
   let refs = [];
   if (kept.length) {
     const file = a.refFile || rv.roundFile(c.dir, round, 'refutations.json');
-    if (!a.refFile && !fs.existsSync(file)) throw new UsageError('args.missing', { name: '--refutations-file' });
+    if (!a.refFile && !fs.existsSync(file)) {
+      // exit 2 as before the review-flow change, but only the one-line message: the usage text would bury the missing command
+      ctx.err(`${ctx.t('cli.errorPrefix')}${ctx.t('wf.review.noRefutations', { round, n: kept.length, id: c.task.id })}`);
+      return 2;
+    }
     refs = rv.readArray(file, 'refutations').map(rv.sanitizeRefutation);
   }
   const { findings, dropped, problems } = rv.applyRefutations(kept, refs);
@@ -347,8 +420,12 @@ function doShow(ctx, a) {
     L.push(`${brief(f)}${f.verdict ? ` (${f.verdict})` : ''}`);
     L.push(`    ${ctx.t('wf.review.evidence')}: ${(f.evidence || []).join(', ')}  [${f.verified_by}, ${f.confidence}]`);
     if (f.suggestion) L.push(`    ${ctx.t('wf.review.suggestion')}: ${clean(f.suggestion, 300)}`);
+    if (f.kept_by) L.push(`    ${ctx.t('wf.review.keptByLine', { reason: clean(String(f.keep_reason || ''), 300) })}`);
   }
-  ctx.emit({ round, final: suffix === 'json', findings: list, filtered_count: filtered.length }, L);
+  // a scoped round: the verdicts on the earlier round's findings sit beside it
+  const verdicts = json.readJson(rv.roundFile(c.dir, round, 'verdicts.json'), []).data;
+  for (const v of verdicts) L.push(ctx.t('wf.review.verdictLine', v));
+  ctx.emit({ round, final: suffix === 'json', findings: list, filtered_count: filtered.length, ...(verdicts.length ? { verdicts } : {}) }, L);
 }
 
 // ---------------------------------------------------------------- dismiss
@@ -359,7 +436,7 @@ function findFinding(c, id) {
       let list = [];
       try { list = rv.readArray(rv.roundFile(c.dir, r, suffix), 'findings'); } catch { continue; }
       const hit = list.find((f) => f && f.id === id);
-      if (hit) return hit;
+      if (hit) return { finding: hit, round: r };
     }
   }
   return null;
@@ -373,9 +450,11 @@ function digestOf(f) {
 
 function doDismiss(ctx, a) {
   const c = ctxOf(ctx, a.task);
-  need(a.scope, '--scope');
   need(a.reason, '--reason');
-  const f0 = findFinding(c, a.finding);
+  const scopeGiven = !!a.scope;
+  if (!scopeGiven) a.scope = 'once';
+  const found = findFinding(c, a.finding);
+  const f0 = found && found.finding;
   if (!f0) throw new CrewError('wf.review.findingNotFound', { id: a.finding, task: c.task.id });
   // the fingerprint uses the category as the reviewer reported it, not a pipeline downgrade
   const f = f0.downgraded_from ? { ...f0, category: f0.downgraded_from.category } : f0;
@@ -391,7 +470,7 @@ function doDismiss(ctx, a) {
   if (!dup) rv.appendLedger(c.wt, entry);
   events.append(c.proj.id, {
     type: 'review.finding_dismissed', src: 'cli', task: c.task.id,
-    data: { finding: a.finding, scope: a.scope, category: f.category, file: entry.file, reason: entry.reason }, key: `${a.finding}:${fp}:${a.scope}`,
+    data: { finding: a.finding, scope: a.scope, round: found.round, category: f.category, file: entry.file, reason: entry.reason }, key: `${a.finding}:${fp}:${a.scope}`,
   });
   let lesson = null;
   if (a.scope === 'always') {
@@ -402,6 +481,7 @@ function doDismiss(ctx, a) {
   }
   ctx.emit({ entry, duplicate: !!dup, lesson }, [
     ctx.t(dup ? 'wf.review.alreadyDismissed' : 'wf.review.dismissed', { id: a.finding, scope: a.scope }),
+    ...(scopeGiven ? [] : [ctx.t('wf.review.scopeDefault')]),
     ...(lesson ? [ctx.t('wf.review.lessonAdded', { key: lesson.key })] : []),
   ]);
 }
@@ -439,30 +519,32 @@ function run(argv, ctx) {
   const sub = argv[0];
   if (!Object.prototype.hasOwnProperty.call(SPECS, sub)) throw new UsageError('wf.review.usage');
   const a = parse(argv.slice(1), SPECS[sub]);
-  ({ run: doRun, submit: doSubmit, filter: doFilter, finalize: doFinalize, show: doShow, dismiss: doDismiss, followup: doFollowup })[sub](ctx, a);
-  return 0;
+  const code = ({ run: doRun, submit: doSubmit, filter: doFilter, finalize: doFinalize, show: doShow, keep: doKeep, dismiss: doDismiss, followup: doFollowup })[sub](ctx, a);
+  return code === 2 ? 2 : 0;
 }
 
 module.exports = {
   name: 'review',
-  summary: { en: 'Review pipeline: find, filter, refute, finalize, dismiss', 'zh-TW': '審查流程：找出、過濾、反駁、定案、駁回' },
+  summary: { en: 'Review pipeline: find, filter, refute, finalize, keep, dismiss', 'zh-TW': '審查流程：找出、過濾、反駁、定案、救回、駁回' },
   usage: {
     en: [
       '  crew review run <task> [--engine claude|<name>] [--since-last-round] [--round N]   (--since-last-round: review only the changes since the previous round started)',
-      '  crew review submit <task> [--round N] [--kind findings|refutations] [--file F]   (JSON on stdin without --file)',
+      '  crew review submit <task> [--round N] [--kind findings|refutations] [--file F | --json <array>]   (JSON on stdin without --file or --json)',
       '  crew review filter <task> [--round N]',
       '  crew review finalize <task> [--refutations-file F] [--round N]',
       '  crew review show <task> [--round N]',
-      '  crew review dismiss <task> <finding-id> --scope once|always --reason "..."',
+      '  crew review keep <task> <finding-id> --reason "..." [--round N]   (puts a finding the filter dropped back among the kept ones, so the refuter judges it)',
+      '  crew review dismiss <task> <finding-id> --reason "..." [--scope once|always]   (once without --scope)',
       '  crew review followup <task> <finding-id> --done-when "..." [--text "..."] [--plan SLUG] [--round N]   (proposes the work as a [?] step of the plan)',
     ].join('\n'),
     'zh-TW': [
       '  crew review run <task> [--engine claude|<名稱>] [--since-last-round] [--round N]   （--since-last-round：只審上一輪開始之後的改動）',
-      '  crew review submit <task> [--round N] [--kind findings|refutations] [--file F]   （沒給 --file 就從標準輸入讀 JSON）',
+      '  crew review submit <task> [--round N] [--kind findings|refutations] [--file F | --json <array>]   （沒給 --file 或 --json 就從標準輸入讀 JSON）',
       '  crew review filter <task> [--round N]',
       '  crew review finalize <task> [--refutations-file F] [--round N]',
       '  crew review show <task> [--round N]',
-      '  crew review dismiss <task> <finding-id> --scope once|always --reason "..."',
+      '  crew review keep <task> <finding-id> --reason "..." [--round N]   （把被過濾掉的發現放回保留清單，讓反駁者判斷）',
+      '  crew review dismiss <task> <finding-id> --reason "..." [--scope once|always]   （沒給 --scope 就用 once）',
       '  crew review followup <task> <finding-id> --done-when "..." [--text "..."] [--plan SLUG] [--round N]   （把這項工作提議成計畫裡的 [?] 步驟）',
     ].join('\n'),
   },

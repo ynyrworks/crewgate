@@ -319,7 +319,6 @@ test('dismiss: once stops matching when the snippet is gone, always keeps matchi
   submit([u.finding('f1')]);
   run(repo, 'review', 'filter', t.id);
   assert.equal(run(repo, 'review', 'dismiss', t.id, 'f1', '--scope', 'once').code, 2, 'reason is required');
-  assert.equal(run(repo, 'review', 'dismiss', t.id, 'f1', '--reason', 'x').code, 2, 'scope is required');
   assert.equal(run(repo, 'review', 'dismiss', t.id, 'nope', '--scope', 'once', '--reason', 'x').code, 1);
   const d = u.crewJson(['review', 'dismiss', t.id, 'f1', '--scope', 'once', '--reason', 'fine here'], repo);
   assert.equal(d.code, 0, d.err);

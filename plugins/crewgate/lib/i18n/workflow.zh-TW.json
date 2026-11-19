@@ -91,7 +91,7 @@
   "wf.task.run.failed": "任務 {id}：{name} worker 失敗（{kind}）：{detail}。任務維持 dispatched，worktree {worktree} 保持原狀；修正後可重跑，或取消任務。",
   "wf.task.run.done": "任務 {id} 已由 {name} 交回：{n} 個檔案提交為 {sha}（分支 {branch}）；報告 {tokens} tokens。下一步：crew task show {id}",
 
-  "wf.review.usage": "review 可用 run | submit | filter | finalize | show | dismiss | followup",
+  "wf.review.usage": "review 可用 run | submit | filter | finalize | show | keep | dismiss | followup",
   "wf.review.findingNotFinal": "任務 {task} 的發現 {id} 不在已定案的審查回合裡，不能變成後續工作（請先執行 crew review finalize；被推翻的發現不算）",
   "wf.review.followupNoPlan": "任務 {id} 沒有連到計畫步驟。請用 --plan SLUG 指定計畫，或不要放進計畫",
   "wf.review.followupAdded": "已在計畫 {slug} 提議 {node}。接受之前不會計入進度。",
@@ -100,7 +100,7 @@
   "wf.review.followupDecide": "請決定：crew plan accept {slug} {node}   或   crew plan reject {slug} {node} --note \"原因\"",
   "wf.review.noFile": "讀不到{what}檔案：{file}",
   "wf.review.notArray": "{what}必須是 JSON 陣列（或含 findings 陣列的物件）",
-  "wf.review.emptyInput": "沒有收到 JSON（請用 --file 或從標準輸入傳入）",
+  "wf.review.emptyInput": "沒有收到 JSON（請用 --file 或 --json，或從標準輸入傳入）",
   "wf.review.noRound": "這個任務還沒有 {what} 檔案；請先執行前一個審查步驟",
   "wf.review.noDiff": "無法為任務 {id} 產生 diff：它沒有存在於 git 的分支",
   "wf.review.noEngine": "全域設定（~/.crewgate/config.json）的 engines 內沒有名為 \"{name}\" 的引擎",
@@ -281,5 +281,17 @@
   "wf.task.rule.recorded": "已記錄：統籌自己讀過（{lines} 行）：{note}",
   "wf.review.sinceFallback": "--since-last-round：之前沒有任何一輪記錄過分支頂端，所以這一輪審查完整差異。",
   "wf.review.verdictLine": "  先前的發現 {id}：{verdict}  {evidence}",
-  "wf.review.verdictsSaved": "引擎 {name} 對 {n} 筆先前的發現給了裁決，已存成 {path}"
+  "wf.review.verdictsSaved": "引擎 {name} 對 {n} 筆先前的發現給了裁決，已存成 {path}",
+  "wf.review.verdictsSavedClaude": "審查者 {name} 對 {n} 筆先前的發現給了裁決，已存成 {path}",
+  "wf.review.keepReapplied": "依你用 review keep 的決定，再次保留：{ids}",
+  "wf.review.noRefutations": "第 {round} 輪有 {n} 筆保留的發現，但還沒有反駁結果。請先跑反駁者，再用這個指令存下它的裁決：crew review submit {id} --round {round} --kind refutations（或給 --refutations-file）。",
+  "wf.review.keepFinalized": "第 {round} 輪已經定案；keep 只能用在最新、尚未定案的一輪。",
+  "wf.review.keepUnknown": "第 {round} 輪被過濾掉的發現裡沒有 {id}。",
+  "wf.review.keepInvalid": "發現 {id} 因格式無效（{detail}）被丟掉，不能救回；請審查者重新提出。",
+  "wf.review.keptBack": "發現 {id} 已放回第 {round} 輪的保留清單（統籌保留：{reason}）。",
+  "wf.review.keepRedo": "第 {round} 輪已存的反駁裁決沒有涵蓋它，所以已移到一旁（{file}）；定案前反駁者必須重新判斷更新後的清單。",
+  "wf.review.keepNext": "反駁者還沒判斷它：請執行 crew review filter {id} --round {round} 取得更新後清單的反駁提示，再執行 crew review finalize {id}。",
+  "wf.review.keptByLine": "統籌保留：{reason}",
+  "wf.review.scopeDefault": "沒給 --scope，已用 once（只駁回這一筆；要讓之後的任務也駁回請加 --scope always）。",
+  "wf.task.acceptedDismissed": "注意：審查第 {round} 輪保留的發現都已駁回（{n} 筆中駁回 {dismissed} 筆），這一輪視為已決定，不需要定案。"
 }

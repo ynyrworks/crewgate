@@ -46,7 +46,7 @@ A plan is a tree of steps in `.crew/plans/<slug>.md` (slug `[a-z0-9-]{1,40}`, at
 - `crew plan edit <slug> <node> "new text"`: changes one step's text (id, box, task, origin and date stay). On a final plan it follows `plan.enforce` like `plan add`, with the kind `changed-text`: `block` refuses until `crew plan drift <slug> --kind changed-text --detail "..."` is answered; `remind` edits and records `plan.drift_unasked`. A proposed `[?]` node is refused (use accept or reject).
 - `crew plan link <slug> <node> <task-id>`, `crew plan set <slug> <node> open|done|dropped|accept` (`accept` turns `[?]` into open), `crew plan rm <slug> <node>` (a leaf only).
 - `crew plan accept <slug> <node>`, `crew plan reject <slug> <node> [--note T]`: decide a proposed node. Accept of `add`/`split` opens the node; `change` rewords the target step and removes the proposal; `drop` drops the target and removes the proposal. Reject marks it dropped, keeps the note and stops later rounds from raising it again. `plan set ... accept` still works as an alias.
-- `crew plan review run <slug> [--node N] [--force] [--engine claude|<name>]` (starts a round, writes the packet, prints the `crew-reviewer` prompt; `--node` limits it to a subtree; `--force` goes past `plan.max_rounds`), `crew plan review submit <slug> [--round N] [--kind findings|refutations] [--file F]` (JSON on stdin without `--file`), `crew plan review filter <slug> [--round N]` (prints the `crew-refuter` prompt; with `roles.refuter.engine` set it runs the engine and saves the refutations), `crew plan review finalize <slug> [--refutations-file F] [--round N]`, `crew plan review show <slug> [--round N]`. See `review-pipeline.md`, "Plan review".
+- `crew plan review run <slug> [--node N] [--force] [--engine claude|<name>]` (starts a round, writes the packet, prints the `crew-reviewer` prompt; `--node` limits it to a subtree; `--force` goes past `plan.max_rounds`), `crew plan review submit <slug> [--round N] [--kind findings|refutations] [--file F | --json '<array>']` (JSON on stdin without `--file` or `--json`), `crew plan review filter <slug> [--round N]` (prints the `crew-refuter` prompt; with `roles.refuter.engine` set it runs the engine and saves the refutations), `crew plan review finalize <slug> [--refutations-file F] [--round N]`, `crew plan review show <slug> [--round N]`. See `review-pipeline.md`, "Plan review".
 - Config `plan.max_proposals_per_round` (5), `plan.max_rounds` (3 per plan), `plan.large_growth` (5 accepted proposals since the last `large_task` approval: the CLI prints the gate hint and records a need).
 - `<node>` is an id such as `n2`; a hand-written line without an id is `L<line>` (ids are assigned on the first CLI write).
 - File: `- [ ] text <!-- id:n1 task:<id> added:YYYY-MM-DD origin:plan -->`; box `[ ]` open, `[x]` done, `[~]` dropped (not counted), `[?]` proposed (not counted). A leaf is done when `[x]` or its task is `merged`/`accepted`; `returned`/`reviewing` show as in review, `dispatched` as in progress, `cancelled` as needs attention. Hand-written lines are valid; unknown comment keys are kept.
@@ -54,11 +54,12 @@ A plan is a tree of steps in `.crew/plans/<slug>.md` (slug `[a-z0-9-]{1,40}`, at
 
 ## Review
 - `crew review run <task> [--engine claude|<name>] [--since-last-round] [--round N]` (records the branch tip the round starts from; `--since-last-round` limits the diff to the changes since the previous round started; an engine failure falls back to the Claude reviewer dispatch unless `roles.reviewer.fallback` is `none`)
-- `crew review submit <task> [--round N] [--kind findings|refutations] [--file F]` (JSON on stdin without `--file`)
+- `crew review submit <task> [--round N] [--kind findings|refutations] [--file F | --json '<array>']` (JSON on stdin without `--file` or `--json`)
 - `crew review filter <task> [--round N]` (with `roles.refuter.engine` set it runs the engine and saves the refutations; on engine failure it prints the Claude refuter dispatch)
 - `crew review finalize <task> [--refutations-file F] [--round N]`
 - `crew review show <task> [--round N]`
-- `crew review dismiss <task> <finding-id> --scope once|always --reason "..."`
+- `crew review keep <task> <finding-id> --reason "..." [--round N]`: puts a finding the filter dropped back among the kept findings of the latest unfinalized round (reason recorded, shown by `review show`)
+- `crew review dismiss <task> <finding-id> --reason "..." [--scope once|always]` (`once` when `--scope` is left out)
 - `crew review followup <task> <finding-id> --done-when "..." [--text "..."] [--plan SLUG] [--round N]`: proposes a finding of a finalized round as a `[?]` step next to the task's plan step (or at the top of `--plan SLUG`)
 
 ## Release record

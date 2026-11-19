@@ -13,7 +13,7 @@ const plans = require('./plans');
 const events = require('./events');
 const store = require('./store');
 const { redact, clean } = require('./redact');
-const { CrewError } = require('./errors');
+const { CrewError, UsageError } = require('./errors');
 const rv = require('../features/review');
 const common = require('../features/common');
 
@@ -80,6 +80,8 @@ const SCHEMA_TEXT = [
   'Report only what matters; return [] when the plan is fine.',
 ].join('\n');
 
+const { TOOL_RULES, SAVE_FALLBACK } = rv;
+
 function reviewerPrompt({ slug, round, packetPath, rawPath, scope, max, cli }) {
   return [
     `You are the crew reviewer for plan ${slug} (plan review round ${round}). You are read-only: do not edit any file.`,
@@ -88,8 +90,10 @@ function reviewerPrompt({ slug, round, packetPath, rawPath, scope, max, cli }) {
     `Look for: ${KINDS.join(', ')}. Judge the plan against its goal; off-goal means a step that does not serve the goal, so the plan is drifting (usually action drop). Read repository files only to check a claim (use Read, Grep, Glob).`,
     SCHEMA_TEXT,
     `File at most ${max} findings worth a decision, the important ones first.`,
+    ...TOOL_RULES,
     `Save the array by piping it to: ${cli} plan review submit ${slug} --round ${round}  (JSON on stdin; it is stored as ${rawPath}).`,
-    'Your final message must only say how many findings you saved.',
+    SAVE_FALLBACK,
+    'Otherwise your final message must only say how many findings you saved.',
   ].join('\n');
 }
 
@@ -101,8 +105,10 @@ function refuterPrompt({ slug, round, packetPath, keptPath, cli }) {
     'Try to DISPROVE each finding: is the claim false, is the step already covered elsewhere in the plan, is the proposal out of scope, too vague to finish, or worse than what the plan says now?',
     'Output a JSON array with one element per finding: { "id": "<finding id>", "verdict": "upheld|refuted|uncertain", "evidence": "node id or file:line and one sentence", "better": "optional: a better wording or alternative for the proposal text" }.',
     'Use "refuted" only with concrete evidence; use "uncertain" when you cannot decide. Give "better" only when the idea is right but the wording or the shape is not.',
+    ...TOOL_RULES,
     `Save it by piping it to: ${cli} plan review submit ${slug} --round ${round} --kind refutations  (JSON on stdin).`,
-    'Your final message must only say how many verdicts you saved.',
+    SAVE_FALLBACK,
+    'Otherwise your final message must only say how many verdicts you saved.',
   ].join('\n');
 }
 
@@ -229,6 +235,17 @@ function sanitizeRefutation(r) {
   const out = rv.sanitizeRefutation(r);
   if (out && typeof out === 'object' && typeof out.better === 'string') out.better = redact(out.better);
   return out;
+}
+
+// The JSON text a `submit` command saves: --file, --json (as --json=<array>, or `--json <array>` when the global --json flag took the word and
+// the array is left over as a stray argument) or stdin. `a.extra` holds the stray arguments (the spec uses rest: 'extra').
+function submitText(ctx, a, what = 'findings') {
+  if (a.file) return common.readText(a.file, what);
+  if (typeof a.jsonText === 'string') return a.jsonText;
+  const stray = (a.extra || []).filter((x) => /^\s*[\[{]/.test(x));
+  if (ctx.json && stray.length === 1 && (a.extra || []).length === 1) return stray[0];
+  if ((a.extra || []).length) throw new UsageError('args.extra', { args: a.extra.join(' ') });
+  return common.readStdin();
 }
 
 // submit(projectId, slug, { kind, round, list }) -> { round, kind, count, file }
@@ -560,6 +577,6 @@ function proposalsOf(projectId, slug, doc) {
 const ORIGIN = (n) => (plans.ORIGINS.includes(n.meta.origin) ? n.meta.origin : 'plan');
 
 module.exports = {
-  KINDS, ACTIONS, dirOf, readState, limits, start, submit, filter, finalize, accept, reject, roundsOf, proposalsOf, planOfTask, addFollowup,
+  TOOL_RULES, SAVE_FALLBACK, submitText, KINDS, ACTIONS, dirOf, readState, limits, start, submit, filter, finalize, accept, reject, roundsOf, proposalsOf, planOfTask, addFollowup,
   sanitizeFindings, reviewerPrompt, refuterPrompt, engineReviewerPrompt, engineRefuterPrompt, roundFile, latestRound, keyOf, enc, dec,
 };

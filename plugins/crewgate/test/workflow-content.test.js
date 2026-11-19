@@ -71,7 +71,7 @@ test('crew skill: language, closing status line, keep going, approvals, review a
     'Push, PR, remote hosts, installs and downloads ask every time', 'One yes covers one action', '30 minutes', '12 hours',
     'The hook denies a push, PR or merge chained in the same command', '`head`/`tail`',
     'A fix made after a send-back gets another review round', '20 changed lines or fewer', 'documentation only',
-    '`crew <group> --help`', 'Never guess options', '--scope once|always --reason', 'todo|doing|done|waiting|parked',
+    '`crew <group> --help`', 'Never guess options', '--reason "..." [--scope once|always]', 'todo|doing|done|waiting|parked',
     'never write the prompt by hand', 'Count running workers before every dispatch or re-dispatch',
   ]) assert.ok(s.includes(needle), needle);
   const gates = read('skills', 'crew', 'references', 'lessons-and-gates.md').replace(/\s+/g, ' ');
