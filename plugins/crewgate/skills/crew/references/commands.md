@@ -2,15 +2,21 @@
 
 Call as `node "${CLAUDE_PLUGIN_ROOT}/bin/crew.js" ...`. Global options: `--json`, `--project <id|path|name>`,
 `--lang en|zh-TW`. Exit codes: 0 ok, 1 runtime error, 2 usage error.
-`crew --help` lists the common groups; `crew --help --all` lists every group.
+`crew --help` lists the common groups; `crew --help --all` lists every group; `crew <group> --help` prints the usage of one group.
 
 ## Setup
 - `crew init [--lang en|zh-TW] [--force] [--reset-review-files] [--engine claude|codex]`: (`--engine codex`, or an existing `.codex/` folder, also writes `.codex/agents/crew-reviewer.toml`, `crew-refuter.toml` and a marked crewgate block in `AGENTS.md`) config (an empty `checks` is filled from the detected stack and printed; existing checks are never overwritten), three agent copies (project copies in `.claude/agents/` take precedence over the plugin agents, so both `crew-worker` and `crewgate:crew-worker` may appear), `.crew/` files, registers the
   project. Never overwrites without `--force` (then `*.bak-<timestamp>` copies; your config values are kept; `.crew/REVIEW.md` and `.crew/LESSONS.md` are never touched by `--force`, only `--reset-review-files` replaces them, with a backup).
 - `crew update check [--force]` / `crew update apply`: the update notice (cached once a day, `updates.check` in the global config turns it off) and the one-click update with fixed commands; `apply` prints the commands instead when nothing can run.
 - `crew doctor`: Node version, config validity (with field paths), empty `checks`, registration, hooks file, when each hook last fired in this project, duplicate-looking work items, board.
-- `crew gate ask <gate> [--task ID] [--detail T]`: records `gate.asked`, prints a gate id (gate: push, open_pr, merge, remote_hosts, large_task, install_or_download, or any other key the project sets to `auto`, `ask` or `never` under `gates`). `auto` answers yes at once; `never` exits 1. `crew task merge` prints the hook's "no approval recorded" reminder when the merge it records had no approval and no plan cover (`gates.plan_covers_merge`, default true: an approved plan covers local merges of its accepted tasks; push and PR never). A `crew gate answer`, `task accept`, `plan finalize --gate` or `plan drift --gate` must not share a command line with a push, PR or merge (denied). `crew gate answer <gate-id> yes|no [--note T] [--quote WORDS]` records the user reply (with `gates.require_user_turn`, a `yes` is refused, exit 1, when a session is known and no user message came after the ask, unless `--quote` is words of the prompt that started this turn and the ask was made in this turn: recorded as `user_turn: "instruction"`; an answered AskUserQuestion widget counts as a user message; `--quote` also works on `plan finalize|close|drift --gate` and `task accept --gate`; a `no` is always accepted; with no session known it only warns).
 - `crew project add|list|rm`
+
+## Gates
+- `crew gate ask <gate> [--task ID] [--detail T]`: records `gate.asked` and prints a gate id. Gate: push, open_pr, merge, remote_hosts, large_task, install_or_download, or any other key the project sets to `auto`, `ask` or `never` under `gates`. `auto` answers yes at once; `never` exits 1.
+- `crew gate answer <gate-id> yes|no [--note T] [--quote WORDS]`: records the user's reply. When a `yes` counts and when it is refused (exit 1, nothing approved): `lessons-and-gates.md`, "The user-turn rule".
+- `--quote` also works on `plan finalize|close|drift --gate` and `task accept --gate`.
+- One yes covers one push, PR or merge (how long it stays valid: Gates in `SKILL.md`). An action on the branch of task T is covered by a yes asked for T or for no task, never by a yes for another task.
+- Setting `gates.plan_covers_merge` (default true): turns the plan cover described in Gates in `SKILL.md` on or off. `crew task merge` prints the hook's "no approval recorded" reminder when the merge it records had no approval and no plan cover.
 
 ## Tasks
 States: `created -> dispatched -> returned -> reviewing -> accepted -> merged`; any open state -> `cancelled`;
@@ -20,7 +26,7 @@ a send-back goes back to `dispatched`.
 - `crew task show <id>`: state, returns, capped report, diff stat, packet path, latest findings summary.
 - `crew task report <id> --report-file F [--packet-file F]`: the worker's call; validates sections and the size cap.
 - `crew task send-back <id> --note "..."`: refused at `max_returns_before_takeover` (records a takeover lesson).
-- `crew task accept <id> [--note] [--skip-refuter "reason"] [--widen "reason" [--gate <id>]]` (`--widen` accepts files outside the task's scope after the user agrees; for a task with no plan) (refused while the latest review round has findings that were not finalized, unless a reason is given; the reason goes into the event), `crew task merge <id> [--note]` (records only, runs no git merge; refused if `gates.merge` is
+- `crew task accept <id> [--note] [--skip-refuter "reason"] [--widen "reason" [--gate <id> [--quote WORDS]]]` (`--widen` accepts files outside the task's scope after the user agrees; for a task with no plan) (refused while the latest review round has findings that were not finalized, unless a reason is given; the reason goes into the event), `crew task merge <id> [--note]` (records only, runs no git merge; refused if `gates.merge` is
   `never`; also records `git.merge` with the real branch when git shows it merged into HEAD), `crew task cancel <id> [--note]`.
 - `crew task run <id> [--engine codex] [--timeout 1800] [--model M]`: runs the Codex CLI as the worker in the task's worktree (created from HEAD when missing), then commits as the repository user (trailer `Co-Authored-By: Codex`), files report and packet and moves the task to `returned`. Failure (bad output, timeout, non-zero exit, no changes): nothing committed, `task.failed` event, a need, task stays `dispatched`. Log: `codex.log` in the task folder.
 
@@ -65,7 +71,7 @@ A plan is a tree of steps in `.crew/plans/<slug>.md` (slug `[a-z0-9-]{1,40}`, at
 
 ## Board data (manual items)
 - `crew need add "text"` / `done N` / `list`: things waiting for the user
-- `crew work set STREAM "title" todo|doing|done|waiting|parked ["note"] [--id ID | --new]`, `work rm STREAM "title" | --id ID`, `work list [--json]`: `set` updates the item with the same title in the stream (trimmed, spaces collapsed, case-insensitive) instead of adding another; `work list` shows item ids; `--new` forces a new item.
+- `crew work set STREAM "title" todo|doing|done|waiting|parked ["note"] [--need N] [--id ID | --new]`, `work rm STREAM "title" | --id ID`, `work list [--json]`: `set` updates the item with the same title in the stream (trimmed, spaces collapsed, case-insensitive) instead of adding another; `work list` shows item ids; `--new` forces a new item.
 - `crew log add WHO "text"`, `crew mr set N "title" [--ci ..] [--merged yes|no]`, `crew validate set ...`
 
 ## Where things live

@@ -71,7 +71,7 @@ usable verdict stays as `uncertain` with a warning. Finalize also moves a `retur
 - `uncertain`: check the cited `file:line` yourself, in a line range, before deciding.
 - `minor`/`nit`: batch them into one send-back note, or accept and mention them to the user.
 - Real, but not for this task: `crew review followup <task> <finding-id> --done-when "..." [--text "..."] [--plan SLUG]`. It adds a `[?]` step that counts only once accepted, next to the task's plan step or at the top of `--plan SLUG`. Do not send back work outside the brief to fit it in. Use another plan, or tell the user, when it does not serve the goal the command prints.
-- Wrong or irrelevant: `crew review dismiss <task> <finding-id> --scope once|always --reason "..."`.
+- Wrong or irrelevant: `crew review dismiss <task> <finding-id> --scope once|always --reason "..."` (`--scope` and `--reason` are required).
   - `once`: this occurrence only; it stops matching when the snippet no longer exists in the file (the ledger stores only a hash of the snippet, never its text, because `.crew/dismissed.jsonl` is committed).
   - `always`: this pattern is accepted in this project; it also adds a lesson candidate suggesting a
     rule in `.crew/REVIEW.md`. Use it sparingly and tell the user.
@@ -81,8 +81,16 @@ so reformatting does not resurrect a dismissed finding.
 
 ## Rounds
 
-Each `review run` starts a new round (`1.raw.json`, `2.raw.json`, ...). Re-review after a send-back
-with a new round; old rounds stay for the record. `crew review show <task> [--round N]` prints a round.
+Each `review run` starts a new round (`1.raw.json`, `2.raw.json`, ...); old rounds stay for the record.
+`crew review show <task> [--round N]` prints a round.
+
+### The round after a send-back
+
+When the worker returns from a send-back, run the whole pipeline again: `crew review run <task>` starts the next round on the branch as it is now.
+Before you decide, open the previous round with `crew review show <task> --round <N-1>` and mark each of its findings fixed or still open.
+A finding still open goes into the next send-back note with its id and file:line.
+When you may read a small fix yourself instead of this round: `SKILL.md`, step 9.
+`crew task accept` notes a task whose last changes after a send-back were not re-reviewed, and `crew release record` flags it NOT RE-REVIEWED.
 
 ## Calibrating the reviewer
 

@@ -28,21 +28,35 @@ Promotion is the user's decision:
 
 ## Gate wording
 
-When a gate is `ask`, ask once, concretely, and wait:
+When a gate is `ask` and the user has not already named the action, ask once, in plain chat text, as the closing status line:
 
-> Ready to merge `feat/list-done` (task t-20260301-ab12, 2 files, tests green) into `main`. Merge now?
+> Waiting for you: merge `feat/list-done` (task t-20260301-ab12, 2 files, tests green, review round 2 clean) into `main`?
 
-Not: "Should I continue?". Name the action, the target and what you checked. Run `crew gate ask <gate> --task <id> --detail "..."` first (it prints a gate id), ask in chat, and only
-after the user answers run `crew gate answer <gate-id> yes|no --note "<their words>"`. Record nothing as
-approved until the user answers in chat. If the user says yes to one push, the next push asks again.
-A gate answer needs a real user reply: `crew gate answer ... yes` is refused when no user message of the session came after the ask (a task notification is not one). An earlier approval does not carry over to a new version: ask again for it. A yes covers one action (it is used up by the push or merge it approved), stays valid after 30 minutes while it is the latest answer of its gate, for at most 12 hours. The approval of a plan also covers the local merge of its accepted tasks.
+Not: "Should I continue?". Name the action, the target and what you checked. Ask nothing else in the same message.
+Run `crew gate ask <gate> --task <id> --detail "..."` before the message (it prints a gate id).
+After the reply, run `crew gate answer <gate-id> yes|no --note "<their words>"` alone and read its result.
+An earlier approval does not carry over to a new version: ask again for it.
 
-Two settings change what a recorded answer is worth. `gates.require_user_turn` (default true): the answer counts only
-when a user message of the same session arrived between your `gate ask` and your `gate answer yes` (judged when `crew gate answer` runs), so never run both in the same turn;
-ask, stop, and answer after the user replied (`crew gate answer yes` is refused when it saw no user message; with no session known it warns and keeps the old verdict). `gates.enforce`
-(`remind` | `confirm` | `block`): with `confirm` Claude Code itself asks the user before the push, PR or merge runs when
-there is no valid answer (wait for the user, do not rephrase the command to avoid it); with `block` the command is
-denied until a valid answer exists.
+### The user-turn rule
+
+`gates.require_user_turn` (default true) decides when `crew gate answer <gate-id> yes` counts. It counts when one of these holds:
+
+- A user message of the session that asked arrived after the `gate ask` (judged when `crew gate answer` runs). An answered question widget counts as such a message.
+- `--quote "<words>"` names words of the prompt that started this turn, and the `gate ask` ran in this same turn and session. It is recorded as `user_turn: "instruction"`.
+
+Otherwise the yes is refused: exit 1, nothing approved, a `gate.refused` event. A turn started by a task notification has no prompt, so nothing in it can be quoted.
+A `no` is always accepted. With no session known at all, the CLI only warns, and a message in any session of the project counts.
+
+### gates.enforce
+
+It decides when a push, PR or merge under an `ask` gate is checked against your recorded approvals:
+
+- `remind` (default): after the command; a missing approval gives you a reminder and a `gate.missing` event on the board.
+- `confirm`: before the command, Claude Code asks the user to allow or deny it. Wait for the user; do not retry the command in another form.
+  After the user allows, there is nothing more to record.
+- `block`: before the command, it is denied until an approval exists. Ask, end the turn, answer after the reply, then retry.
+
+A push, PR or merge under a `never` gate is denied before it runs, whatever `gates.enforce` says. `crew task merge` itself refuses when `gates.merge` is `never`.
 
 ## Handoff body template
 
