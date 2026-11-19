@@ -130,6 +130,12 @@ and tells the orchestrator to take the task over.
    findings, low confidence, and nits beyond a cap; downgrades patterns such as theoretical races.
 3. *Refute*: a refuter tries to disprove what is left. You only see findings marked upheld or uncertain.
 
+**Review rule at accept (0.26).** `crew task accept` refuses a task that was sent back and has no later finalized review round, and a task with no finalized round at all, unless the change is small (`review.small_fix_lines`, default 20 lines) or only documentation (`review.docs_globs`) and the orchestrator says what it read: `--read-by-orchestrator "<what was read>"`. Two ways out: set `review.enforce` to `remind` (accept, with a warning and a record) or `off`. After a send-back, `crew review run <task> --since-last-round` reviews only the fix.
+
+**Investigation tasks (0.26).** `crew task create --role investigate` makes a read-only task for a question (a root cause, a comparison). The `crew-investigator` agent answers with a report (Answer, Evidence, Ruled out, Still unknown), changes no project file and makes no commit; it is accepted without the scope check or the review rule, and `crew task run` refuses it.
+
+**Briefs.** Machine impact must also say what the run shows on the user's screen: a line `Visible to the user: nothing` (or windows, notifications, sound, reboot prompts, changes to real system settings). `crew task create` warns when it is missing.
+
 **Hooks.** One script (`scripts/crew-hook.js`) handles SessionStart, UserPromptSubmit, PreToolUse,
 PostToolUse, SubagentStart/Stop, Stop, PreCompact and SessionEnd. They link a dispatched subagent to its task
 through the `crew-task:` marker, warn (or block, if you choose) when the orchestrator edits code itself, warn
@@ -199,6 +205,7 @@ default language) in `~/.crewgate/config.json`. The full, generated key referenc
 | `limits.orchestrator_edit` | `off`, `warn` or `block` when the orchestrator edits code. |
 | `limits.max_parallel_workers`, `limits.max_returns_before_takeover` | Concurrency and send-back limits. |
 | `review.min_confidence`, `review.report_inference`, `review.nit_cap` | How strict the filter is. |
+| `review.enforce`, `review.small_fix_lines`, `review.docs_globs` | The review rule at `crew task accept`: `block` (default), `remind` or `off`; what counts as a small fix; which files count as documentation. |
 | `lessons.promote_after_days`, `lessons.rules_cap` | When lessons become candidates, how many rules fit. |
 
 After changing the schema in code, regenerate the reference with `node scripts/gen-config-docs.js`; a test
