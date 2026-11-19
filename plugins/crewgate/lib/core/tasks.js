@@ -40,6 +40,13 @@ const REPORT_SECTIONS = [
   { key: 'assumptions', label: 'Assumptions & unfinished', names: ['assumptions', '假設'] },
   { key: 'realenv', label: 'Needs real-environment check', names: ['needs real', '需要實機', '實機'] },
 ];
+// An investigation task (role investigate) files these instead: the answer, the evidence, what was ruled out, what stays unknown.
+const INVESTIGATE_REPORT_SECTIONS = [
+  { key: 'answer', label: 'Answer', names: ['answer', 'root cause', '結論', '根因', '答案'] },
+  { key: 'evidence', label: 'Evidence', names: ['evidence', '證據'] },
+  { key: 'ruled_out', label: 'Ruled out', names: ['ruled out', '排除'] },
+  { key: 'unknown', label: 'Still unknown', names: ['still unknown', 'unknown', '未知', '仍不明', '尚不明'] },
+];
 
 const MARKER_RE = /crew-task:[ \t]*(t-\d{8}-[0-9a-z]{4})\b/;
 
@@ -78,13 +85,14 @@ function validateBrief(text) {
   return { ok: !missing.length && !empty.length, missing, empty, sections };
 }
 
-// validateReport(text, { maxTokens }) -> { ok, tokens, errors: [{ code, section? }], sections }
+// validateReport(text, { maxTokens, role }) -> { ok, tokens, errors: [{ code, section? }], sections }
 // codes: missing_section, empty_section, too_long
 function validateReport(text, opts = {}) {
   const maxTokens = opts.maxTokens || DEFAULT_REPORT_TOKENS;
-  const sections = parseSections(text, REPORT_SECTIONS);
+  const defs = opts.role === 'investigate' ? INVESTIGATE_REPORT_SECTIONS : REPORT_SECTIONS;
+  const sections = parseSections(text, defs);
   const errors = [];
-  for (const s of REPORT_SECTIONS) {
+  for (const s of defs) {
     if (!(s.key in sections)) errors.push({ code: 'missing_section', section: s.label });
     else if (!sections[s.key]) errors.push({ code: 'empty_section', section: s.label });
   }
@@ -256,9 +264,9 @@ const sendBack = (projectId, taskId, opts) => transition(projectId, taskId, 'dis
 // Validates report.md, stores report.md (and packet.md), then moves dispatched -> returned.
 // -> { task, tokens }. Throws CrewError task.reportInvalid (err.errors) without writing anything.
 function recordReport(projectId, taskId, input, opts = {}) {
-  load(projectId, taskId);
+  const role = load(projectId, taskId).role;
   const text = redact(String((input && input.report) || ''));
-  const v = validateReport(text, { maxTokens: opts.maxTokens });
+  const v = validateReport(text, { maxTokens: opts.maxTokens, role });
   if (!v.ok) {
     const err = new CrewError('task.reportInvalid', { problems: v.errors.map((e) => (e.code === 'too_long' ? `too long (${e.tokens} > ${e.max} tokens)` : `${e.code.replace('_', ' ')}: ${e.section}`)).join('; ') });
     err.errors = v.errors;
