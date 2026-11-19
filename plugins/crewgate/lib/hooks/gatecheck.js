@@ -73,6 +73,9 @@ function markTemp(fh, f, sessionCwd) {
     const dir = targetDir(sessionCwd, f.cd) || sessionCwd;
     const info = require('../core/project').inspect(dir);
     if (!info.linked) return f;
+    // the session's own work tree is gated like the main checkout, whatever its branch: only a worktree the command steps into can be scratch
+    const own = require('../core/project').inspect(sessionCwd);
+    if (own && own.workTree && require('../core/project').normalizePath(own.workTree) === require('../core/project').normalizePath(info.workTree)) return f;
     const norm = require('../core/project').normalizePath;
     const mine = require('../core/tasks').list(fh.pid).filter((t) => t.worktree).map((t) => norm(path.resolve(fh.root, t.worktree)));
     if (!mine.includes(norm(info.workTree)) && throwaway(fh, dir)) f.ignore = true;

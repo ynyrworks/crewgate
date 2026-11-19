@@ -189,8 +189,9 @@ test('scratch worktree: a git merge in a linked worktree that is no task worktre
   const f = fixture({ enforce: 'block' });
   const scratch = path.join(tmpDir('crew-scratch-'), 'wt');
   git(f.repo, 'worktree', 'add', '-q', '-b', 'scratch', scratch);
-  assert.equal(pre(f, 'git merge feat/x', 's1', { cwd: scratch }).out, '{}');
-  assert.equal(post(f, 'git merge feat/x', 's1', { cwd: scratch }).out, '{}');
+  const into = (dir) => `cd "${dir.replace(/\\/g, '/')}" && git merge feat/x`;
+  assert.equal(pre(f, into(scratch), 's1').out, '{}');
+  assert.equal(post(f, into(scratch), 's1').out, '{}');
   assert.equal(merges(f).length, 0);
   assert.equal(missing(f).length, 0);
   assert.equal(pre(f, `cd "${scratch.replace(/\\/g, '/')}" && git merge feat/x`, 's2').out, '{}', 'cd into it');
@@ -294,12 +295,14 @@ function approveFor(f, gate, task) {
   return id;
 }
 
-test('session worktree: a merge in the own linked worktree of the session is gated; a detached HEAD or a throwaway branch is not', () => {
+test('session worktree: a merge in the own linked worktree of the session is always gated; a detached HEAD or a throwaway branch the command steps into is not', () => {
   const f = fixture({ enforce: 'block' });
   const wt = path.join(tmpDir('crew-sesswt-'), 'wt');
   git(f.repo, 'worktree', 'add', '-q', '-b', 'harness/work', wt);
-  // throwaway: no commit of its own
-  assert.equal(pre(f, 'git merge feat/x', 'k1', { cwd: wt }).out, '{}');
+  const into = (dir) => `cd "${dir.replace(/\\/g, '/')}" && git merge feat/x`;
+  // throwaway (no commit of its own): ignored when the command steps into it, gated when it is the session's own work tree
+  assert.equal(pre(f, into(wt), 'k1').out, '{}');
+  assert.equal(decision(pre(f, 'git merge feat/x', 'k0', { cwd: wt })), 'deny', 'own work tree, throwaway branch');
   // real work on the branch: the merge moves a branch that matters
   fs.writeFileSync(path.join(wt, 'own.txt'), 'x');
   git(wt, 'add', 'own.txt');
@@ -311,8 +314,8 @@ test('session worktree: a merge in the own linked worktree of the session is gat
   // detached HEAD is ignored
   const det = path.join(tmpDir('crew-detwt-'), 'wt');
   git(f.repo, 'worktree', 'add', '-q', '--detach', det);
-  assert.equal(pre(f, 'git merge feat/x', 'k3', { cwd: det }).out, '{}');
-  assert.equal(post(f, 'git merge feat/x', 'k3', { cwd: det }).out, '{}');
+  assert.equal(pre(f, into(det), 'k3').out, '{}');
+  assert.equal(post(f, into(det), 'k3').out, '{}');
   assert.equal(merges(f).length, 1);
 });
 
@@ -359,4 +362,24 @@ test('a yes belongs to its task: a yes for another task does not cover a merge o
   assert.equal(decision(pre(p, 'git push origin feat/t1', 'y6')), 'deny');
   approveFor(p, 'push');
   assert.equal(pre(p, 'git push origin feat/t1', 'y7').out, '{}');
+});
+
+test('plan cover needs the approval record and an unchanged plan: a state line written by hand, or a plan edited after approval, covers nothing', () => {
+  // approved, then a step is written into the file by hand
+  const f = fixture({ enforce: 'block' });
+  const t1 = taskAt(f, 'feat/s1');
+  const slug = finalPlanOf(f, t1.id);
+  assert.equal(pre(f, 'git merge feat/s1', 'c1').out, '{}', 'covered while unchanged');
+  const file = path.join(f.repo, '.crew', 'plans', slug + '.md');
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').trimEnd() + '\n- [ ] Slipped in by hand\n');
+  assert.equal(decision(pre(f, 'git merge feat/s1', 'c2')), 'deny', 'changed since approval');
+  // never approved: the file only says final
+  const g = fixture({ enforce: 'block' });
+  const t2 = taskAt(g, 'feat/s2');
+  assert.equal(run(g, ['plan', 'new', 'q', '--title', 'Plan Q', '--goal', 'Ship it', '--not-doing', 'No rewrite', '--done-when', 'Tests pass']).code, 0);
+  const add = JSON.parse(run(g, ['--json', 'plan', 'add', 'q', 'Write the code']).out);
+  assert.equal(run(g, ['plan', 'link', 'q', add.id || add.node || (add.data && add.data.id), t2.id]).code, 0);
+  const qf = path.join(g.repo, '.crew', 'plans', 'q.md');
+  fs.writeFileSync(qf, fs.readFileSync(qf, 'utf8').replace('state:draft', 'state:final'));
+  assert.equal(decision(pre(g, 'git merge feat/s2', 'c3')), 'deny', 'no approval record');
 });

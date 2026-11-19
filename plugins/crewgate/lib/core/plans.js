@@ -522,6 +522,10 @@ function mergeCover(root, projectId, branches) {
     const tk = all.find((t) => t.branch && t.branch === b && (t.state === 'accepted' || t.state === 'merged'));
     const slug = tk ? finalPlanOfTask(root, projectId, tk.id) : null;
     if (!slug) return null;
+    // the cover is the user's approval: it needs the record finalizeAnswer wrote (not just a state line in the file) and a plan
+    // that still reads as approved
+    const rec = readRecord(projectId, slug);
+    if (!rec || rec.state !== 'final' || !rec.gate_id || changedSinceApproved(root, projectId, slug)) return null;
     if (!first) first = slug;
   }
   return first;
