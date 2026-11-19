@@ -365,6 +365,34 @@ function detect(command, depth = 0) {
   return out;
 }
 
+// Is one of the command's segments a crew call that records or decides an approval: `crew gate answer`, `crew task accept`,
+// `crew plan finalize --gate`, `crew plan drift --gate`? Such a call must run alone, so its result is read before the action it
+// approves. Segments are split like detect() does (; && || | & newline), wrappers are looked into, heredoc bodies are not commands.
+const isCrewWord = (w) => /^crew(\.js)?$/.test(base(w));
+function isGateCrew(seg) {
+  const i = commandStart(seg);
+  let k = i;
+  if (base(seg[i] || '') === 'node' || base(seg[i] || '') === 'npx') k = i + 1;
+  if (!isCrewWord(seg[k] || '')) return false;
+  const rest = seg.slice(k + 1);
+  const words = rest.filter((w) => !w.startsWith('-'));
+  const flag = (name) => rest.some((w) => w === name || w.startsWith(`${name}=`));
+  if (words[0] === 'gate' && words[1] === 'answer') return true;
+  if (words[0] === 'task' && words[1] === 'accept') return true;
+  if (words[0] === 'plan' && (words[1] === 'finalize' || words[1] === 'drift') && flag('--gate')) return true;
+  return false;
+}
+function hasGateCrew(command, depth = 0) {
+  try {
+    for (const seg of segments(tokenize(command))) {
+      if (isGateCrew(seg)) return true;
+      const wrapped = depth < MAX_WRAP_DEPTH ? wrappedCommand(seg) : null;
+      if (wrapped !== null && hasGateCrew(wrapped, depth + 1)) return true;
+    }
+  } catch { /* unparseable: no */ }
+  return false;
+}
+
 // What a finished shell command says about its merges: one entry per merge that happened, in order.
 // Reads git's own words ("Merge made by", "Fast-forward", "Squash commit", "Updating a..b").
 // -> [{ outcome: 'merge'|'fast-forward'|'squash', range? }] ([] = no merge reported, or no output at all)
@@ -382,4 +410,4 @@ function mergesIn(output) {
   return out;
 }
 
-module.exports = { detect, tokenize, mergesIn, isDynamic, OPS, base, commandStart, gitOptions, wrappedCommand };
+module.exports = { detect, hasGateCrew, tokenize, mergesIn, isDynamic, OPS, base, commandStart, gitOptions, wrappedCommand };

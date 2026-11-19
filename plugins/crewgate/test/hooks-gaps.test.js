@@ -50,7 +50,7 @@ test('gh pr create is the open_pr gate, git merge the merge gate; a "no" answer 
   assert.match(post(f, 'glab mr create', 'mr1').json.hookSpecificOutput.additionalContext, /"open_pr" gate/, 'a push yes is not an open_pr yes');
 });
 
-test('an approval older than 30 minutes or from another session does not count; an auto gate stays quiet, a never gate that ran is reported', () => {
+test('an approval older than the age bound or from another session does not count; an auto gate stays quiet, a never gate that ran is reported', () => {
   const f = H.fixture({ config: { gates: { merge: 'auto', open_pr: 'never' } } });
   H.start(f);
   assert.equal(post(f, 'git merge x', 'a1').out, '{}', 'auto');
@@ -61,7 +61,8 @@ test('an approval older than 30 minutes or from another session does not count; 
   gates.answer(f.pid, g.id, 'yes', '', { session: 'other-session' });
   assert.equal(gates.hasApproval(f.pid, 'push', f.sid), false, 'other session');
   assert.equal(gates.hasApproval(f.pid, 'push', 'other-session'), true);
-  assert.equal(gates.hasApproval(f.pid, 'push', 'other-session', Date.now() + gates.ANSWER_WINDOW_MS + 60000), false, 'too old');
+  assert.equal(gates.hasApproval(f.pid, 'push', 'other-session', Date.now() + gates.ANSWER_WINDOW_MS + 60000), true, 'late but still the latest unused yes');
+  assert.equal(gates.hasApproval(f.pid, 'push', 'other-session', Date.now() + gates.APPROVAL_MAX_AGE_MS + 60000), false, 'too old');
 });
 
 // ---------------------------------------------------------------- 2. hook-seen

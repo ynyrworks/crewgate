@@ -123,11 +123,11 @@ function cliMergeRecorded(pid, data, dir) {
   } catch { return false; }
 }
 
-// A push, PR or merge whose gate is "ask" needs a recorded yes (crew gate answer) from the last 30 minutes.
-// Without one: a gate.missing event and reminder lines for the model. With gates.enforce=confirm the
+// A push, PR or merge whose gate is "ask" needs a recorded yes (crew gate answer) that no earlier action has used up, or, for a
+// local merge of an accepted task of a final plan, that plan's approval (see gatecheck.check). Without one: a gate.missing event and reminder lines for the model. With gates.enforce=confirm the
 // PreToolUse hook already put the command to the user (gate.prompted for this tool call): the command ran, so the
 // user allowed it; that is recorded as gate.confirmed and nothing is reminded.
-function gateLines(h, found, tuid) {
+function gateLines(h, found, tuid, chk) {
   const lines = [];
   let prompted = null;
   const wanted = G.wantedGates(found);
@@ -141,7 +141,7 @@ function gateLines(h, found, tuid) {
     } catch { /* ignore */ }
     lines.push(h.t('gate.neverRan', { what: m.command, gate: m.gate }));
   }
-  for (const m of G.unapproved(h, wanted)) {
+  for (const m of chk.missing) {
     if (tuid && gates.enforceOf(h.cfg()) === 'confirm') {
       if (!prompted) {
         try { prompted = events.read(h.pid, { types: 'gate.prompted', since: Date.now() - 30 * 60 * 1000 }).filter((e) => e.data && e.data.tool_use_id === tuid); } catch { prompted = []; }
@@ -184,24 +184,41 @@ function onBash(payload) {
   // A directory outside every registered project records nothing (and is never registered here).
   const handleFor = G.makeHandleFor(payload, h);
   const byProject = new Map(); // pid -> { h, found }
-  found.forEach((f, i) => {
+  const owner = new Map(); // found entry -> its project group
+  found.forEach((f) => {
     const fh = handleFor(f);
     if (!fh) return;
+    G.markTemp(fh, f, sessionCwd); // a merge in a scratch worktree: f.ignore
     if (!byProject.has(fh.pid)) byProject.set(fh.pid, { h: fh, found: [] });
     byProject.get(fh.pid).found.push(f);
-    if (f.type === 'git.merge' && cliMergeRecorded(fh.pid, f.data, G.targetDir(sessionCwd, f.cd) || sessionCwd)) return; // `crew task merge` already recorded it
+    owner.set(f, byProject.get(fh.pid));
+    if (f.type === 'git.merge' && !f.ignore && cliMergeRecorded(fh.pid, f.data, G.targetDir(sessionCwd, f.cd) || sessionCwd)) f.cliRecorded = true; // `crew task merge` already recorded it (and reminded)
+  });
+  // What covers each gate is read before this command's own events are written: an event that carries approved_by uses a yes up.
+  for (const g of byProject.values()) g.chk = G.check(g.h, G.wantedGates(g.found.filter((f) => !f.ignore && !f.cliRecorded)));
+  const nth = new Map();
+  found.forEach((f, i) => {
+    const g = owner.get(f);
+    if (!g || f.ignore || f.cliRecorded) return;
+    const gate = gates.gateOf(f);
+    // one yes per action: the n-th action of a gate in this command takes the n-th cover the check found
+    const k0 = `${g.h.pid}:${gate}`;
+    const n = nth.get(k0) || 0;
+    nth.set(k0, n + 1);
+    const by = (g.chk.items.get(gate) || [])[n] || null;
+    const mine = !!by;
     const list = f.type === 'git.merge' ? mergeEvents(f, merges, found.filter((x) => x.type === 'git.merge').length) : [f.data];
     list.forEach((data, k) => {
       try {
-        events.append(fh.pid, {
-          type: f.type, src: 'hook', session: fh.sid, tool_use_id: tuid,
-          data, key: `${tuid || Date.now()}:${i}${k ? `:${k}` : ''}`,
+        events.append(g.h.pid, {
+          type: f.type, src: 'hook', session: g.h.sid, tool_use_id: tuid,
+          data: mine && (k === 0 || by.startsWith('plan:')) ? { ...data, approved_by: by } : data, key: `${tuid || Date.now()}:${i}${k ? `:${k}` : ''}`,
         });
       } catch { /* ignore */ }
     });
   });
   const lines = [];
-  for (const g of byProject.values()) lines.push(...gateLines(g.h, g.found, tuid));
+  for (const g of byProject.values()) lines.push(...gateLines(g.h, g.found, tuid, g.chk));
   return lines.length ? C.withContext('PostToolUse', lines.join('\n')) : null;
 }
 

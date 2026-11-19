@@ -21,7 +21,7 @@ const DEFAULTS = Object.freeze({
   },
   gates: {
     push: 'ask', open_pr: 'ask', merge: 'ask', remote_hosts: 'ask', large_task: 'ask', install_or_download: 'ask',
-    enforce: 'remind', require_user_turn: true,
+    enforce: 'remind', require_user_turn: true, plan_covers_merge: true,
   },
   limits: {
     max_parallel_workers: 3,
@@ -96,6 +96,9 @@ const SCHEMA = [
   f('gates.require_user_turn', 'boolean', d(
     'An approval counts only when you sent a message between "gate ask" and "gate answer yes", so the model cannot approve itself within one turn.',
     '核准要在「gate ask」與「gate answer yes」之間有使用者送出訊息才算數，避免模型在同一輪自己核准。')),
+  f('gates.plan_covers_merge', 'boolean', d(
+    'Your approval of a plan (plan finalize --gate) also approves the local merge (git merge) of the branch of each accepted task linked to it, for as long as the plan is final. Pushes, PRs and merges of anything else still ask every time.',
+    '你核准計畫（plan finalize --gate）時，也等於核准該計畫中已驗收任務的分支做本機合併（git merge），計畫維持定稿期間有效。推送、PR 與其他合併仍然每次都要問。')),
   f('limits', 'object', d('Limits and guards.', '限制與守門。')),
   f('limits.max_parallel_workers', 'integer', d('Most workers running at once.', '同時進行的 worker 上限。'), { min: 1, max: 20 }),
   f('limits.parallel_enforce', 'string', d(
