@@ -206,7 +206,7 @@ test('review run records the branch tip, and --since-last-round diffs from it an
   assert.equal(scoped.code, 0, scoped.err);
   const prompt = JSON.parse(scoped.out).prompt;
   assert.ok(prompt.includes(`diff ${tip1} feat/x`), 'the diff runs from the tip recorded for the previous round');
-  assert.match(prompt, /"addressed" or "not addressed"/);
+  assert.match(prompt, /"verdict": "addressed\|not addressed"/);
   assert.match(prompt, /new problems found in the fix diff only/);
   assert.match(prompt, /f1 \[major\] src\/x\.js:1/);
   const full = h.crew(['--lang', 'en', '--json', 'review', 'run', t.id], repo);

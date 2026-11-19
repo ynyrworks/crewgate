@@ -87,7 +87,7 @@
   "wf.task.run.failed": "Task {id}: the {name} worker failed ({kind}): {detail}. The task stays dispatched and the worktree {worktree} was left as it is; fix and run again, or cancel the task.",
   "wf.task.run.done": "Task {id} returned by {name}: {n} file(s) committed as {sha} on {branch}; report {tokens} tokens. Next: crew task show {id}",
 
-  "wf.review.usage": "review takes run | submit | filter | finalize | show | dismiss | followup",
+  "wf.review.usage": "review takes run | submit | filter | finalize | show | keep | dismiss | followup",
   "wf.review.findingNotFinal": "Finding {id} of task {task} is not in a finalized review round, so it cannot become a follow-up (run crew review finalize first; a refuted finding does not count)",
   "wf.review.followupNoPlan": "Task {id} is not linked to a plan step. Name a plan with --plan SLUG, or leave this out of the plan",
   "wf.review.followupAdded": "Proposed {node} in plan {slug}. It does not count until it is accepted.",
@@ -96,7 +96,7 @@
   "wf.review.followupDecide": "Decide: crew plan accept {slug} {node}   or   crew plan reject {slug} {node} --note \"why\"",
   "wf.review.noFile": "Cannot read the {what} file: {file}",
   "wf.review.notArray": "The {what} must be a JSON array (or an object with a findings array)",
-  "wf.review.emptyInput": "No JSON was given (pass --file or pipe it on stdin)",
+  "wf.review.emptyInput": "No JSON was given (pass --file or --json, or pipe it on stdin)",
   "wf.review.noRound": "No {what} file yet for this task; run the earlier review step first",
   "wf.review.noDiff": "Cannot build a diff for task {id}: it has no branch that exists in git",
   "wf.review.noEngine": "No engine named \"{name}\" in the global config (~/.crewgate/config.json, engines)",
@@ -277,5 +277,15 @@
   "wf.task.rule.recorded": "Recorded: read by the orchestrator ({lines} line(s)): {note}",
   "wf.review.sinceFallback": "--since-last-round: no earlier round has a recorded branch tip, so this round reviews the full diff.",
   "wf.review.verdictLine": "  Earlier finding {id}: {verdict}  {evidence}",
-  "wf.review.verdictsSaved": "Engine {name} gave a verdict on {n} earlier finding(s), stored as {path}"
+  "wf.review.verdictsSaved": "Engine {name} gave a verdict on {n} earlier finding(s), stored as {path}",
+  "wf.review.keepReapplied": "Kept again, as you decided with review keep: {ids}",
+  "wf.review.noRefutations": "Round {round} has {n} kept finding(s) and no refutations yet. Run the refuter, then save its verdicts with: crew review submit {id} --round {round} --kind refutations (or pass --refutations-file).",
+  "wf.review.keepFinalized": "Round {round} is already finalized; keep only works on the latest round that is not finalized.",
+  "wf.review.keepUnknown": "Finding {id} is not among the findings the filter dropped in round {round}.",
+  "wf.review.keepInvalid": "Finding {id} was dropped as invalid ({detail}) and cannot be kept; ask the reviewer to file it again.",
+  "wf.review.keptBack": "Finding {id} is back among the kept findings of round {round} (kept by the orchestrator: {reason}).",
+  "wf.review.keepNext": "The refuter has not judged it yet: run crew review filter {id} --round {round} to get the refuter prompt for the updated list, then crew review finalize {id}.",
+  "wf.review.keptByLine": "kept by the orchestrator: {reason}",
+  "wf.review.scopeDefault": "No --scope given: used once (this round's finding only; pass --scope always to keep it dismissed for later tasks).",
+  "wf.task.acceptedDismissed": "Note: every kept finding of review round {round} was dismissed or judged ({dismissed} of {n} dismissed), so the round counts as decided without finalize."
 }

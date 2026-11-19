@@ -92,8 +92,11 @@ function findingsSummary(taskDir) {
 // What the review of a task lacks at accept time -> { kind: 'none' } when no round was recorded,
 // { kind: 'unfinalized', round, n } when the latest round has findings that never went through
 // the refuter and `review finalize`, { kind: 'not_re_reviewed', round } when the task was sent back after
-// its last finalized round (same rule as `crew release record`), or null when nothing is missing.
-function reviewGap(taskDir, projectId, taskId) {
+// its last finalized round (same rule as `crew release record`), { kind: 'dismissed', round, n, dismissed } when every kept finding of the
+// latest round was dismissed (or judged by the refuter, with at least one dismissed), or null when nothing is missing.
+// `rule`: review.enforce is not off. Only then does a round with no findings that was never finalized count as no review (the rule check needs it);
+// with the rule off the gap is what it was before the rule existed.
+function reviewGap(taskDir, projectId, taskId, rule = true) {
   const round = review.latestRound(taskDir, 'raw.json');
   if (!round) return { kind: 'none' };
   const finalized = review.latestRound(taskDir, 'json');
@@ -101,9 +104,26 @@ function reviewGap(taskDir, projectId, taskId) {
   const suffix = fs.existsSync(review.roundFile(taskDir, round, 'kept.json')) ? 'kept.json' : 'raw.json';
   let n = 0;
   try { n = review.readArray(review.roundFile(taskDir, round, suffix), 'findings').length; } catch { /* unreadable: nothing to count */ }
-  if (n) return { kind: 'unfinalized', round, n };
-  // a round submitted with no findings and never finalized is no review: without any finalized round the task has none
-  return finalized ? notReReviewed(taskDir, finalized, projectId, taskId) : { kind: 'none' };
+  if (n) {
+    const closed = suffix === 'kept.json' ? closedByDismissals(taskDir, projectId, taskId, round) : null;
+    return closed || { kind: 'unfinalized', round, n };
+  }
+  // a round submitted with no findings and never finalized is no review (when the rule is on): without any finalized round the task has none
+  return finalized ? notReReviewed(taskDir, finalized, projectId, taskId) : (rule ? { kind: 'none' } : null);
+}
+
+// Every kept finding of the round is dismissed, or has a refuter verdict while at least one is dismissed -> { kind: 'dismissed', ... } or null.
+function closedByDismissals(taskDir, projectId, taskId, round) {
+  let kept = [];
+  try { kept = review.readArray(review.roundFile(taskDir, round, 'kept.json'), 'findings'); } catch { return null; }
+  if (!kept.length) return null;
+  const gone = new Set(events.read(projectId)
+    .filter((e) => e.type === 'review.finding_dismissed' && e.task === taskId && e.data && e.data.round === round).map((e) => e.data.finding));
+  let judged = new Set();
+  try { judged = new Set(review.readArray(review.roundFile(taskDir, round, 'refutations.json'), 'refutations').map((r) => r && r.id)); } catch { /* none */ }
+  const dismissed = kept.filter((f) => gone.has(f.id)).length;
+  if (!dismissed || !kept.every((f) => gone.has(f.id) || judged.has(f.id))) return null;
+  return { kind: 'dismissed', round, n: kept.length, dismissed };
 }
 
 function notReReviewed(taskDir, finalized, projectId, taskId) {
@@ -462,10 +482,11 @@ function run(argv, ctx) {
   } else if (sub === 'accept') {
     const changedWarn = planChangedOnAccept(ctx, proj, cfg, a.id);
     const taskDir = paths.taskDir(proj.id, a.id);
-    const gap = reviewGap(taskDir, proj.id, a.id);
+    const gap = reviewGap(taskDir, proj.id, a.id, cfg.review.enforce !== 'off');
     // Findings nobody tried to refute are what the review exists to catch: going past them takes a stated reason.
     if (gap && gap.kind === 'unfinalized' && !a.skipRefuter) throw new CrewError('wf.task.acceptUnfinalized', { id: a.id, round: gap.round, n: gap.n });
     const skipped = gap && gap.kind === 'unfinalized' ? { review_gap: gap, skip_refuter: a.skipRefuter } : null;
+    const closedBy = gap && gap.kind === 'dismissed' ? { review_gap: gap, closed_by: 'dismissals' } : null;
     let ruleLine = null;
     let ruleEvent = null;
     let ruleData = null;
@@ -494,7 +515,7 @@ function run(argv, ctx) {
         ctx.t('wf.task.widenNext', { id: a.id, gate: scope.asked.gate_id, reason: clean(a.widen, 200) }),
       ]);
     }
-    const task = tasks.transition(proj.id, a.id, 'accepted', { ...opts, note: a.note || '', data: skipped || ruleData ? { ...skipped, ...ruleData } : undefined });
+    const task = tasks.transition(proj.id, a.id, 'accepted', { ...opts, note: a.note || '', data: skipped || closedBy || ruleData ? { ...skipped, ...closedBy, ...ruleData } : undefined });
     if (ruleEvent) evAppend(proj, 'review.rule_unmet', a.id, ruleEvent);
     if (scope.after) scope.after();
     try { const tip = common.branchTip(proj.path, task.branch); if (tip) tasks.recordScopeTip(proj.id, a.id, tip); } catch { /* ignore */ }
@@ -506,6 +527,7 @@ function run(argv, ctx) {
     if (gap) {
       if (gap.kind === 'none') L.push(ctx.t('wf.task.acceptedNoReview'));
       else if (gap.kind === 'not_re_reviewed') L.push(ctx.t('wf.task.acceptedNotReReviewed', { round: gap.round }));
+      else if (gap.kind === 'dismissed') L.push(ctx.t('wf.task.acceptedDismissed', { round: gap.round, n: gap.n, dismissed: gap.dismissed }));
       else L.push(ctx.t('wf.task.acceptedUnfinalized', { round: gap.round, n: gap.n }));
     }
     ctx.emit({ task, open_findings: open, review_gap: gap, ...(ruleData ? { review_rule: ruleData.review_rule } : {}), ...(skipped ? { skip_refuter: a.skipRefuter } : {}) }, L);

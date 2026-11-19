@@ -114,7 +114,7 @@ In Codex there is no `$ARGUMENTS`: take the sub-command from what the user said,
    `crew review filter <id>` → dispatch the refuter with the printed prompt →
    `crew review finalize <id> [--refutations-file F]` → `crew review show <id>`. You only ever read the survivors.
    Dismiss a finding you judge wrong or irrelevant, so it does not come back:
-   `crew review dismiss <id> <finding-id> --scope once|always --reason "..."`. A real finding that this task will not fix is a **follow-up**: propose it with
+   `crew review dismiss <id> <finding-id> --reason "..." [--scope once|always]` (`once` without `--scope`). If a subagent's save is refused, take its final message (the JSON array) and save it with `crew review submit <id> --round N --file F` or `--json '<array>'` (same for `crew plan review submit`). A finding the filter dropped that you judge real: `crew review keep <id> <finding-id> --reason "..."`. A real finding that this task will not fix is a **follow-up**: propose it with
    `crew review followup <id> <finding-id> --done-when "..."`, which adds a `[?]` step next to the task's plan
    step. It counts only once accepted. If it does not serve the plan's goal, use `--plan <other>` or just tell the user.
 9. **Decide.**
@@ -127,9 +127,8 @@ In Codex there is no `$ARGUMENTS`: take the sub-command from what the user said,
    - A fix made after a send-back gets another review round (step 8) before accept; `crew task accept` refuses otherwise (`review.enforce`).
      The one exception: a fix of 20 changed lines or fewer (`review.small_fix_lines`) you may read line by line, and accept with `--read-by-orchestrator "<what you read>"`; your report to the user says so.
    - A task with no review round at all may be accepted only when it is documentation only or 20 changed lines or fewer, again with `--read-by-orchestrator`; the CLI refuses it otherwise.
-   - Clean: `crew task accept <id>`. Finalize the round first, even when you expect to dismiss its
-     findings: accept refuses an unfinalized round with findings unless you pass `--skip-refuter "<reason>"`,
-     and tell the user when you do.
+   - Clean: `crew task accept <id>`. Finalize the round first: accept refuses an unfinalized round with findings unless
+     you pass `--skip-refuter "<reason>"` (tell the user when you do). When you dismissed every kept finding, accept takes the round as decided.
 10. **Gates, then merge.** Check the gates (below). Run the full test suite at merge, one run at a time, in the
     foreground. When allowed, merge with git yourself, then record
     it: `crew task merge <id> --note "<merge commit>"`. Remove the worktree when done

@@ -193,7 +193,7 @@ test('full pipeline: filter -> finalize -> show; task show lists the survivors',
   assert.equal(filtered.length, 3);
   assert.match(run(repo, 'review', 'filter', t.id).out, /invalid entry bad/);
 
-  assert.equal(run(repo, 'review', 'finalize', t.id).code, 2, 'refutations are required when something survived');
+  assert.equal(run(repo, 'review', 'finalize', t.id).code, 1, 'refutations are required when something survived');
   const refs = u.writeFile(h.tmpDir(), 'ref.json', JSON.stringify([
     { id: 'keep', verdict: 'upheld', evidence: 'src/x.js:1 confirmed' },
     { id: 'wrong', verdict: 'refuted', evidence: 'src/x.js:2 already handled' },
@@ -319,7 +319,6 @@ test('dismiss: once stops matching when the snippet is gone, always keeps matchi
   submit([u.finding('f1')]);
   run(repo, 'review', 'filter', t.id);
   assert.equal(run(repo, 'review', 'dismiss', t.id, 'f1', '--scope', 'once').code, 2, 'reason is required');
-  assert.equal(run(repo, 'review', 'dismiss', t.id, 'f1', '--reason', 'x').code, 2, 'scope is required');
   assert.equal(run(repo, 'review', 'dismiss', t.id, 'nope', '--scope', 'once', '--reason', 'x').code, 1);
   const d = u.crewJson(['review', 'dismiss', t.id, 'f1', '--scope', 'once', '--reason', 'fine here'], repo);
   assert.equal(d.code, 0, d.err);
