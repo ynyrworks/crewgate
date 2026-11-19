@@ -77,19 +77,23 @@ function emptyCounts() {
     tasks_accepted: 0,
     tasks_accepted_no_review_round: 0,
     tasks_accepted_after_send_back_no_later_round: 0,
+    tasks_accepted_send_back_unknown: 0,
     lessons: { added: 0, promoted: 0 },
     plans: { created: 0, finalized: 0, closed: 0 },
   };
 }
 
-// When a finalized round (N.json) was finalized: the "review round N" event when there is one, else the file's time (live data only).
-function finalizedAt(taskEvs, round, file) {
+// When a finalized round (N.json) was finalized: the "review round N" event when there is one; else, for a collected folder, the time
+// recorded in its summary.json at collection (rec); else, for live data only (rec null), the file's time. A copy's file times say nothing,
+// so for a collected folder with neither an event nor a record the time is unknown (null).
+function finalizedAt(taskEvs, round, file, rec, key) {
   const hit = taskEvs.filter((e) => e.type === 'task.reviewed' && dataOf(e).note === `review round ${round}`);
   if (hit.length) return Date.parse(hit[hit.length - 1].ts);
-  try { return fs.statSync(file).mtimeMs; } catch { return 0; }
+  if (rec) { const t = Date.parse(rec[key]); return Number.isNaN(t) ? null : t; }
+  try { return fs.statSync(file).mtimeMs; } catch { return null; }
 }
 
-function countProject(c, projectDir) {
+function countProject(c, projectDir, rec) {
   const evs = readEvents(path.join(projectDir, 'events.jsonl'));
   const byTask = new Map();
   for (const e of evs) {
@@ -131,7 +135,10 @@ function countProject(c, projectDir) {
     const sent = tevs.filter((e) => e.type === 'task.sent_back').map((e) => Date.parse(e.ts)).filter((n) => !Number.isNaN(n));
     if (sent.length) {
       const last = Math.max(...sent);
-      if (!rounds.some((r) => finalizedAt(tevs, r, path.join(findings, `${r}.json`)) > last)) c.tasks_accepted_after_send_back_no_later_round++;
+      const times = rounds.map((r) => finalizedAt(tevs, r, path.join(findings, `${r}.json`), rec, `${path.basename(projectDir)}/${id}/${r}`));
+      if (times.some((t) => t !== null && t > last)) continue;
+      if (times.some((t) => t === null)) c.tasks_accepted_send_back_unknown++;
+      else c.tasks_accepted_after_send_back_no_later_round++;
     }
   }
 }
@@ -149,7 +156,7 @@ function sumInto(t, c) {
     const x = (t.drift.answers_by_kind[k] = t.drift.answers_by_kind[k] || {});
     for (const [a, n] of Object.entries(ans)) bump(x, a, n);
   }
-  for (const k of ['tasks_accepted', 'tasks_accepted_no_review_round', 'tasks_accepted_after_send_back_no_later_round']) t[k] += c[k];
+  for (const k of ['tasks_accepted', 'tasks_accepted_no_review_round', 'tasks_accepted_after_send_back_no_later_round', 'tasks_accepted_send_back_unknown']) t[k] += c[k];
   for (const k of ['added', 'promoted']) t.lessons[k] += c.lessons[k];
   for (const k of ['created', 'finalized', 'closed']) t.plans[k] += c.plans[k];
 }
@@ -160,11 +167,11 @@ function dataRoot(folder) {
   return fs.existsSync(path.join(inner, 'projects')) ? inner : folder;
 }
 
-function countFolder(root) {
+function countFolder(root, rec) {
   const c = emptyCounts();
   let ids = [];
   try { ids = fs.readdirSync(path.join(root, 'projects')); } catch { /* no projects */ }
-  for (const id of ids) countProject(c, path.join(root, 'projects', id));
+  for (const id of ids) countProject(c, path.join(root, 'projects', id), rec);
   return c;
 }
 
@@ -193,6 +200,7 @@ function rowsOf(c) {
   rows.push(['tasks accepted', c.tasks_accepted]);
   rows.push(['  accepted with no finalized review round', c.tasks_accepted_no_review_round]);
   rows.push(['  accepted after a send-back, no later round', c.tasks_accepted_after_send_back_no_later_round]);
+  if (c.tasks_accepted_send_back_unknown) rows.push(['  accepted after a send-back, round time unknown (not counted above)', c.tasks_accepted_send_back_unknown]);
   rows.push(['lessons added / promoted', `${c.lessons.added} / ${c.lessons.promoted}`]);
   rows.push(['plans created / finalized / closed', `${c.plans.created} / ${c.plans.finalized} / ${c.plans.closed}`]);
   return rows;
@@ -206,7 +214,9 @@ function runStats(o) {
     if (!fs.existsSync(folder) || !fs.statSync(folder).isDirectory()) { console.error(`Not a folder: ${folder} (unpack an archive first)`); process.exit(1); }
     const name = o.folders.length ? machineName(folder, taken) : label;
     taken.add(name);
-    machines[name] = countFolder(dataRoot(folder));
+    let rec = null;   // a collected folder has a summary.json; its recorded round times replace the copy's file times
+    if (o.folders.length) { try { rec = JSON.parse(fs.readFileSync(path.join(folder, 'summary.json'), 'utf8')).finalized_rounds || {}; } catch { rec = {}; } }
+    machines[name] = countFolder(dataRoot(folder), rec);
   }
   const total = emptyCounts();
   for (const c of Object.values(machines)) sumInto(total, c);
@@ -281,7 +291,7 @@ function collect(o) {
   const out = chooseOut(o);
   if (fs.existsSync(out)) { console.error(`Output folder already exists: ${out}`); process.exit(1); }
 
-  const summary = { machine: label, platform: process.platform, node: process.version, collected: new Date().toISOString(), home, plugin_versions: [], projects: [], transcripts: [], skipped: [] };
+  const summary = { machine: label, platform: process.platform, node: process.version, collected: new Date().toISOString(), home, plugin_versions: [], projects: [], transcripts: [], finalized_rounds: {}, skipped: [] };
   const jobs = [];   // { src, dst, transcript }
   const add = (src, dst, transcript = false) => { if (fs.existsSync(src)) jobs.push({ src, dst, transcript }); };
 
@@ -334,6 +344,23 @@ function collect(o) {
     summary.projects.push(row);
   }
 
+  // When each finalized review round was finalized (the source file's time), for --stats on the copy, whose file times are the copy's.
+  try {
+    for (const pid of fs.readdirSync(path.join(home, 'projects'))) {
+      const tdir = path.join(home, 'projects', pid, 'tasks');
+      let tasks = [];
+      try { tasks = fs.readdirSync(tdir); } catch { continue; }
+      for (const t of tasks) {
+        let fl = [];
+        try { fl = fs.readdirSync(path.join(tdir, t, 'findings')); } catch { continue; }
+        for (const f of fl) {
+          const m = /^(\d+)\.json$/.exec(f);
+          if (m) { try { summary.finalized_rounds[`${pid}/${t}/${m[1]}`] = fs.statSync(path.join(tdir, t, 'findings', f)).mtime.toISOString(); } catch { /* skip */ } }
+        }
+      }
+    }
+  } catch { /* no projects */ }
+
   const tBytes = jobs.filter((j) => j.transcript).reduce((n, j) => n + sizeOf(j.src), 0);
   const total = jobs.reduce((n, j) => n + sizeOf(j.src), 0);
   if (o.transcripts) {
@@ -346,7 +373,7 @@ function collect(o) {
   for (const j of jobs) {
     try {
       fs.mkdirSync(path.dirname(j.dst), { recursive: true });
-      fs.cpSync(j.src, j.dst, { recursive: true });
+      fs.cpSync(j.src, j.dst, { recursive: true, preserveTimestamps: true });
     } catch (e) {
       summary.skipped.push(`${j.src}: ${e.message}`);
     }

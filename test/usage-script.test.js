@@ -152,3 +152,44 @@ test('output is never made inside a git work tree unless --out is given', () => 
   assert.equal(explicit.code, 0, explicit.err);
   assert.match(explicit.out, /Wrote folder:/);
 });
+
+// Rounds with no "review round" event: t5 finalized (file time) before its send-back, t6 after it.
+test('--stats on a collected folder uses the recorded round times, not the copy file times; unrecorded counts as unknown', () => {
+  const home = tmp('ug-home-');
+  const pdir = path.join(home, 'projects', 'p1');
+  const lines = [
+    ev('task.sent_back', { ts: T('02') }, 't5'), ev('task.accepted', { ts: T('03') }, 't5'),
+    ev('task.sent_back', { ts: T('02') }, 't6'), ev('task.accepted', { ts: T('06') }, 't6'),
+  ];
+  fs.mkdirSync(pdir, { recursive: true });
+  fs.writeFileSync(path.join(pdir, 'events.jsonl'), `${lines.join('\n')}\n`);
+  for (const [t, m] of [['t5', '01'], ['t6', '05']]) {
+    const f = path.join(pdir, 'tasks', t, 'findings', '1.json');
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    fs.writeFileSync(f, '[]');
+    const d = new Date(T(m));
+    fs.utimesSync(f, d, d);
+  }
+  const live = JSON.parse(run(['--stats', '--json'], { env: { CREWGATE_HOME: home }, cwd: tmp('ug-cwd-') }).out).total;
+  assert.equal(live.tasks_accepted_after_send_back_no_later_round, 1);
+
+  const cwd = tmp('ug-cwd-');
+  const out = path.join(cwd, 'crewgate-data-cc-1');
+  const r = run(['--no-transcripts', '--out', out], { env: { CREWGATE_HOME: home, CLAUDE_CONFIG_DIR: tmp('ug-claude-') }, cwd });
+  assert.equal(r.code, 0, r.err);
+  assert.ok(Date.now() - fs.statSync(path.join(out, 'crewgate', 'projects', 'p1', 'tasks', 't5', 'findings', '1.json')).mtimeMs > 60 * 60 * 1000, 'copy keeps the file time');
+  // make the copy's file times the time of the copy, as after unpacking without them
+  for (const t of ['t5', 't6']) fs.utimesSync(path.join(out, 'crewgate', 'projects', 'p1', 'tasks', t, 'findings', '1.json'), new Date(), new Date());
+  const c = JSON.parse(run(['--stats', '--json', out], { cwd }).out).total;
+  assert.equal(c.tasks_accepted_after_send_back_no_later_round, 1);
+  assert.equal(c.tasks_accepted_send_back_unknown, 0);
+
+  const sp = path.join(out, 'summary.json');
+  const sum = JSON.parse(fs.readFileSync(sp, 'utf8'));
+  delete sum.finalized_rounds;
+  fs.writeFileSync(sp, JSON.stringify(sum));
+  const u = JSON.parse(run(['--stats', '--json', out], { cwd }).out).total;
+  assert.equal(u.tasks_accepted_after_send_back_no_later_round, 0);
+  assert.equal(u.tasks_accepted_send_back_unknown, 2);
+  assert.match(run(['--stats', out], { cwd }).out, /round time unknown[^\n]*\s2\b/);
+});
