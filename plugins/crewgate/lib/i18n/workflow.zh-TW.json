@@ -150,7 +150,7 @@
   "wf.handoff.untrustedEnd": "交接資料結束。",
   "wf.handoff.cancelled": "已取消交接 {id}。",
 
-  "wf.lesson.usage": "lesson 可用 add | list | suggest | promote | retire",
+  "wf.lesson.usage": "lesson 可用 add | list | suggest | find | promote | retire",
   "wf.lesson.badKey": "經驗 key 必須是小寫英數與連字號（最多 64 字元）：{key}",
   "wf.lesson.badKind": "未知的經驗類型 {kind}；可用：{kinds}",
   "wf.lesson.noText": "經驗需要內容",
@@ -162,6 +162,9 @@
   "wf.lesson.suggestHead": "有 {n} 筆經驗在至少 {days} 個不同日子出現：",
   "wf.lesson.suggestAsk": "請問使用者要升格哪些成規則；沒有明確同意就一筆都不要升格。",
   "wf.lesson.noCandidates": "目前沒有可升格的經驗。",
+  "wf.lesson.checkHint": "這看起來是機械性的（指令、檔案樣式、選項或禁用的呼叫）：先提議做成自動檢查（測試、lint 規則或 hook），再考慮寫成規則。",
+  "wf.lesson.findNeeds": "lesson find 需要至少一個關鍵字或 --paths <glob>",
+  "wf.lesson.findLimit": "--limit 至少要是 1",
   "wf.lesson.unknownKey": "沒有以 {key} 記錄的經驗",
   "wf.lesson.noRule": "規則需要內容（--rule）",
   "wf.lesson.ruleNewline": "規則必須是單行文字（不能換行）",

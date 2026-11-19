@@ -11,6 +11,7 @@ const { clean } = require('../core/redact');
 const C = require('./common');
 const sess = require('./session');
 const account = require('../core/account');
+const lessons = require('../features/lessons');
 
 const MAX_BYTES = 4000;
 const OPEN_STATES = ['created', 'dispatched', 'returned', 'reviewing', 'accepted'];
@@ -49,6 +50,7 @@ function build(h, perState, card) {
   const inner = [parts.length ? h.t('brief.tasks', { list: parts.join('; ') }) : h.t('brief.noTasks')];
   if (handoffs.length) inner.push(h.t('brief.handoffs', { count: handoffs.length, ids: handoffs.slice(0, 5).join(', ') + (handoffs.length > 5 ? ', ...' : '') }));
   if (needs) inner.push(h.t('brief.needs', { count: needs }));
+  try { const n = lessons.suggest(h.workTree, cfg).length; if (n) inner.push(h.t('brief.lessons', { count: n })); } catch { /* no lessons file */ }
   if (h.accountWarn) inner.push(h.t(h.accountWarn === 'unknown' ? 'brief.accountUnknown' : 'brief.accountMismatch'));
   inner.push(h.t('brief.rules', { file: line(cfg.lessons && cfg.lessons.rules_file, 80) || 'CLAUDE.md' }));
 

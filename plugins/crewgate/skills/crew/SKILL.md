@@ -139,7 +139,8 @@ In Codex there is no `$ARGUMENTS`: take the sub-command from what the user said,
     Stop only for a gate, a drift question, a failed check you cannot resolve, or an empty frontier.
 12. **Lessons.** Whenever the user corrects you, a task is sent back for a repeatable reason, or you
     dismiss a finding for good, run `crew lesson add --key <slug> --text "..." --kind <kind>`. Do not
-    promote anything yourself (see Wrap-up).
+    promote anything yourself (see Wrap-up). When the session-start state names lessons ready, bring them up at wrap-up;
+    before you write a brief, run `crew lesson find <the task's words> --paths <its globs>` and put what it finds into the brief.
 
 ## Gates
 
@@ -199,7 +200,8 @@ With tasks still running, the closing status line names them.
 3. `crew lesson suggest`: for each candidate, show the user the key, how many days it occurred and
    the proposed one-line rule. **Ask which to promote. Promote nothing without a clear yes.** For a yes:
    `crew lesson promote <key> --rule "<one line>"`. If the rules block is full the command names the
-   oldest rule; offer `crew lesson retire <key>` and let the user choose.
+   oldest rule; offer `crew lesson retire <key>` and let the user choose. A candidate marked as mechanical
+   (a command, file pattern, option or banned call): offer an automatic check (a test, lint rule or hook) first, a rule only if the user declines.
 4. Offer a handoff if work is unfinished (below).
 5. Give the user a short summary: merged, pending, decisions needed.
 
