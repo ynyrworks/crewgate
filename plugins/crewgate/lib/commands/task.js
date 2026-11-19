@@ -231,16 +231,18 @@ function planChangedOnAccept(ctx, proj, cfg, id) {
   return ctx.t('wf.task.acceptPlanChangedWarn', { id, slug });
 }
 
-// The files changed on a task's branch since its scope base (see common.scopeRange: the branch tips recorded at earlier accepts count),
+// The files changed on a task's branch since its scope base (see common.scopeRange: the base stored at dispatch comes first),
 // so files of an earlier accepted task on the same branch are not this task's. Both paths of a rename are listed (the old one was
 // touched too). -> { files } or { failed: code, branch, repo } when it cannot be said.
 function changedFiles(root, branch, proj, id) {
   const tips = proj ? tasks.list(proj.id, { state: 'accepted' }).concat(tasks.list(proj.id, { state: 'merged' })).filter((t) => t.id !== id && t.scope_tip).map((t) => t.scope_tip) : [];
-  const r = common.scopeRange(root, branch, tips);
-  if (r.failed) return { failed: r.failed, branch, repo: root };
+  let stored = '';
+  try { stored = (proj && tasks.load(proj.id, id).scope_base) || ''; } catch { /* none */ }
+  const r = common.scopeRange(root, branch, tips, stored);
+  if (r.failed) return { failed: r.failed, branch, repo: root, stale: r.stale };
   const out = common.git(['diff', '--name-only', '--no-renames', '-z', r.base, r.branch], root);
   if (out === null) return { failed: 'git-diff', branch, repo: root };
-  return { files: out.split('\0').filter(Boolean) };
+  return { files: out.split('\0').filter(Boolean), stale: r.stale };
 }
 
 const evAppend = (proj, type, id, data, session) => {
@@ -271,15 +273,16 @@ function scopeOnAccept(ctx, proj, cfg, id, a) {
   if (!task.scope.allow.length && !task.scope.deny.length) return none;
   const session = gates.currentSession();
   const got = changedFiles(proj.path, task.branch, proj, id);
+  none.lines = got.stale ? [ctx.t('wf.task.scopeStale', { id, branch: task.branch })] : [];
   if (got.failed) {
     evAppend(proj, 'task.scope_check_failed', id, { reason: got.failed, branch: got.branch || '', repo: got.repo }, session);
-    return { ...none, lines: [ctx.t('wf.task.scopeCheckFailed', { id, reason: ctx.t(`wf.task.scopeWhy.${got.failed}`, { branch: got.branch || '-', repo: got.repo }) })] };
+    return { ...none, lines: [...none.lines, ctx.t('wf.task.scopeCheckFailed', { id, reason: ctx.t(`wf.task.scopeWhy.${got.failed}`, { branch: got.branch || '-', repo: got.repo }) })] };
   }
   const files = drift.outsideFiles(task.scope, got.files, process.platform === 'win32' || process.platform === 'darwin');
   if (!files.length) return none;
   const list = listFiles(files);
   if (mode === 'remind') {
-    return { ...none, lines: [ctx.t('wf.task.scopeWarn', { id, files: list })], after: () => evAppend(proj, 'task.scope_warned', id, { files: files.slice(0, 50), count: files.length }, session) };
+    return { ...none, lines: [...none.lines, ctx.t('wf.task.scopeWarn', { id, files: list })], after: () => evAppend(proj, 'task.scope_warned', id, { files: files.slice(0, 50), count: files.length }, session) };
   }
   const root = ctx.workTree() || proj.path;
   const slug = plans.finalPlanOfTask(root, proj.id, id);

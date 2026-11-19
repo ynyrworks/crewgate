@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { spawnSync } = require('child_process');
 const paths = require('./paths');
 const json = require('./json');
 const events = require('./events');
@@ -235,6 +236,20 @@ function recordScopeTip(projectId, taskId, sha) {
   });
 }
 
+// recordScopeBase(projectId, taskId, root) -> sha or null. At the first dispatch: the tip of the task's branch, the start its scope is
+// judged from at accept. Set once (a send-back does not move it). No branch yet, no repository or no git: nothing is recorded.
+function recordScopeBase(projectId, taskId, root) {
+  try {
+    const t = load(projectId, taskId);
+    if (t.scope_base || !t.branch || !/^[A-Za-z0-9][A-Za-z0-9._/@+-]*$/.test(t.branch) || !root) return null;
+    const r = spawnSync('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${t.branch}`], { cwd: root, encoding: 'utf8', timeout: 5000, windowsHide: true });
+    const sha = r.status === 0 ? String(r.stdout || '').trim() : '';
+    if (!/^[0-9a-f]{7,64}$/.test(sha)) return null;
+    json.update(taskFile(projectId, taskId), {}, (x) => { if (x.id && !x.scope_base) x.scope_base = sha; return x; });
+    return sha;
+  } catch { return null; }
+}
+
 const sendBack = (projectId, taskId, opts) => transition(projectId, taskId, 'dispatched', opts);
 
 // recordReport(projectId, taskId, { report, packet }, { maxTokens, ...transition opts })
@@ -268,5 +283,5 @@ function readBrief(projectId, taskId) {
 module.exports = {
   STATES, TRANSITIONS, BRIEF_SECTIONS, REPORT_SECTIONS,
   estimateTokens, validateBrief, validateReport, createTask, load, list, findMarker,
-  transition, setFields, recordScopeTip, sendBack, recordReport, readReport, readBrief,
+  transition, setFields, recordScopeTip, recordScopeBase, sendBack, recordReport, readReport, readBrief,
 };

@@ -212,6 +212,7 @@ async function runCodex(ctx, proj, cfg, task, a) {
   tasks.setFields(proj.id, task.id, { branch: wt.branch, worktree: wt.worktree });
   if (task.state === 'created') {
     tasks.transition(proj.id, task.id, 'dispatched', { src: 'cli', note: `dispatched by crew task run (${name})`, data: { engine: name, model: model || null, background: false, via: 'codex-run' } });
+    tasks.recordScopeBase(proj.id, task.id, root);
   } else {
     events.append(proj.id, { type: 'task.dispatched', src: 'cli', task: task.id, data: { engine: name, model: model || null, redispatch: true, via: 'codex-run' }, key: `${task.id}:run:${Date.now()}` });
   }

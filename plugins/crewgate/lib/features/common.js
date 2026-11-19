@@ -70,13 +70,24 @@ function branchRange(root, branch) {
   return null;
 }
 
-// The commit a task's scope is judged from, for `crew task accept`. -> { base, branch } or { failed: code }.
-// Rule: the base is the closest of (a) the branch tips recorded when other tasks were accepted, if that tip is an ancestor of this
-// branch tip, and (b) the merge-base with HEAD/main/master; for a branch already merged, the merge-base of the first parent of the
-// merge commit that took it in. A branch with no commit beyond its base gives base = tip (nothing changed).
+// The commit a task's scope is judged from, for `crew task accept`. -> { base, branch } or { failed: code }; stale: true when a stored base was dropped.
+// Rule: the base stored at dispatch (scopeBase), when it is an ancestor of the branch tip. Without one (or when the branch was rebased
+// or reset past it) the 0.25 guess: the closest of the branch tips recorded at other accepts that are ancestors of the tip, and the
+// merge-base with HEAD/main/master (for a merged branch, of the first parent of the merge that took it in).
 // Codes: 'no-branch' (not in this repository), 'no-base' (no common history with HEAD/main/master), 'no-commits' (nothing beyond
 // the base, or fast-forwarded in with no recorded base: nothing to tell the task's own commits apart).
-function scopeRange(root, branch, recordedTips = []) {
+function scopeRange(root, branch, recordedTips = [], scopeBase = '') {
+  if (!branch || !BRANCH_RE.test(branch)) return { failed: 'no-branch' };
+  const has = /^[0-9a-f]{7,64}$/.test(scopeBase || '');
+  if (has) {
+    const tip = git(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], root);
+    if (tip && git(['merge-base', '--is-ancestor', scopeBase, tip.trim()], root) !== null) return { base: scopeBase, branch };
+  }
+  const r = guessRange(root, branch, recordedTips);
+  return has ? { ...r, stale: true } : r;
+}
+
+function guessRange(root, branch, recordedTips) {
   if (!branch || !BRANCH_RE.test(branch)) return { failed: 'no-branch' };
   const tip = git(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`], root);
   if (!tip) return { failed: 'no-branch' };
