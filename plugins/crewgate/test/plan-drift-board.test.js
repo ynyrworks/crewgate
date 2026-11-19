@@ -104,7 +104,7 @@ test('plan skill: "When work drifts" names the commands and the rules', () => {
   assert.ok(raw.split('\n').length < 133);
   const s = read('skills', 'plan', 'SKILL.md');
   assert.ok(s.includes('When work drifts'));
-  for (const c of ['crew plan drift', '--gate', '--answer', '--outside-plan', 'end the turn', 'Never edit the plan file', '`add`', '`goal`', '`new`', '`drop`', '`defer`']) assert.ok(s.includes(c), c);
+  for (const c of ['crew plan drift', '--gate', '--answer', '--outside-plan', 'end the turn', 'Never edit the plan file', '`add`', '`goal`', '`new`', '`drop`', '`defer`', '--under', '--origin user --quote', 'Expected, Found, Why it matters']) assert.ok(s.includes(c), c);
 });
 
 test('crew skill points at the drift section; commands.md lists the drift commands', () => {

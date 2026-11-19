@@ -215,9 +215,13 @@ tasks, so the board can show how far the whole job is and updates by itself when
 grow, but visibly: every node records where it came from (`plan`, `user`, `review`, `refute`, `implementation`,
 `send-back`) and when it was added, and the plan page can highlight what was added recently.
 
-For a plan of about three steps or more, the orchestrator is told to clarify first: it asks only what would change the
-plan and what the code cannot answer, and keeps the answers in the plan file. It asks again only when the goal, scope, a
-constraint or an earlier answer changes. Since 0.22 this is `/crewgate:plan`, and plain words such as "write a plan for X" reach it, usually: that is the model's call. A new plan is a draft with a goal, what it leaves out, what done means, and steps. Only your reply makes it final, and a worker cannot start on a task linked to a draft (`plan.enforce`: `block`, `remind` or `off`). Plans from before 0.22 are legacy and are left alone. The questions themselves are instructions to the model, not checks.
+For medium and large work, the orchestrator is told to interview you first. It maps the open decisions as a tree and
+asks in rounds: one chat message holds every question whose earlier decisions are settled, each numbered with a
+recommended answer that a plain yes accepts. It looks up facts itself, asks only what would change the plan and what the
+code cannot answer, and stops when no branch is open or when you say so (the open decisions are then marked assumed and
+shown with the plan). The answers are kept in the plan file. Before approval, a read-only subagent reads the plan as its
+builder, and only the decisions it finds missing come back to you, in one more round. It asks again only when the goal, scope, a
+constraint or an earlier answer changes. Since 0.22 this is `/crewgate:plan`, and plain words such as "write a plan for X" reach it, usually: that is the model's call. A new plan is a draft with a goal, what it leaves out, what done means, and steps. Only your words make it final: your reply, or the message in which you asked for it. That one yes also confirms the assumed answers and approves the local merge of the plan's accepted tasks (`gates.plan_covers_merge`); push and PR still ask. A worker cannot start on a task linked to a draft (`plan.enforce`: `block`, `remind` or `off`). Plans from before 0.22 are legacy and are left alone. The questions themselves are instructions to the model, not checks.
 
 Since 0.23, when work leaves a final plan it stops and asks one question with five answers: `add`, `goal`, `new`, `drop` or `defer`. It asks at a new step on a final plan, when the plan text no longer matches what you approved, for a task with no plan while a plan is final, and for files outside a task's scope at accept. The same kind is asked once between two of your messages. A small unrelated fix can use `crew task create --outside-plan "reason"`, which needs no reply and is counted. `crew plan drift-stats` shows the numbers. Work inside the allowed files that goes in the wrong direction is not caught, because no model judges meaning.
 
