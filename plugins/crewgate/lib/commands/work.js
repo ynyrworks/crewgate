@@ -6,7 +6,7 @@ const store = require('../core/store');
 
 const SPECS = {
   set: {
-    positionals: [{ name: 'stream' }, { name: 'title' }, { name: 'state', choices: store.WORK_STATES }, { name: 'note', optional: true }],
+    positionals: [{ name: 'stream' }, { name: 'title', text: true }, { name: 'state', choices: store.WORK_STATES }, { name: 'note', optional: true, text: true }],
     options: { '--need': { dest: 'need', int: true }, '--id': { dest: 'itemId' }, '--new': { dest: 'forceNew', flag: true } },
   },
   rm: { positionals: [{ name: 'stream' }, { name: 'title', optional: true }], options: { '--id': { dest: 'itemId' } } },

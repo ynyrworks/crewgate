@@ -6,7 +6,7 @@ const store = require('../core/store');
 
 const SPECS = {
   set: {
-    positionals: [{ name: 'iid', int: true }, { name: 'title' }],
+    positionals: [{ name: 'iid', int: true }, { name: 'title', text: true }],
     options: { '--ci': { dest: 'ci', choices: store.CI_STATES }, '--merged': { dest: 'merged', choices: ['yes', 'no'] } },
   },
   list: { positionals: [], options: {} },

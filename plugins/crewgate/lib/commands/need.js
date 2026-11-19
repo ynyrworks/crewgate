@@ -5,7 +5,7 @@ const { UsageError } = require('../core/errors');
 const store = require('../core/store');
 
 const SPECS = {
-  add: { positionals: [{ name: 'text' }], options: {} },
+  add: { positionals: [{ name: 'text', text: true }], options: {} },
   done: { positionals: [{ name: 'id', int: true }], options: {} },
   list: { positionals: [], options: { '--all': { dest: 'all', flag: true } } },
 };

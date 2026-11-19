@@ -127,3 +127,33 @@ test('the out-of-scope, changed-plan and accept-on-changed-plan stop messages ha
     assert.match(zh, /就選 add；.*就選 new/, k);
   }
 });
+
+test('plan add, plan edit, log add, need add, work set and mr set take text values that start with "-"; a real unknown option still errors', () => {
+  const run = (...a) => h.crew(a, repo);
+  const ok = (...a) => { const r = run(...a); assert.equal(r.code, 0, `${a.join(' ')}: ${r.err}`); return r; };
+  ok('plan', 'new', 'dash2', '--title', 'T', '--goal', 'G');
+  const plan = () => fs.readFileSync(`${repo}/.crew/plans/dash2.md`, 'utf8');
+  ok('plan', 'add', 'dash2', '- first step');
+  assert.match(plan(), /- first step/);
+  ok('plan', 'add', 'dash2', '-single');
+  assert.match(plan(), /-single/);
+  const id = (plan().match(/\bn\d+\b/g) || []).pop();
+  assert.ok(id, 'a node id exists');
+  ok('plan', 'edit', 'dash2', id, '-edited');
+  assert.match(plan(), /-edited/);
+  ok('log', 'add', 'me', '-logged');
+  assert.match(ok('log', 'list').out, /-logged/);
+  ok('need', 'add', '-needed');
+  assert.match(ok('need', 'list').out, /-needed/);
+  ok('work', 'set', 'stream1', '-wtitle', 'doing', '-wnote');
+  const items = JSON.stringify(JSON.parse(ok('work', 'list', '--json').out));
+  assert.match(items, /-wtitle/);
+  assert.match(items, /-wnote/);
+  ok('mr', 'set', '7', '-mrtitle');
+  assert.match(ok('mr', 'list').out, /-mrtitle/);
+  for (const a of [['plan', 'add', 'dash2', 'x', '--bogus'], ['log', 'add', 'me', 'x', '--bogus'], ['need', 'add', 'x', '--bogus'], ['work', 'set', 's', 'x', 'doing', 'n', '--bogus'], ['mr', 'set', '8', 'x', '--bogus']]) {
+    const r = run(...a);
+    assert.equal(r.code, 2, a.join(' '));
+    assert.match(r.err, /--bogus/);
+  }
+});

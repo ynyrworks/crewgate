@@ -329,6 +329,19 @@ A button switches between them, and the page remembers your choice in the browse
   <img alt="Office: sessions as pixel-art characters at desks" src="images/office-light.png" width="100%">
 </picture>
 
+## Comparing usage before and after a change
+
+`scripts/collect-usage-data.js` copies one machine's Crewgate data so two runs (before and after a change, or two machines) can be compared. Run it before a change you want to measure and again after it has been in use for a while. It only reads.
+
+```
+node scripts/collect-usage-data.js [--out DIR] [--since 2026-10-01] [--no-transcripts]
+node scripts/collect-usage-data.js --stats [--json] [FOLDER...]
+```
+
+- **What it collects:** the data folder's `projects/`, `projects.json` and `config.json` (not `accounts.json`, `sessions`, `cache` or `bin`); per registered project its `.crew/plans`, `.crew/LESSONS.md` and `.claude/crew.json`; and the Claude Code session transcripts that mention Crewgate. Transcripts hold full conversation text: it prints that and the total size first, and `--no-transcripts` leaves them out.
+- **Compare two runs:** `--stats` prints, from the data alone, the numbers the plan compares (answers refused for `no_user_turn`, `gate.missing` by gate, merge gate asked/yes/no, drift asked and answered by kind, tasks accepted with no finalized review round or after a send-back with no later round, lessons, plans), per machine and in total. `--stats FOLDER...` reads earlier collected folders (unpack an archive first), so two machines' collections can be compared on one machine. Example from a first collection: merge gate asked 275, yes 259; 34 `no_user_turn` refusals; 78 `gate.missing`; 175 of 450 accepted tasks with no review round.
+- **Do not commit the output.** `.gitignore` has `crewgate-data-*`, and the script will not write inside a git work tree unless `--out` is given.
+
 ## Privacy and safety
 
 - **Local only.** The board binds `127.0.0.1`, rejects foreign `Host` headers, sets no CORS headers, requires a

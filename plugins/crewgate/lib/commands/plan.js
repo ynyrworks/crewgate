@@ -18,14 +18,14 @@ const SPECS = {
   list: { positionals: [], options: {} },
   show: { positionals: [{ name: 'slug' }], options: {} },
   add: {
-    positionals: [{ name: 'slug' }, { name: 'text' }],
+    positionals: [{ name: 'slug' }, { name: 'text', text: true }],
     options: {
       '--under': { dest: 'under' }, '--task': { dest: 'task' },
       '--origin': { dest: 'origin', choices: plans.ORIGINS, default: 'plan' }, '--proposed': { dest: 'proposed', flag: true },
       '--quote': { dest: 'quote' },
     },
   },
-  edit: { positionals: [{ name: 'slug' }, { name: 'node' }, { name: 'text' }], options: {} },
+  edit: { positionals: [{ name: 'slug' }, { name: 'node' }, { name: 'text', text: true }], options: {} },
   clarify: {
     positionals: [{ name: 'slug' }],
     options: { '--question': { dest: 'question' }, '--answer': { dest: 'answer' }, '--by': { dest: 'by', choices: ['user', 'assumed', 'decision'], default: 'user' } },
