@@ -156,8 +156,8 @@ test('full delegated flow: dispatch, report, review, send-back, accept, merge', 
   // task.leftovers (one per worker stop) exists only when the process listing worked: left out of the fixed order
   assert.deepEqual(all.map((e) => e.type).filter((t) => t !== 'task.leftovers'), [
     'session.start', 'task.created', 'task.dispatched', 'subagent.start', 'task.returned', 'subagent.stop',
-    'task.reviewed', 'task.sent_back', 'task.dispatched', 'subagent.start', 'task.returned', 'subagent.stop',
-    'task.reviewed', 'task.accepted', 'gate.asked', 'gate.answered', 'git.merge', 'task.merged', 'session.end',
+    'review.finalized', 'task.reviewed', 'task.sent_back', 'task.dispatched', 'subagent.start', 'task.returned', 'subagent.stop',
+    'review.finalized', 'task.reviewed', 'task.accepted', 'gate.asked', 'gate.answered', 'git.merge', 'task.merged', 'session.end',
   ]);
   const dispatches = all.filter((e) => e.type === 'task.dispatched');
   assert.equal(dispatches[0].data.agent_type, 'crew-worker');

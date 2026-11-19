@@ -10,6 +10,7 @@ const { redact } = require('../core/redact');
 const { CrewError } = require('../core/errors');
 const common = require('./common');
 const paths = require('../core/paths');
+const events = require('../core/events');
 
 const SEVERITIES = ['blocker', 'major', 'minor', 'nit'];
 const VERIFIED_BY = ['repro', 'test', 'code-trace', 'inference'];
@@ -32,6 +33,26 @@ function latestRound(taskDir, suffix) {
 }
 
 function roundFile(taskDir, round, suffix) { return path.join(findingsDir(taskDir), `${round}.${suffix}`); }
+
+// Writes a finalized round (N.json) and records that it was finalized: a review.finalized event { round } in the task's event log.
+// Whether a return came before or after the finalize is read from the order of the log (finalizedIndex), so no file time and no
+// second clock is involved. The key makes each finalize its own event (finalizing the same round again is a new moment).
+function saveFinalized(projectId, taskId, taskDir, round, findings) {
+  json.save(roundFile(taskDir, round, 'json'), findings);
+  events.append(projectId, { type: 'review.finalized', src: 'cli', task: taskId, data: { round }, key: `${round}|${Date.now()}|${crypto.randomBytes(6).toString('hex')}` });
+}
+
+// Index in `taskEvs` (one task's events, in log order) of the last event marking round `round` finalized: this version's
+// review.finalized, or the "review round N" task.reviewed of older versions. -1 when there is none (a round written before either).
+function finalizedIndex(taskEvs, round) {
+  for (let i = taskEvs.length - 1; i >= 0; i--) {
+    const e = taskEvs[i];
+    const d = (e && e.data) || {};
+    if (e.type === 'review.finalized' && Number(d.round) === Number(round)) return i;
+    if (e.type === 'task.reviewed' && d.note === `review round ${round}`) return i;
+  }
+  return -1;
+}
 
 function readArray(file, what) {
   let raw;
@@ -344,7 +365,7 @@ function refuterInstructions({ task, briefPath, reviewPath, diffCmd, keptPath, r
 }
 
 module.exports = {
-  SEVERITIES, VERIFIED_BY, VERDICTS, MAX_DIFF_BYTES, findingsDir, latestRound, roundFile, readArray,
+  SEVERITIES, VERIFIED_BY, VERDICTS, MAX_DIFF_BYTES, findingsDir, latestRound, roundFile, readArray, saveFinalized, finalizedIndex,
   validateFinding, normSnippet, fingerprint, fingerprintOf, snippetDigest, sanitizeFinding, sanitizeFindings, sanitizeRefutation, ledgerFile, readLedger, appendLedger, snippetPresent,
   SCHEMA_TEXT, TOOL_RULES, SAVE_FALLBACK, matchLedger, filterFindings, applyRefutations, extractJsonArray, reviewerInstructions, refuterInstructions,
 };

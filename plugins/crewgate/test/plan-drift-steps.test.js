@@ -329,9 +329,7 @@ test('a failure of the check lets the dispatch through and records plan.check_fa
 function reviewing(f, task) {
   for (const s of ['dispatched', 'returned', 'reviewing']) tasks.transition(f.pid, task.id, s);
   // a finalized review round with no findings, so the review rule (review.enforce) is met: this task has no branch to count
-  const dir = path.join(paths.taskDir(f.pid, task.id), 'findings');
-  fs.mkdirSync(dir, { recursive: true });
-  for (const name of ['1.raw.json', '1.json']) fs.writeFileSync(path.join(dir, name), '[]');
+  h.finalizedRound(f.pid, task.id);
 }
 test('crew task accept on a changed final plan: block refuses and the task stays reviewing; remind warns and accepts; off accepts; unchanged accepts', () => {
   for (const mode of MODES) {

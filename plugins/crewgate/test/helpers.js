@@ -59,6 +59,16 @@ function crew(args, cwd, extraEnv = {}) {
   return { code: r.status, out: r.stdout.trim(), err: r.stderr.trim() };
 }
 
+// A finalized review round for a task, written the way `crew review finalize` writes it (N.raw.json as submitted, then the
+// product's own saveFinalized: N.json plus the review.finalized event that says when). `findings` go in both files.
+function finalizedRound(projectId, taskId, findings = [], round = 1) {
+  const rv = require('../lib/features/review');
+  const dir = require('../lib/core/paths').taskDir(projectId, taskId);
+  fs.mkdirSync(rv.findingsDir(dir), { recursive: true });
+  fs.writeFileSync(rv.roundFile(dir, round, 'raw.json'), JSON.stringify(findings));
+  rv.saveFinalized(projectId, taskId, dir, round, findings);
+}
+
 const GOOD_BRIEF = [
   '# Goal', 'Add the thing.', '',
   '# Scope', 'Allowed: src/**. Forbidden: docs/**.', '',
@@ -76,4 +86,4 @@ const GOOD_REPORT = [
   '## Needs real-environment check', 'no', '',
 ].join('\n');
 
-module.exports = { tmpDir, setupHome, hasGit, git, makeRepo, crew, BIN, GOOD_BRIEF, GOOD_REPORT };
+module.exports = { tmpDir, setupHome, hasGit, git, makeRepo, crew, finalizedRound, BIN, GOOD_BRIEF, GOOD_REPORT };
