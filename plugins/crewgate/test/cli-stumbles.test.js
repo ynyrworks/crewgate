@@ -43,18 +43,23 @@ test('a closed pipe on stdout ends crew without a stack trace and with exit 0', 
   for (let i = 0; i < 4000; i++) lines.push(`- item ${i} ${'x'.repeat(60)}`);
   const file = `${repo}/.crew/plans/big.md`;
   fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('## Not doing\n', `## Not doing\n${lines.join('\n')}\n`));
+  const evidence = `${h.tmpDir()}/stream-errors-stdout.log`;
   for (let round = 0; round < 3; round++) {
     const r = await new Promise((resolve) => {
-      const c = spawn(process.execPath, [h.BIN, 'plan', 'show', 'big'], { cwd: repo, stdio: ['ignore', 'pipe', 'pipe'] });
+      // CREWGATE_STREAM_ERROR_LOG (honoured only with CREWGATE_TEST=1) leaves the code of each stream error where the closed pipe cannot hide it
+      const env = { ...process.env, CREWGATE_TEST: '1', CREWGATE_STREAM_ERROR_LOG: evidence };
+      const c = spawn(process.execPath, [h.BIN, 'plan', 'show', 'big'], { cwd: repo, env, stdio: ['ignore', 'pipe', 'pipe'] });
       let err = '';
       let first = false;
       c.stderr.on('data', (d) => { err += d; });
       c.stdout.on('data', () => { if (!first) { first = true; c.stdout.destroy(); } });
-      c.on('close', (code) => resolve({ code, err, first }));
+      c.on('close', (code, signal) => resolve({ code, signal, err, first }));
     });
-    assert.ok(r.first);
-    assert.equal(r.err, '');
-    assert.equal(r.code, 0);
+    const seen = fs.existsSync(evidence) ? fs.readFileSync(evidence, 'utf8') : '(no stream error recorded)';
+    const why = `round ${round}: exit code ${r.code}, signal ${r.signal}, stderr read: ${JSON.stringify(r.err)}, stream error codes seen by the child:\n${seen}`;
+    assert.ok(r.first, why);
+    assert.equal(r.err, '', why);
+    assert.equal(r.code, 0, why);
   }
 });
 

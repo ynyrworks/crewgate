@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.26.2 — 2026-11-20
+
+Fixes the macOS closed-pipe case that 0.26.1 did not fix.
+
+0.26.1 did not fix the macOS case. The code macOS returns is `ENOTCONN`, observed in CI after 0.26.1 was released (run 44658213969, macos-latest, Node 22). The three codes 0.26.1 added (`EPROTOTYPE`, `ECONNRESET`, `ERR_STREAM_DESTROYED`) were guesses from reading and have not been observed. A macOS user of 0.26.0 or 0.26.1 could see, now and then, when the reader closes the output early (as in `crew ... | head -1`), a stack trace on stderr and exit 1, also for a command that succeeded. Linux and Windows were not affected.
+
+### Fixed
+
+- `lib/core/stream-guard.js` now also ignores `ENOTCONN` (a write to the socket pair of a spawned child's stdout after the reader destroyed its end). The list stays explicit; every other stream error still surfaces. The comments in the file say which codes were observed and which were not.
+- The closed-pipe test "a closed pipe on stdout ends crew without a stack trace and with exit 0" now runs the child with `CREWGATE_TEST=1` and `CREWGATE_STREAM_ERROR_LOG`, and every assertion prints the exit code, the stderr read and the recorded stream error codes. What it requires is unchanged.
+
+### Not verified / known limits
+
+- Whether `ENOTCONN` is the only code macOS returns is not known. The fix is confirmed only by repeated CI runs on macOS; if the test fails again, its message carries the recorded codes.
+
 ## 0.26.1 — 2026-11-20
 
 Fixes one macOS-only case of the closed-pipe handling added in 0.26.0.
