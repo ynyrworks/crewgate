@@ -12,7 +12,7 @@ const err = (code) => Object.assign(new Error(code), { code });
 
 test('every "reader is gone" code is ignored, in any order, ERR_STREAM_DESTROYED first included', () => {
   for (const order of [
-    ['EPIPE'], ['EPROTOTYPE'], ['ECONNRESET'], ['ERR_STREAM_DESTROYED'],
+    ['EPIPE'], ['ENOTCONN'], ['EPROTOTYPE'], ['ECONNRESET'], ['ERR_STREAM_DESTROYED'],
     ['ERR_STREAM_DESTROYED', 'EPIPE'], ['EPROTOTYPE', 'ERR_STREAM_DESTROYED', 'ECONNRESET', 'EPIPE'],
   ]) {
     for (const c of order) assert.doesNotThrow(() => guard.handleStreamError(err(c)), c);
