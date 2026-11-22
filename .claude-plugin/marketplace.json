@@ -7,7 +7,7 @@
       "name": "crewgate",
       "source": "./plugins/crewgate",
       "description": "Delegate coding work to AI subagents in Claude Code, and be sure it does what you want: plans you approve, independent review, approval gates and a local record.",
-      "version": "0.26.2",
+      "version": "0.26.3",
       "license": "MIT",
       "repository": "https://github.com/ynyrworks/crewgate",
       "keywords": ["subagents", "orchestration", "delegation", "code-review", "worktree", "hooks"]
@@ -16,7 +16,7 @@
       "name": "crewgate-office",
       "source": "./plugins/crewgate-office",
       "description": "Optional Office view for the crewgate board: your sessions as a pixel-art office. Needs the crewgate plugin.",
-      "version": "0.26.2",
+      "version": "0.26.3",
       "license": "MIT",
       "repository": "https://github.com/ynyrworks/crewgate",
       "keywords": ["crewgate", "board", "office", "pixel-art"]
