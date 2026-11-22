@@ -1,7 +1,7 @@
 {
   "name": "crewgate",
   "version": "0.26.2",
-  "description": "Delegated development: an orchestrator dispatches workers and reviewers in git worktrees, a deterministic review filter keeps only real findings, and hooks record progress on a local board. Codex support is experimental.",
+  "description": "Delegate coding work to AI subagents, and be sure it does what you want: plans you approve, independent review, approval gates and a local record. Codex support is experimental.",
   "author": {
     "name": "Ynyr"
   },
