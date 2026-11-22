@@ -24,8 +24,8 @@ Rules in `CLAUDE.md` help until they are forgotten. crewgate turns the important
 flowchart TD
     A["You: write a plan for feature X"] --> B{"How big is it?<br/>You can overrule this"}
     B -- "Small fix" --> F["A helper agent does it<br/>in its own branch"]
-    B -- "Medium: up to 5 questions" --> C["It asks what the code cannot answer,<br/>each with a recommended answer"]
-    B -- "Large: as many as it takes" --> C
+    B -- "Medium: a few steps,<br/>some open choices" --> C["It asks what the code cannot answer,<br/>each with a recommended answer,<br/>until nothing is guessed"]
+    B -- "Large: many parts,<br/>with a plan review" --> C
     C --> D["A short plan: goal, not doing,<br/>done when, decisions, steps"]
     D --> E{"You approve?"}
     E -- "Not yet" --> C
@@ -33,7 +33,9 @@ flowchart TD
     F --> G["Another agent reviews it,<br/>and a third tries to disprove the findings"]
     G --> H{"You see what survived.<br/>Good enough?"}
     H -- "No" --> F
-    H -- "Yes" --> I["You approve the merge and the push"]
+    H -- "Yes" --> K{"Accepted only if it was reviewed,<br/>and a fix was reviewed again.<br/>Small and docs-only changes excepted"}
+    K -- "Not reviewed" --> G
+    K -- "Reviewed" --> I["The approved plan covers local merges.<br/>A push asks you every time"]
     F -. "Work leaves the plan" .-> J{"It stops and asks:<br/>what is this?"}
     J -- "Add it, or change the goal" --> F
     J -- "A new plan" --> C
@@ -65,13 +67,13 @@ For a small job, skip the plan:
 
 > /crewgate:crew fix the typo in the README, delegate it.
 
-The model says how big it thinks the job is, and you can overrule it. To approve a plan, reply yes in chat. Plans are Markdown files in `.crew/plans/`. You never need to learn the commands: the model runs them.
+The model says how big it thinks the job is, and you can overrule it. A question can be delegated too: an investigation task is read-only and returns a report. To approve a plan, reply yes in chat; one reply approves the plan. Your own instruction, such as "finalize it and start", counts as approval too. Plans are Markdown files in `.crew/plans/`. You never need to learn the commands: the model runs them.
 
 ## What is enforced, and what is only asked
 
 | | |
 |---|---|
-| **Stopped by code** | A worker on a plan you have not approved. A plan made final without your reply. An approval given without your message. More workers than the limit. A new worker while the machine is above 85% CPU. An incomplete brief. A change to an approved plan until you answer the drift question. A task with no plan while a plan is final, unless it gives a reason. |
+| **Stopped by code** | A worker on a plan you have not approved. A plan made final without your reply. An approval given without your message. More workers than the limit. A new worker while the machine is above 85% CPU. An incomplete brief. A change to an approved plan until you answer the drift question. A task with no plan while a plan is final, unless it gives a reason. Accepting a task that was not reviewed, or whose fix was not reviewed again (`review.enforce`). An approval whose quoted words are not in your message. A push or merge written in the same command as the call that records its approval. |
 | **Recorded for you to see** | Who did what, every merge and push, what a worker left running, changes to the plan settings, every drift answer and every `--outside-plan`. |
 | **Asked of the model, not checked** | Whether its questions were good. Whether the plan caught what you meant. Whether it starts a plan at all: plain words usually reach `/crewgate:plan`, but that is the model's call. Whether a `--outside-plan` reason is true. Work inside the allowed files that goes in the wrong direction. |
 
@@ -86,6 +88,8 @@ Change these on the board's Settings page, in `.claude/crew.json`, or by asking 
 | `plan.interview` | Ask questions before a plan: `on`, `off` | `on` |
 | `plan.enforce` | A plan you have not approved: stops the work (`block`), only warns (`remind`), does nothing (`off`) | `block` |
 | `plan.review` | When an agent criticises the plan: `large`, `ask`, `off` | `large` |
+| `review.enforce` | Accepting a task that was not reviewed, or whose fix was not reviewed again: refuse (`block`), accept with a warning (`remind`), do nothing (`off`) | `block` |
+| `gates.plan_covers_merge` | Your approval of a plan also approves the local merges of its accepted tasks: `true`, `false` | `true` |
 
 Everything else is in [docs/CONFIG.md](docs/CONFIG.md).
 

@@ -13,10 +13,11 @@ The details behind the [README](../README.md). The README is where to start.
 
 **Review**
 - A three-stage pipeline: find (reviewer), filter (deterministic, no model), refute (a skeptic tries to disprove what is left).
-- A dismissal ledger: a finding you reject once is not reported again.
+- A dismissal ledger: `crew review dismiss` hides that one occurrence (`--scope once`, the default); `--scope always` keeps the pattern dismissed for later tasks.
+- A review rule at accept: `crew task accept` refuses a task that was not reviewed, or was sent back and not reviewed again. A small or documentation-only change passes when the orchestrator says what it read (`review.enforce`).
 
 **Safety**
-- Approval gates for push, PR, merge, remote hosts, large tasks and installs, set to `auto`, `ask` or `never`. `gates.enforce` picks how a missing approval is handled: `remind`, `confirm` (Claude Code asks you) or `block` (see Gates below).
+- Approval gates for push, PR, merge, remote hosts, large tasks and installs, set to `auto`, `ask` or `never`. `gates.enforce` picks how a missing approval is handled: `remind`, `confirm` (Claude Code asks you) or `block` (see Gates below). Your own words count as approval when they are quoted (`--quote`), and an approved plan covers the local merges of its accepted tasks (`gates.plan_covers_merge`); a push asks every time.
 - An edit guard that warns or blocks when the orchestrator edits code itself, and a reminder when it reads a huge file without a range.
 - Secrets, keys and IP addresses are redacted before anything is stored; worker boundaries are written into the agent files.
 - Local only: the board binds `127.0.0.1`, no telemetry, no model calls from hooks or the board, one optional update check.
@@ -48,6 +49,8 @@ Privacy and safety; turn it off with `updates.check`).
 flowchart TD
     U["You ask for something"] --> S{"Size, which you can overrule"}
     S -- "Small fix" --> T
+    S -- "A question" --> INV["Investigation task: read-only,<br/>the investigator returns a report"]
+    INV --> IA["Accepted: no scope check,<br/>no review rule"]
     S -- "Medium or large" --> Q["/crewgate:plan asks what the code cannot answer"]
     Q --> D["Draft plan in .crew/plans:<br/>goal, not doing, done when, steps"]
     D -. "Large, by plan.review" .-> PR["Plan review: criticism and<br/>refutation become proposed steps"]
@@ -62,7 +65,8 @@ flowchart TD
     R2 --> R3["Refuter tries to disprove what is left"]
     R3 --> A{"You see what survived"}
     A -- "Send back" --> W
-    A -- "Accept" --> SC{{"CHECK scope:<br/>changed files against --allow and --deny"}}
+    A -- "Accept" --> RV{{"CHECK review rule:<br/>reviewed, and a fix reviewed again"}}
+    RV --> SC{{"CHECK scope:<br/>changed files against --allow and --deny"}}
     SC --> GM{{"GATES push: your reply, each time;<br/>merge: your reply or the approved plan"}}
     GM --> REC["Merge, release record, push"]
     X1["New step on a final plan"] -.-> DQ
@@ -83,8 +87,10 @@ flowchart LR
         O["Orchestrator: main session,<br/>plans and delegates"]
         W2["Worker: own worktree"]
         V["Reviewer and refuter: read-only"]
+        IV["Investigator: read-only"]
         O --> W2
         O --> V
+        O --> IV
     end
     H["Hooks: one script,<br/>sees every tool call"]
     C["crew CLI: tasks, plans,<br/>gates, reviews"]
@@ -117,7 +123,7 @@ flowchart LR
 **Roles.** The orchestrator plans, briefs, dispatches, reviews and merges; it does not implement. A worker
 implements one task in a worktree, runs the project checks, commits and never pushes. A reviewer reads the
 diff, the brief and `.crew/REVIEW.md` and returns structured findings with evidence. A refuter tries to
-disprove each surviving finding. Every role has an `engine` and a `model` in the config.
+disprove each surviving finding. An investigator answers one question read-only and returns a report; it changes no project file. Every role has an `engine` and a `model` in the config.
 
 **Task loop.** `created -> dispatched -> returned -> (reviewing) -> accepted -> merged`. A send-back returns a
 task to `dispatched`. After `max_returns_before_takeover` send-backs (default 2) the CLI refuses another one
