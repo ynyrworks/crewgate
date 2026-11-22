@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.26.3 — 2026-11-22
+
+Documentation and plugin description only. No command, hook, skill or agent file changed, and there is no behaviour change.
+
+### Changed
+
+- The README (English and Traditional Chinese) and the two diagrams of the guide now match 0.25 and 0.26. Corrections:
+  - The README diagram said a medium job gets "up to 5 questions"; that was wrong since 0.25 (no cap).
+  - It said you approve the merge and the push; since 0.25 an approved plan covers local merges, and a push asks every time.
+  - The "Stopped by code" table and the Settings table gained the 0.25 and 0.26 checks and settings.
+  - The guide said a dismissed finding is not reported again; that was wrong since 0.26 (`--scope once` is the default).
+  - The guide's diagrams now show the review rule at accept and the investigator.
+- The plugin description shown when installing now matches the first line of the README.
+
+### Upgrade
+
+Nothing to run.
+
+### Not verified / known limits
+
+- `docs/DESIGN.md`, `examples/todo-cli/WALKTHROUGH.md` and the board screenshots in `docs/images` were not checked against 0.23 to 0.26 and may be out of date.
+- Everything listed as not verified for 0.26.0 to 0.26.2 still stands.
+
 ## 0.26.2 — 2026-11-20
 
 Fixes the macOS closed-pipe case that 0.26.1 did not fix.
