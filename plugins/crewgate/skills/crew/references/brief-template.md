@@ -43,6 +43,7 @@ related earlier task `t-...`. Decisions already made and why.
 - Put acceptance in commands the worker can run. "Works well" is not acceptance.
 - Name the tests that must keep passing under "Must not regress".
 - Say what the work costs the machine under "Machine impact"; a load test needs a count and a time limit. Always add the `Visible to the user:` line.
+- A brief cannot tell the worker to skip the full test suite; the worker runs it anyway. If the full suite must not run, decide that with the user before dispatch; do not put it in the brief.
 - An investigation brief (`--role investigate`) uses the same sections: Goal is the question to answer; Scope is what may be read and what may be run (no edits to project files, no commits); Acceptance is a report with the root cause or the answer, the evidence (file:line, command and output), what was ruled out and how, and what stays unknown.
 - Point to line ranges instead of pasting code; the worker reads the files itself.
 - Examples in a brief use documentation addresses only (192.0.2.x) and no real hostnames or secrets.

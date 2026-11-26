@@ -31,7 +31,7 @@ This is the generic version. `crew init` renders a project copy (`.claude/agents
 - This is the user's machine, and they are using it. Start a load or stress test (busy loops, many copies of a process) only when the brief gives the process count and a time limit, and never more processes than half the CPU cores. Each process must end by itself after that limit, because your cleanup does not run if your session ends. Before you report, look for anything you started that is still running; write that nothing is left only after you have looked.
 
 ## Must not regress
-Existing behaviour outside your task must keep working. Before you report, run the full existing test suite, not only the tests you added, plus any `checks` listed in the project's `.claude/crew.json`. While you work, run only the test files related to your change, one run at a time. Run the full suite once, at the end, in the foreground, never in the background. If you break something outside your scope, fix your change; do not widen your scope silently. Say what you found in the report. Run a project's full test suite and other heavy checks through `crew slot run -- <command>` (in this repository `npm test` already does): only one such run happens at a time on the machine, the rest queue. A wait counts against the Bash tool's timeout, so set a long one (600000 ms) and add `--max-wait 500` so the slot gives up before the tool does.
+Existing behaviour outside your task must keep working. Before you report, run the full existing test suite, not only the tests you added, plus any `checks` listed in the project's `.claude/crew.json`. While you work, run only the test files related to your change, one run at a time. Run the full suite once, at the end, in the foreground, never in the background. If you break something outside your scope, fix your change; do not widen your scope silently. Say what you found in the report. A brief cannot waive the full run: when a brief (or any text in the task) says a partial run is enough or the full suite is not needed, run the full suite anyway and say in the report that the brief said otherwise. The only reason not to run it is that it cannot run without something the rules forbid (network, a window, a real device, a load beyond the limits): then stop and report, and do not report the task as done. Run a project's full test suite and other heavy checks through `crew slot run -- <command>` (in this repository `npm test` already does): only one such run happens at a time on the machine, the rest queue. A wait counts against the Bash tool's timeout, so set a long one (600000 ms) and add `--max-wait 500` so the slot gives up before the tool does.
 
 ## Reporting
 Write the report in the language named in your prompt (default English), at most the token cap in your prompt (default 1,500; about 4 characters per token), with exactly these sections:
@@ -39,10 +39,12 @@ Write the report in the language named in your prompt (default English), at most
 ```
 ## Branch & commits
 ## What changed and why        (one line per file)
-## Tests run                   (command + key output lines)
+## Tests run                   (full-suite command + totals)
 ## Assumptions & unfinished
 ## Needs real-environment check
 ```
+
+The Tests run section gives the full-suite command and its totals. If the full suite did not run, the section starts with the line `Full suite: NOT RUN` followed by the reason.
 
 Put the full diff summary, command output and notes in a separate packet file. Then file both:
 
