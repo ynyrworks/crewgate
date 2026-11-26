@@ -48,6 +48,14 @@ test('worker files: a brief cannot waive the full suite, a skipped run is visibl
   assert.ok(read('skills', 'crew', 'references', 'brief-template.md').includes('cannot tell the worker to skip the full test suite'));
 });
 
+test('worker files: no scripts on stdin, leftover processes are checked and reported', () => {
+  for (const f of [['agents', 'crew-worker.md'], ['templates', 'agents', 'crew-worker.md']]) {
+    const w = read(...f);
+    assert.ok(w.includes('Never feed a script to an interpreter on standard input'), `${f.join('/')} has the no-stdin-script rule`);
+    assert.ok(w.includes('unless you saw it end'), `${f.join('/')} has the leftover-process check rule`);
+  }
+});
+
 test('REVIEW.md template: calibration, nit handling, evidence, CI overlap', () => {
   const t = read('templates', 'REVIEW.md');
   for (const needle of ['Severity calibration', 'nit', 'TOCTOU', 'theoretical-race', 'file:line', 'CI']) assert.ok(t.includes(needle), needle);
