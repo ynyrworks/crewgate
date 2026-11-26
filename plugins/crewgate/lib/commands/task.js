@@ -20,6 +20,7 @@ const drift = require('../core/drift');
 const gates = require('../core/gates');
 const sess = require('../hooks/session');
 const release = require('../features/release');
+const worktrees = require('../features/worktrees');
 
 const STATES = tasks.STATES;
 const NOTE = { '--note': { dest: 'note' } };
@@ -515,7 +516,7 @@ function run(argv, ctx) {
       task = tasks.sendBack(proj.id, a.id, { ...opts, note });
     } catch (e) {
       if (e && e.key === 'task.takeover') {
-        lessons.add(ctx.workTree() || proj.path, proj.id, {
+        lessons.add(proj.path, proj.id, {
           key: 'takeover-limit', kind: 'takeover',
           text: `Task ${a.id} hit the send-back limit (${max}); the orchestrator had to take it over. Last note: ${note}`,
         });
@@ -589,7 +590,17 @@ function run(argv, ctx) {
     const L = [ctx.t('wf.task.merged', { id: task.id })];
     if (git.status === 'recorded') L.push(ctx.t('wf.task.mergeGit', { branch: task.branch, commit: git.commit }));
     if (git.missing) L.push(ctx.t('hooks.gate.missing', { what: 'git merge', gate: 'merge', cmd: common.cliCommand() }));
-    ctx.emit({ task, git_merge: git }, L);
+    // after everything above is recorded: remove the task's clean worktree; it never changes the exit code
+    let wtRes = null;
+    try {
+      const chk = worktrees.check(proj, task, ctx.cwd, cfg);
+      if (chk) {
+        wtRes = worktrees.remove(proj, chk);
+        const why = (code, m) => ctx.t(`wf.task.wtWhy.${code}`, { path: wtRes.path, msg: m || '' });
+        L.push(wtRes.removed ? ctx.t('wf.task.wtRemoved', { path: wtRes.path }) : ctx.t('wf.task.wtKept', { path: wtRes.path, why: why(wtRes.reason, wtRes.message) }));
+      }
+    } catch { wtRes = null; }
+    ctx.emit({ task, git_merge: git, ...(wtRes ? { worktree: { path: wtRes.path, removed: wtRes.removed, ...(wtRes.reason ? { reason: wtRes.reason } : {}), ...(wtRes.adopted !== undefined ? { adopted: wtRes.adopted } : {}) } } : {}) }, L);
   } else {
     const task = tasks.transition(proj.id, a.id, 'cancelled', { ...opts, note: a.note || '' });
     ctx.emit({ task }, ctx.t('wf.task.cancelled', { id: task.id }));

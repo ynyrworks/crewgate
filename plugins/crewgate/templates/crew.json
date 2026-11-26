@@ -102,5 +102,8 @@
   },
   "release": {
     "record_dir": ".crew/releases"
+  },
+  "worktree": {
+    "remove_on_merge": true
   }
 }
