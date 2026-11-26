@@ -195,6 +195,8 @@ This installs everything crewgate needs. The Office page is separate and you can
 6. When the worker returns, the orchestrator runs the review pipeline, shows you the surviving findings,
    sends back or accepts, and asks before merging (the `merge` gate defaults to `ask`).
 
+After a merge, run `crew task merge` from the main checkout. When git confirms the branch is merged and the task's worktree has no changes, it removes the worktree (never the branch); otherwise it keeps it and says why. `worktree.remove_on_merge: false` keeps every worktree. `crew task clean` lists the worktrees of merged and cancelled tasks, and `--apply` removes those that can go. A squash or rebase merge is not recognised as merged, so those worktrees are only listed. Session start names finished tasks that still have a worktree, and accepted tasks whose branch is already merged. Lessons are always kept in the main checkout's `.crew/LESSONS.md`.
+
 ## Configuration
 
 Project settings live in `.claude/crew.json` (all keys optional); global settings (board port, usage prices,

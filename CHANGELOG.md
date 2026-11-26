@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `crew task clean [--apply] [--json]`: lists the worktrees of merged and cancelled tasks with their size and why each stays or can go; `--apply` removes the ones that can.
+- The setting `worktree.remove_on_merge` (default `true`).
+- Two session-start lines: finished tasks whose worktree is still on disk, and accepted tasks whose branch is already merged.
+
+### Changed
+
+- `crew task merge` removes the task's clean worktree after a confirmed merge and keeps the branch. It says why when it keeps the worktree.
+- Lessons are kept in the main checkout from every command (`lesson add/list/suggest/find`, the takeover and dismissal lessons, the session-start count). Lessons left in a worktree are copied to the main checkout before it is removed.
+- Worker rules: a brief cannot waive the full test suite, and a skipped run is the first line of "Tests run" (`Full suite: NOT RUN`). No scripts fed to an interpreter on standard input. A command that timed out or went to the background is checked and stopped by pid before reporting.
+
+### Fixed
+
+- The reason shown when git status of a worktree cannot be read.
+
+### Not verified / known limits
+
+- The worker rule changes were not shown to change behaviour (`docs/research/skill-pressure-test-report.md`: the rerun could not use the real agent type).
+- Squash and rebase merges are not recognised as merged: those worktrees are only listed.
+- The size walk and `status-failed` ran on Windows only.
+- A failed removal after lessons were adopted leaves the worktree without its untracked lessons file (the lessons are in the main checkout).
+
 ## 0.26.3 — 2026-11-22
 
 Documentation and plugin description only. No command, hook, skill or agent file changed, and there is no behaviour change.

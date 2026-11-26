@@ -185,6 +185,8 @@ claude --plugin-dir crewgate/plugins/crewgate
    看板若不見了，`crew board status` 與 `crew doctor` 會提示；`~/.crewgate/board.log` 會記下看板停止的原因（被強制終止的程序不會留下紀錄）。
 6. 實作者回報後，統籌會跑審查流程、把倖存的發現給你看，決定退回或驗收，並在合併前先問你（`merge` 關卡預設是 `ask`）。
 
+合併後，請在主工作目錄執行 `crew task merge`。當 git 確認分支已合併、且任務的 worktree 沒有任何變更時，它會移除該 worktree（不會刪分支）；否則保留並說明原因。`worktree.remove_on_merge: false` 則一律保留。`crew task clean` 會列出已合併與已取消任務的 worktree，加 `--apply` 移除可移除的。squash 或 rebase 合併不會被認定為已合併，這類 worktree 只會被列出。工作階段開始時會點出仍留有 worktree 的已結束任務，以及分支已合併的已驗收任務。教訓一律存在主工作目錄的 `.crew/LESSONS.md`。
+
 ## 設定
 
 專案設定在 `.claude/crew.json`（所有欄位都是選填）；全域設定（看板連接埠、用量單價、預設語言）在
