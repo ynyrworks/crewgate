@@ -1,6 +1,6 @@
 {
   "name": "crewgate",
-  "version": "0.26.3",
+  "version": "0.27.0",
   "description": "Delegate coding work to AI subagents in Claude Code, and be sure it does what you want: plans you approve, independent review, approval gates and a local record.",
   "author": { "name": "Ynyr" },
   "license": "MIT",

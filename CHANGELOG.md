@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.27.0 — 2026-11-27
+
+Task worktrees are cleaned up after a merge, lessons are kept in the main checkout, and two worker rules were tightened after a pressure test of the prompts.
 
 ### Added
 
@@ -18,12 +20,18 @@
 
 - The reason shown when git status of a worktree cannot be read.
 
+### Upgrade
+
+- After updating the plugin, run `crew init --force` in each project. It backs up and rewrites the worker file (`.claude/agents`) with the new rules, and rewrites `.claude/crew.json` keeping your values while adding the new `worktree.remove_on_merge` setting at its default (`true`).
+- Worktrees left over from earlier merges are not removed by the update. `crew task clean` lists them; `crew task clean --apply` removes the ones that can go.
+
 ### Not verified / known limits
 
 - The worker rule changes were not shown to change behaviour (`docs/research/skill-pressure-test-report.md`: the rerun could not use the real agent type).
 - Squash and rebase merges are not recognised as merged: those worktrees are only listed.
 - The size walk and `status-failed` ran on Windows only.
 - A failed removal after lessons were adopted leaves the worktree without its untracked lessons file (the lessons are in the main checkout).
+- The worktree cleanup was tried for real in throwaway projects on Windows against 0.26.2 (`docs/research/worktree-cleanup-trial.md`); adopting an untracked lessons file, a removal that git refuses and the size limit have unit tests only.
 
 ## 0.26.3 — 2026-11-22
 
