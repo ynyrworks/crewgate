@@ -156,9 +156,9 @@ function writeBlock(file, text, lines) {
 }
 
 // Candidates: keys seen on >= promote_after_days distinct days, not promoted, not retired.
-function suggest(root, cfg) {
+function suggest(root, cfg, lessonsRoot = root) {
   const promoted = new Set(readRules(root, cfg).map((r) => r.key));
-  return summarize(readEntries(root))
+  return summarize(readEntries(lessonsRoot))
     .filter((s) => s.count > 0 && s.days >= cfg.lessons.promote_after_days && !promoted.has(s.key) && !s.retired);
 }
 
@@ -166,8 +166,8 @@ function suggest(root, cfg) {
 // day so a long and a short period compare. Counts recorded lessons only: a correction nobody recorded is not seen.
 const SCORE_EARLY_DAYS = 7;
 function spanDays(from, to) { return Math.round((Date.parse(to) - Date.parse(from)) / 86400000); }
-function score(root, cfg, today) {
-  const entries = readEntries(root).filter((e) => e.kind !== 'retired');
+function score(root, cfg, today, lessonsRoot = root) {
+  const entries = readEntries(lessonsRoot).filter((e) => e.kind !== 'retired');
   return readRules(root, cfg).filter((r) => r.key).map((r) => {
     const own = entries.filter((e) => e.key === r.key);
     const before = own.filter((e) => e.date <= r.last).length;
@@ -198,7 +198,7 @@ function oldestRule(rules, stats) {
 }
 
 function promote(root, projectId, cfg, key, rule, opts = {}) {
-  const stats = summarize(readEntries(root));
+  const stats = summarize(readEntries(opts.lessonsRoot || root));
   const st = stats.find((s) => s.key === key && s.count > 0);
   if (!st) throw new CrewError('wf.lesson.unknownKey', { key });
   const text = checkRuleText(rule);
@@ -235,12 +235,43 @@ function retire(root, projectId, cfg, key, opts = {}) {
   if (at >= 0) lines.splice(at, 1);
   writeBlock(file, cur, lines);
   // a retired marker keeps `suggest` from proposing the same key again until it recurs
-  appendLine(root, `- ${common.today()} [retired] ${key}: retired from rules`);
+  appendLine(opts.lessonsRoot || root, `- ${common.today()} [retired] ${key}: retired from rules`);
   if (projectId) events.append(projectId, { type: 'lesson.retired', src: opts.src || 'cli', data: { key }, key: `${key}:${Date.now()}` });
   return { key, rule: gone.rule, file, count: rules.length };
 }
 
+// Brings lesson lines left in a work tree back to the project: appends every line of <worktreeRoot>/.crew/LESSONS.md
+// that the project file does not have yet (same date, kind, key and text), in order. Never touches the source file.
+// -> { adopted, skipped, ok: true }, or { adopted, skipped, ok: false, error } when the source cannot be read or the
+// project file cannot be written (adopted then counts only the lines really appended). A missing source file is ok.
+function adoptFrom(worktreeRoot, projectRoot) {
+  let adopted = 0;
+  let skipped = 0;
+  try {
+    const src = lessonsFile(worktreeRoot);
+    const dst = lessonsFile(projectRoot);
+    if (path.resolve(src) === path.resolve(dst)) return { adopted, skipped, ok: true };
+    if (fs.existsSync(dst) && paths.canonical(src) === paths.canonical(dst)) return { adopted, skipped, ok: true };
+    const have = new Set(readEntries(projectRoot).map((e) => JSON.stringify([e.date, e.kind, e.key, e.text])));
+    let raw = '';
+    try { raw = fs.readFileSync(src, 'utf8'); } catch (err) { if (!err || err.code !== 'ENOENT') throw err; }
+    const wanted = [];
+    for (const line of raw.split(/\r?\n/)) {
+      const m = LINE_RE.exec(line);
+      if (m) wanted.push({ date: m[1], kind: m[2], key: m[3], text: m[4] });
+    }
+    for (const e of wanted) {
+      const id = JSON.stringify([e.date, e.kind, e.key, e.text]);
+      if (have.has(id)) { skipped++; continue; }
+      appendLine(projectRoot, `- ${e.date} [${e.kind}] ${e.key}: ${e.text}`);
+      have.add(id);
+      adopted++;
+    }
+    return { adopted, skipped, ok: true };
+  } catch (err) { return { adopted, skipped, ok: false, error: String((err && err.message) || err) }; }
+}
+
 module.exports = {
   START, END, OLD_START, OLD_END, KINDS, KEY_RE, add, readEntries, summarize, suggest, score, promote, retire, readRules, splitBlock,
-  parseRules, lessonsFile,
+  parseRules, lessonsFile, adoptFrom,
 };
