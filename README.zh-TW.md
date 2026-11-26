@@ -90,6 +90,7 @@ flowchart TD
 | `plan.review` | 什麼時候由 agent 批評計畫：`large`、`ask`、`off` | `large` |
 | `review.enforce` | 接受沒審查過的任務，或退回後沒再審查的修正：拒絕（`block`）、接受但警告（`remind`）、不處理（`off`） | `block` |
 | `gates.plan_covers_merge` | 你核准計畫時，也核准該計畫中已驗收任務的本機合併：`true`、`false` | `true` |
+| `worktree.remove_on_merge` | `crew task merge` 之後，若確認已合併且任務的 worktree 沒有任何變更，就移除該 worktree（分支保留）：`true`、`false` | `true` |
 
 其他設定都在 [docs/CONFIG.md](docs/CONFIG.md)。
 

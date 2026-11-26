@@ -90,6 +90,7 @@ Change these on the board's Settings page, in `.claude/crew.json`, or by asking 
 | `plan.review` | When an agent criticises the plan: `large`, `ask`, `off` | `large` |
 | `review.enforce` | Accepting a task that was not reviewed, or whose fix was not reviewed again: refuse (`block`), accept with a warning (`remind`), do nothing (`off`) | `block` |
 | `gates.plan_covers_merge` | Your approval of a plan also approves the local merges of its accepted tasks: `true`, `false` | `true` |
+| `worktree.remove_on_merge` | After `crew task merge`, remove the task's worktree when the merge is confirmed and the worktree has no changes (the branch stays): `true`, `false` | `true` |
 
 Everything else is in [docs/CONFIG.md](docs/CONFIG.md).
 

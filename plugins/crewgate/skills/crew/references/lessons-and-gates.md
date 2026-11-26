@@ -2,7 +2,7 @@
 
 ## Lessons
 
-A lesson is one line in `.crew/LESSONS.md`: `- YYYY-MM-DD [kind] key: text`.
+A lesson is one line in `.crew/LESSONS.md` of the main checkout (also when you run `crew lesson add` inside a worktree): `- YYYY-MM-DD [kind] key: text`.
 
 | kind | record it when |
 |---|---|

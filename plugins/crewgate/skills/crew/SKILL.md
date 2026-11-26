@@ -29,7 +29,7 @@ In Codex there is no `$ARGUMENTS`: take the sub-command from what the user said,
 - **init**: run `crew init` (add `--lang zh-TW` if the user writes Chinese). Then `crew doctor` and
   show the user anything that is not OK. Never pass `--force` unless the user asks; it backs up and
   refreshes the generated files.
-- **status**: `crew task list`, `crew handoff list`, `crew lesson suggest`, `crew need list`, `crew plan list`.
+- **status**: `crew task list`, `crew handoff list`, `crew lesson suggest`, `crew need list`, `crew plan list`; `crew task clean` shows worktrees of finished tasks still on disk.
   Summarise in a few lines: tasks by state with return counts, plan progress, open handoffs, lessons ready, things
   waiting for the user.
 - **wrap-up**: see "Wrap-up" below.
@@ -139,8 +139,9 @@ In Codex there is no `$ARGUMENTS`: take the sub-command from what the user said,
      you pass `--skip-refuter "<reason>"` (tell the user when you do). When you dismissed every kept finding, accept takes the round as decided.
 10. **Gates, then merge.** Check the gates (below). Run the full test suite at merge, one run at a time, in the
     foreground. When allowed, merge with git yourself, then record
-    it: `crew task merge <id> --note "<merge commit>"`. Remove the worktree when done
-    (`git worktree remove <path>`). Before tagging a release, follow `references/release.md`.
+    it: `crew task merge <id> --note "<merge commit>"`. Run it from the main checkout, not from inside the worktree: when git
+    confirms the merge there and the worktree is clean, it removes the task's worktree itself (the branch stays), otherwise it says why.
+    `crew task clean` lists what is left (`--apply` removes what can go). Before tagging a release, follow `references/release.md`.
 11. **Keep going.** After a merge, start the next plan steps without waiting to be told. The plan is a graph of steps:
     every step whose prerequisites are done and that needs no decision from the user may start, up to `max_parallel_workers`.
     Stop only for a gate, a drift question, a failed check you cannot resolve, or an empty frontier.
