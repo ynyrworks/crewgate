@@ -14,6 +14,8 @@
   "hooks.brief.noTasks": "open tasks: none",
   "hooks.brief.handoffs": "open handoffs: {count} (ids: {ids}); list them with `handoff list`, read one by accepting it",
   "hooks.brief.needs": "needs waiting for the user: {count}",
+  "hooks.brief.leftover": "finished tasks with a worktree still on disk: {count}; `crew task clean` lists them",
+  "hooks.brief.mergedAccepted": "accepted tasks whose branch is already merged: {count} ({ids}); close each with `crew task merge <id>`",
   "hooks.brief.lessons": "lessons ready to show the user: {count} (run `crew lesson suggest`; promote nothing without a clear yes)",
   "hooks.brief.rules": "promoted rules: marked block in {file} (crewgate:rules)",
   "hooks.warn.parallel": "Dispatching task {id} puts {count} tasks in flight (limit {max}). Wait for a worker to return before starting more.",
