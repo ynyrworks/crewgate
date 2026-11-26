@@ -13,7 +13,7 @@
   "wf.init.keptHint": "Existing files were kept. Use --force to regenerate them (the old copies are backed up first; .crew/REVIEW.md and .crew/LESSONS.md need --reset-review-files).",
   "wf.init.next": "Next: run `crew doctor`, then start with the /crewgate:crew skill.",
 
-  "wf.task.usage": "task takes create | list | show | report | send-back | accept | merge | cancel | run",
+  "wf.task.usage": "task takes create | list | show | report | send-back | accept | merge | clean | cancel | run",
   "wf.task.created": "Task {id} created.",
   "wf.task.marker": "Put this exact line into the Agent prompt so the task is linked to its worker:",
   "wf.task.agentHint": "Dispatch with the Agent tool: subagent_type \"{agent}\", model \"{model}\". Use run_in_background for long work.",
@@ -55,7 +55,7 @@
   "wf.task.acceptedUnfinalized": "Note: review round {round} was never finalized, so its {n} finding(s) did not go through the refuter.",
   "wf.task.acceptedNotReReviewed": "Note: the task was sent back after review round {round} was finalized, and its last changes were not re-reviewed.",
   "wf.task.acceptUnfinalized": "Task {id} was not accepted: review round {round} has {n} finding(s) that did not go through the refuter. Run crew review filter and the refuter, then crew review finalize. To accept anyway, say why with --skip-refuter \"reason\".",
-  "wf.task.merged": "Task {id} recorded as merged (no git command was run).",
+  "wf.task.merged": "Task {id} recorded as merged (it records the merge; it does not run git merge).",
   "wf.task.mergeNever": "The merge gate is set to \"never\" in .claude/crew.json; do not merge this task",
   "wf.task.cancelled": "Task {id} cancelled.",
   "wf.task.run.investigate": "task {id} is an investigation; dispatch it to the crew-investigator agent, not task run",
@@ -303,5 +303,15 @@
   "wf.review.keepNext": "The refuter has not judged it yet: run crew review filter {id} --round {round} to get the refuter prompt for the updated list, then crew review finalize {id}.",
   "wf.review.keptByLine": "kept by the orchestrator: {reason}",
   "wf.review.scopeDefault": "No --scope given: used once (this round's finding only; pass --scope always to keep it dismissed for later tasks).",
-  "wf.task.acceptedDismissed": "Note: every kept finding of review round {round} was dismissed ({dismissed} of {n}), so the round counts as decided without finalize."
+  "wf.task.acceptedDismissed": "Note: every kept finding of review round {round} was dismissed ({dismissed} of {n}), so the round counts as decided without finalize.",
+  "wf.task.wtWhy.status-failed": "git status could not be read in it.",
+  "wf.task.wtWhy.cancelled": "its task was cancelled, so its work was not merged. To remove it by hand: git worktree remove \"{path}\"",
+  "wf.task.cleanNone": "No worktrees of finished tasks on disk.",
+  "wf.task.cleanLine": "{id}  {state}  {path}  {size}  {verdict}",
+  "wf.task.cleanCan": "can be removed",
+  "wf.task.cleanRemoved": "removed",
+  "wf.task.cleanFailed": "not removed: {why}",
+  "wf.task.cleanHint": "{n} can be removed; run crew task clean --apply to remove them.",
+  "wf.task.cleanSummary": "removed {removed}, kept {kept}, freed about {freed}",
+  "wf.task.cleanAtLeast": "at least {size}"
 }
