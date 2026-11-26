@@ -39,6 +39,15 @@ test('agent templates carry the default worker boundaries (DESIGN section 10)', 
   assert.ok(read('templates', 'agents', 'crew-refuter.md').includes('upheld|refuted|uncertain'));
 });
 
+test('worker files: a brief cannot waive the full suite, a skipped run is visible', () => {
+  for (const f of [['agents', 'crew-worker.md'], ['templates', 'agents', 'crew-worker.md']]) {
+    const w = read(...f);
+    assert.ok(w.includes('cannot waive'), `${f.join('/')} has the no-waiver rule`);
+    assert.ok(w.includes('Full suite: NOT RUN'), `${f.join('/')} has the NOT RUN line`);
+  }
+  assert.ok(read('skills', 'crew', 'references', 'brief-template.md').includes('cannot tell the worker to skip the full test suite'));
+});
+
 test('REVIEW.md template: calibration, nit handling, evidence, CI overlap', () => {
   const t = read('templates', 'REVIEW.md');
   for (const needle of ['Severity calibration', 'nit', 'TOCTOU', 'theoretical-race', 'file:line', 'CI']) assert.ok(t.includes(needle), needle);
