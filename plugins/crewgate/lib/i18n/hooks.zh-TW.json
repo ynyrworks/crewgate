@@ -14,6 +14,8 @@
   "hooks.brief.noTasks": "未結案任務：無",
   "hooks.brief.handoffs": "待接手的交接單：{count} 件（編號：{ids}）；用 `handoff list` 查看，接手後才讀內容",
   "hooks.brief.needs": "等待使用者處理的事項：{count}",
+  "hooks.brief.leftover": "已結束任務仍留在磁碟上的 worktree：{count} 個；用 `crew task clean` 列出",
+  "hooks.brief.mergedAccepted": "已驗收但分支早已合併的任務：{count} 件（{ids}）；逐一用 `crew task merge <id>` 結案",
   "hooks.brief.lessons": "可讓使用者看的經驗：{count} 筆（執行 `crew lesson suggest`；沒有明確同意不要升格）",
   "hooks.brief.rules": "已升級的規則：{file} 內的標記區塊（crewgate:rules）",
   "hooks.warn.parallel": "派出任務 {id} 後會有 {count} 個任務同時進行（上限 {max}）。請等有 worker 回報再派更多。",
