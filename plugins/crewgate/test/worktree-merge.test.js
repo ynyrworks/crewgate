@@ -248,3 +248,60 @@ test('dismissal lesson written from a worktree lands in the main checkout', () =
   assert.match(fs.readFileSync(LF(main), 'utf8'), /\[dismissal\] review-dismissed-correctness/);
   assert.doesNotMatch(fs.readFileSync(LF(wt), 'utf8'), /review-dismissed-correctness/);
 });
+
+// git refuses `worktree remove` on a locked worktree (no --force is ever passed), so the git-failed path is reached for real.
+function withLock(wt, main, fn) {
+  h.git(main, 'worktree', 'lock', wt);
+  try { fn(); } finally { h.git(main, 'worktree', 'unlock', wt); }
+}
+
+test('git refuses to remove (locked worktree): exit 0, merged, worktree and branch stay, reason git-failed', () => {
+  const { main, wt, task } = setup();
+  mergeBranch(main);
+  withLock(wt, main, () => {
+    const r = doMerge(task.id, main);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(r.data.task.state, 'merged');
+    assert.equal(r.data.worktree.path, wt);
+    assert.equal(r.data.worktree.removed, false);
+    assert.equal(r.data.worktree.reason, 'git-failed');
+    assert.ok(fs.existsSync(wt));
+    assert.match(h.git(main, 'branch', '--list', 'feat/wt'), /feat\/wt/);
+  });
+  // the same again as text, on a second task (the first is merged already)
+  const b = setup();
+  mergeBranch(b.main);
+  withLock(b.wt, b.main, () => {
+    const t = h.crew(['task', 'merge', b.task.id], b.main);
+    assert.equal(t.code, 0, t.err);
+    const line = t.out.split('\n').find((l) => l.startsWith(`Worktree ${b.wt} stays: git could not remove it: `));
+    assert.ok(line, t.out);
+    assert.ok(line.length > `Worktree ${b.wt} stays: git could not remove it: `.length, 'the message is not empty');
+    assert.ok(fs.existsSync(b.wt));
+  });
+});
+
+test('git-failed message is one line', () => {
+  const { main, wt, task } = setup();
+  mergeBranch(main);
+  withLock(wt, main, () => {
+    const r = doMerge(task.id, main);
+    assert.equal(r.data.worktree.reason, 'git-failed');
+    assert.ok(r.data.worktree.message && !/[\r\n]/.test(r.data.worktree.message), String(r.data.worktree.message));
+  });
+});
+
+test('untracked .crew/LESSONS.md and a locked worktree: the lesson is in the main checkout, the worktree stays', () => {
+  const { main, wt, task } = setup({ keepLessonsOut: true });
+  lessons.add(wt, null, { key: 'from-worker', text: 'written in the worktree', date: '2026-05-01' });
+  mergeBranch(main);
+  withLock(wt, main, () => {
+    const r = doMerge(task.id, main);
+    assert.equal(r.code, 0, r.err);
+    assert.equal(r.data.worktree.removed, false);
+    assert.equal(r.data.worktree.reason, 'git-failed');
+    assert.equal(r.data.worktree.adopted, 1);
+    assert.match(fs.readFileSync(LF(main), 'utf8'), /^- 2026-05-01 \[correction\] from-worker: written in the worktree$/m);
+    assert.ok(fs.existsSync(wt));
+  });
+});

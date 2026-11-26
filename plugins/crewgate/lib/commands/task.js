@@ -600,7 +600,7 @@ function run(argv, ctx) {
         L.push(wtRes.removed ? ctx.t('wf.task.wtRemoved', { path: wtRes.path }) : ctx.t('wf.task.wtKept', { path: wtRes.path, why: why(wtRes.reason, wtRes.message) }));
       }
     } catch { wtRes = null; }
-    ctx.emit({ task, git_merge: git, ...(wtRes ? { worktree: { path: wtRes.path, removed: wtRes.removed, ...(wtRes.reason ? { reason: wtRes.reason } : {}), ...(wtRes.adopted !== undefined ? { adopted: wtRes.adopted } : {}) } } : {}) }, L);
+    ctx.emit({ task, git_merge: git, ...(wtRes ? { worktree: { path: wtRes.path, removed: wtRes.removed, ...(wtRes.reason ? { reason: wtRes.reason } : {}), ...(wtRes.message ? { message: wtRes.message } : {}), ...(wtRes.adopted !== undefined ? { adopted: wtRes.adopted } : {}) } } : {}) }, L);
   } else {
     const task = tasks.transition(proj.id, a.id, 'cancelled', { ...opts, note: a.note || '' });
     ctx.emit({ task }, ctx.t('wf.task.cancelled', { id: task.id }));
