@@ -122,13 +122,13 @@ test('init outside git still works and registers the folder', () => {
   assert.ok(exists(dir, '.claude', 'crew.json'));
 });
 
-test('lesson add / promote / retire edit the worktree files, not the main checkout', () => {
+test('lesson add / retire keep lessons in the main checkout; promote / retire edit the rules file of the worktree', () => {
   const { main, wt } = initialised('feat/l');
-  const mainLessons = fs.readFileSync(path.join(main, '.crew', 'LESSONS.md'), 'utf8');
+  const wtLessons = fs.readFileSync(path.join(wt, '.crew', 'LESSONS.md'), 'utf8');
   assert.equal(h.crew(['lesson', 'add', '--key', 'k-one', '--text', 'first'], wt).code, 0);
   assert.equal(h.crew(['lesson', 'add', '--key', 'k-one', '--text', 'again', '--date', '2020-01-02'], wt).code, 0);
-  assert.match(fs.readFileSync(path.join(wt, '.crew', 'LESSONS.md'), 'utf8'), /k-one/);
-  assert.equal(fs.readFileSync(path.join(main, '.crew', 'LESSONS.md'), 'utf8'), mainLessons);
+  assert.match(fs.readFileSync(path.join(main, '.crew', 'LESSONS.md'), 'utf8'), /k-one/);
+  assert.equal(fs.readFileSync(path.join(wt, '.crew', 'LESSONS.md'), 'utf8'), wtLessons);
   const p = h.crew(['lesson', 'promote', 'k-one', '--rule', 'Do the thing'], wt);
   assert.equal(p.code, 0, p.err);
   assert.match(fs.readFileSync(path.join(wt, 'CLAUDE.md'), 'utf8'), /Do the thing/);
@@ -136,7 +136,8 @@ test('lesson add / promote / retire edit the worktree files, not the main checko
   assert.equal(u.crewJson(['lesson', 'list'], wt).data[0].promoted, true);
   assert.equal(h.crew(['lesson', 'retire', 'k-one'], wt).code, 0);
   assert.doesNotMatch(fs.readFileSync(path.join(wt, 'CLAUDE.md'), 'utf8'), /Do the thing/);
-  assert.equal(fs.readFileSync(path.join(main, '.crew', 'LESSONS.md'), 'utf8'), mainLessons);
+  assert.match(fs.readFileSync(path.join(main, '.crew', 'LESSONS.md'), 'utf8'), /\[retired\] k-one/);
+  assert.equal(fs.readFileSync(path.join(wt, '.crew', 'LESSONS.md'), 'utf8'), wtLessons);
 });
 
 test('lesson in a normal repo still edits the repo files', () => {
