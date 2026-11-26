@@ -474,7 +474,7 @@ function doDismiss(ctx, a) {
   });
   let lesson = null;
   if (a.scope === 'always') {
-    lesson = lessons.add(c.wt, c.proj.id, {
+    lesson = lessons.add(c.proj.path, c.proj.id, {
       key: `review-dismissed-${common.slug(f.category, 40)}`, kind: 'dismissal',
       text: `Dismissed a ${f.category} finding for good (${entry.reason}). Consider a rule in .crew/REVIEW.md.`,
     });

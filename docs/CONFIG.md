@@ -58,6 +58,8 @@ Committed with the project. Created by `crew init`.
 | `plan.interview` | string; one of `on`, `off` | `"on"` | Whether the /crewgate:plan skill interviews you about a plan before drafting it: on or off. | /crewgate:plan 技能在起草計畫前是否先訪談你：on 或 off。 |
 | `plan.enforce` | string; one of `block`, `remind`, `off` | `"block"` | What happens when work starts from a plan that is still a draft: block (refuse), remind (only warn) or off (nothing). | 從仍是草稿的計畫開工時的處理：block（拒絕）、remind（只提醒）、off（不處理）。 |
 | `plan.review` | string; one of `large`, `ask`, `off` | `"large"` | When a plan review is offered before the plan is finalized: large (only for a large plan), ask (always ask you) or off (never). | 定案前何時提供計畫審查：large（只有大型計畫）、ask（每次都問你）、off（不提供）。 |
+| `worktree` | object | `{"remove_on_merge":true}` | Task worktrees. | 任務的 worktree。 |
+| `worktree.remove_on_merge` | boolean | `true` | After `crew task merge` records a merge, remove the git worktree of the task (git worktree remove, no force) when git confirms the branch is merged into the main checkout, the worktree has no changes and you are not inside it. The branch is never deleted. false keeps every worktree and prints the command to remove it. | `crew task merge` 記錄合併後，若 git 確認分支已合併進主工作目錄、worktree 沒有任何變更、且你不在其中，就移除該任務的 git worktree（git worktree remove，不加 force）。分支不會被刪除。設為 false 則一律保留，並印出移除指令。 |
 | `checks` | array of string | `[]` | Commands a worker must run before reporting. | worker 回報前必須執行的指令。 |
 | `forbidden` | object | `{"paths":[],"actions":[]}` | Boundaries rendered into the worker agent file. | 寫進 worker agent 檔的禁止事項。 |
 | `forbidden.paths` | array of string | `[]` | Paths a worker must not touch. | worker 不可碰的路徑。 |

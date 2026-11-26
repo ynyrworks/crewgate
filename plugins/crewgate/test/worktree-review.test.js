@@ -11,7 +11,7 @@ const u = require('./workflow-util');
 
 h.setupHome();
 
-test('review dismiss + lesson inside a linked worktree write the worktree copies', () => {
+test('review dismiss inside a linked worktree writes the ledger in the worktree and the lesson in the main checkout', () => {
   const main = u.initRepo();
   h.git(main, 'add', '-A');
   h.git(main, 'commit', '-q', '-m', 'crew files');
@@ -28,9 +28,9 @@ test('review dismiss + lesson inside a linked worktree write the worktree copies
 
   const ledger = path.join(wt, '.crew', 'dismissed.jsonl');
   assert.equal(fs.readFileSync(ledger, 'utf8').trim().split('\n').length, 1, 'ledger entry in the worktree');
-  assert.match(fs.readFileSync(path.join(wt, '.crew', 'LESSONS.md'), 'utf8'), /review-dismissed-correctness/);
+  assert.match(fs.readFileSync(path.join(main, '.crew', 'LESSONS.md'), 'utf8'), /review-dismissed-correctness/, 'lesson in the main checkout');
   assert.equal(fs.readFileSync(path.join(main, '.crew', 'dismissed.jsonl'), 'utf8'), '', 'main checkout ledger untouched');
-  assert.doesNotMatch(fs.readFileSync(path.join(main, '.crew', 'LESSONS.md'), 'utf8'), /review-dismissed-correctness/);
+  assert.doesNotMatch(fs.readFileSync(path.join(wt, '.crew', 'LESSONS.md'), 'utf8'), /review-dismissed-correctness/);
 
   // from the main checkout the finding is not dismissed (its ledger is separate), proving the split
   assert.equal(u.crewIn(['review', 'submit', t.id, '--round', '2'], main, JSON.stringify([u.finding('g1')])).code, 0);
