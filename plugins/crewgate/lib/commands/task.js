@@ -43,6 +43,7 @@ const SPECS = {
   'send-back': { positionals: [{ name: 'id' }], options: NOTE },
   accept: { positionals: [{ name: 'id' }], options: { ...NOTE, '--skip-refuter': { dest: 'skipRefuter' }, '--read-by-orchestrator': { dest: 'readBy' }, '--widen': { dest: 'widen' }, '--gate': { dest: 'gate' }, '--quote': { dest: 'quote' } } },
 merge: { positionals: [{ name: 'id' }], options: NOTE },
+  clean: { positionals: [], options: { '--apply': { dest: 'apply', flag: true } } },
   cancel: { positionals: [{ name: 'id' }], options: NOTE },
   run: {
     positionals: [{ name: 'id' }],
@@ -403,6 +404,51 @@ function acceptInvestigation(ctx, proj, cfg, task, a, opts) {
   return 0;
 }
 
+// crew task clean [--apply]: the worktrees of merged and cancelled tasks, with size and whether they can go; --apply removes the ones that can.
+const CLEAN_TOTAL_MS = 10000;
+const CLEAN_EACH_MS = 2000;
+const mbText = (n) => `${(n / 1048576).toFixed(1)} MB`;
+
+function runClean(proj, cfg, a, ctx) {
+  const t0 = Date.now();
+  const rows = [];
+  for (const task of tasks.list(proj.id, { state: ['merged', 'cancelled'] })) {
+    const chk = worktrees.check(proj, task, ctx.cwd, cfg, { explicit: true });
+    if (!chk) continue;
+    const left = CLEAN_TOTAL_MS - (Date.now() - t0);
+    const sz = worktrees.dirSize(chk.path, { limitMs: Math.max(0, Math.min(CLEAN_EACH_MS, left)) });
+    rows.push({ task, chk, size: sz });
+  }
+  if (!rows.length) { ctx.emit({ worktrees: [], removed: 0, kept: 0, freed_bytes: 0 }, [ctx.t('wf.task.cleanNone')]); return 0; }
+  let removed = 0;
+  let freed = 0;
+  const L = [];
+  const out = rows.map(({ task, chk, size }) => {
+    const e = { task: task.id, state: task.state, path: chk.path, size_bytes: size.bytes, size_partial: size.partial, removable: chk.ok };
+    if (!chk.ok) e.reason = chk.reason;
+    let res = null;
+    if (a.apply && chk.ok) {
+      res = worktrees.remove(proj, chk);
+      e.removed = res.removed;
+      if (res.removed) { removed++; freed += size.bytes; }
+      else { e.reason = res.reason; if (res.message) e.message = res.message; }
+      if (res.adopted !== undefined) e.adopted = res.adopted;
+    }
+    const why = (code, m) => ctx.t(`wf.task.wtWhy.${code}`, { path: chk.path, msg: m || '' });
+    let verdict;
+    if (res) verdict = res.removed ? ctx.t('wf.task.cleanRemoved') : ctx.t('wf.task.cleanFailed', { why: why(res.reason, res.message) });
+    else verdict = chk.ok ? ctx.t('wf.task.cleanCan') : why(chk.reason);
+    const sizeText = size.partial ? ctx.t('wf.task.cleanAtLeast', { size: mbText(size.bytes) }) : mbText(size.bytes);
+    L.push(ctx.t('wf.task.cleanLine', { id: task.id, state: task.state, path: chk.path, size: sizeText, verdict }));
+    return e;
+  });
+  const kept = out.length - removed;
+  if (a.apply) L.push(ctx.t('wf.task.cleanSummary', { removed, kept, freed: mbText(freed) }));
+  else if (out.some((e) => e.removable)) L.push(ctx.t('wf.task.cleanHint', { n: out.filter((e) => e.removable).length }));
+  ctx.emit({ worktrees: out, removed, kept, freed_bytes: freed }, L);
+  return 0;
+}
+
 function run(argv, ctx) {
   const sub = argv[0];
   if (!Object.prototype.hasOwnProperty.call(SPECS, sub)) throw new UsageError('wf.task.usage');
@@ -601,6 +647,8 @@ function run(argv, ctx) {
       }
     } catch { wtRes = null; }
     ctx.emit({ task, git_merge: git, ...(wtRes ? { worktree: { path: wtRes.path, removed: wtRes.removed, ...(wtRes.reason ? { reason: wtRes.reason } : {}), ...(wtRes.message ? { message: wtRes.message } : {}), ...(wtRes.adopted !== undefined ? { adopted: wtRes.adopted } : {}) } } : {}) }, L);
+  } else if (sub === 'clean') {
+    return runClean(proj, cfg, a, ctx);
   } else {
     const task = tasks.transition(proj.id, a.id, 'cancelled', { ...opts, note: a.note || '' });
     ctx.emit({ task }, ctx.t('wf.task.cancelled', { id: task.id }));
@@ -619,7 +667,8 @@ module.exports = {
       '  crew task report <id> --report-file F [--packet-file F]   (used by the worker)',
       '  crew task send-back <id> --note "..."',
       '  crew task accept <id> [--note "..."] [--skip-refuter "reason"] [--read-by-orchestrator "what was read"] [--widen "reason" [--gate ID]]   (the reason is needed when a review round was not finalized; --read-by-orchestrator accepts a small fix after a send-back, or a documentation-only or small task with no review, that the orchestrator read (review.enforce); --widen takes files outside the scope after the user agrees)',
-      '  crew task merge <id> [--note "..."]    (records the merge; it does not run git)',
+      '  crew task merge <id> [--note "..."]    (records the merge; it does not run git merge, and removes the task worktree when it is clean)',
+      '  crew task clean [--apply]    (list the worktrees of merged and cancelled tasks with their size; --apply removes the ones that can go)',
       '  crew task cancel <id> [--note "..."]',
       '  crew task run <id> [--engine codex] [--timeout 1800] [--model M]   (run a Codex CLI worker in the task worktree)',
     ].join('\n'),
@@ -630,7 +679,8 @@ module.exports = {
       '  crew task report <id> --report-file F [--packet-file F]   （worker 使用）',
       '  crew task send-back <id> --note "..."',
       '  crew task accept <id> [--note "..."] [--skip-refuter "原因"] [--read-by-orchestrator "讀了什麼"] [--widen "原因" [--gate ID]]   （審查輪次沒有定案時必須說明原因；--read-by-orchestrator 用來接受統籌自己讀過的、被退回後的小修正，或沒有審查的純文件／小任務（review.enforce）；--widen 在使用者同意後接受範圍外的檔案）',
-      '  crew task merge <id> [--note "..."]    （只記錄合併，不執行 git）',
+      '  crew task merge <id> [--note "..."]    （只記錄合併，不執行 git merge；任務的 worktree 乾淨時會一併移除）',
+      '  crew task clean [--apply]    （列出已合併與已取消任務的 worktree 和大小；加 --apply 移除可移除的）',
       '  crew task cancel <id> [--note "..."]',
       '  crew task run <id> [--engine codex] [--timeout 1800] [--model M]   (run a Codex CLI worker in the task worktree)',
     ].join('\n'),

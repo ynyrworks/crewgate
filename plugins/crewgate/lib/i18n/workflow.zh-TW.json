@@ -13,7 +13,7 @@
   "wf.init.keptHint": "既有檔案已保留。要重新產生請加 --force（舊檔會先備份）。",
   "wf.init.next": "下一步：執行 `crew doctor`，再用 /crewgate:crew 技能開始。",
 
-  "wf.task.usage": "task 可用 create | list | show | report | send-back | accept | merge | cancel | run",
+  "wf.task.usage": "task 可用 create | list | show | report | send-back | accept | merge | clean | cancel | run",
   "wf.task.created": "已建立任務 {id}。",
   "wf.task.marker": "把下面這行原樣放進 Agent 的提示詞，任務才會和 worker 連結起來：",
   "wf.task.agentHint": "用 Agent 工具派出：subagent_type \"{agent}\"，model \"{model}\"。耗時的工作請用 run_in_background。",
@@ -55,7 +55,7 @@
   "wf.task.acceptedUnfinalized": "注意：第 {round} 輪審查沒有定案，其中 {n} 筆發現沒有經過反駁。",
   "wf.task.acceptedNotReReviewed": "注意：任務在第 {round} 輪審查定案後被退回，最後的修改沒有重新審查。",
   "wf.task.acceptUnfinalized": "任務 {id} 未被接受：第 {round} 輪審查有 {n} 筆發現沒有經過反駁。請執行 crew review filter 和 refuter，再執行 crew review finalize。若仍要接受，請用 --skip-refuter \"原因\" 說明原因。",
-  "wf.task.merged": "任務 {id} 已記錄為合併（沒有執行任何 git 指令）。",
+  "wf.task.merged": "任務 {id} 已記錄為合併（只記錄合併，不執行 git merge）。",
   "wf.task.mergeNever": ".claude/crew.json 把合併關卡設為 \"never\"；請勿合併此任務",
   "wf.task.cancelled": "任務 {id} 已取消。",
   "wf.task.run.investigate": "任務 {id} 是調查任務；請派給 crew-investigator 代理，不要用 task run",
@@ -303,5 +303,15 @@
   "wf.review.keepNext": "反駁者還沒判斷它：請執行 crew review filter {id} --round {round} 取得更新後清單的反駁提示，再執行 crew review finalize {id}。",
   "wf.review.keptByLine": "統籌保留：{reason}",
   "wf.review.scopeDefault": "沒給 --scope，已用 once（只駁回這一筆；要讓之後的任務也駁回請加 --scope always）。",
-  "wf.task.acceptedDismissed": "注意：審查第 {round} 輪保留的發現都已駁回（{n} 筆中駁回 {dismissed} 筆），這一輪視為已決定，不需要定案。"
+  "wf.task.acceptedDismissed": "注意：審查第 {round} 輪保留的發現都已駁回（{n} 筆中駁回 {dismissed} 筆），這一輪視為已決定，不需要定案。",
+  "wf.task.wtWhy.status-failed": "無法讀取它的 git status。",
+  "wf.task.wtWhy.cancelled": "它的任務已取消，工作沒有合併。要手動移除請執行：git worktree remove \"{path}\"",
+  "wf.task.cleanNone": "磁碟上沒有已結束任務的 worktree。",
+  "wf.task.cleanLine": "{id}  {state}  {path}  {size}  {verdict}",
+  "wf.task.cleanCan": "可以移除",
+  "wf.task.cleanRemoved": "已移除",
+  "wf.task.cleanFailed": "未移除：{why}",
+  "wf.task.cleanHint": "{n} 個可以移除；執行 crew task clean --apply 來移除。",
+  "wf.task.cleanSummary": "已移除 {removed} 個，保留 {kept} 個，釋出約 {freed}",
+  "wf.task.cleanAtLeast": "至少 {size}"
 }

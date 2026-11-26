@@ -4,7 +4,7 @@
 // passing check. Nothing here deletes a branch, passes --force to git or runs `git worktree prune`.
 // check -> null (no worktree recorded, or its folder is gone: nothing to say)
 //        | { path, ok, reason?, adopt?, main } ; reason codes: setting-off, not-a-worktree, main-checkout, not-merged,
-//          inside, dirty. adopt is true when the only change is the untracked .crew/LESSONS.md (lessons still to adopt).
+//          inside, dirty, status-failed (git status cannot be read), cancelled (only with opts.explicit). adopt is true when the only change is the untracked .crew/LESSONS.md (lessons still to adopt).
 // remove -> { path, removed, reason?, adopted?, message? } ; extra reason codes: adopt-failed, git-failed.
 const fs = require('fs');
 const path = require('path');
@@ -27,12 +27,16 @@ function inside(dir, root) {
   return d === r || d.startsWith(r.endsWith('/') ? r : `${r}/`);
 }
 
-function check(proj, task, cwd, cfg) {
+// opts.explicit (`crew task clean`): the user asked for the cleanup, so worktree.remove_on_merge is not consulted and a cancelled
+// task's worktree is never removable (its work was not merged).
+function check(proj, task, cwd, cfg, opts) {
   if (!task || !task.worktree) return null;
   const wt = path.resolve(proj.path, String(task.worktree));
   if (!fs.existsSync(wt)) return null;
   const res = (ok, reason, more) => ({ path: wt, ok, ...(reason ? { reason } : {}), main: proj.path, ...(more || {}) });
-  if (cfg && cfg.worktree && cfg.worktree.remove_on_merge === false) return res(false, 'setting-off');
+  const explicit = !!(opts && opts.explicit);
+  if (!explicit && cfg && cfg.worktree && cfg.worktree.remove_on_merge === false) return res(false, 'setting-off');
+  if (explicit && task.state === 'cancelled') return res(false, 'cancelled');
   const known = listed(proj.path);
   if (!known || !known.includes(norm(wt))) return res(false, 'not-a-worktree');
   if (norm(wt) === norm(proj.path) || known[0] === norm(wt)) return res(false, 'main-checkout');
@@ -42,7 +46,7 @@ function check(proj, task, cwd, cfg) {
   if (!tip || common.git(['merge-base', '--is-ancestor', tip, 'HEAD'], proj.path) === null) return res(false, 'not-merged');
   if (cwd && inside(cwd, wt)) return res(false, 'inside');
   const st = common.git(['status', '--porcelain', '--untracked-files=all', '-z'], wt);
-  if (st === null) return res(false, 'dirty');
+  if (st === null) return res(false, 'status-failed');
   const entries = st.split('\0').filter(Boolean);
   if (!entries.length) return res(true);
   if (entries.length === 1 && entries[0] === '?? .crew/LESSONS.md') return res(true, undefined, { adopt: true });
@@ -72,4 +76,28 @@ function remove(proj, chk) {
   }
 }
 
-module.exports = { check, remove };
+// Size of a folder: entries are read, symlinks and junctions are not followed. Stops at the limit.
+// -> { bytes, partial }. opts: limitMs (default 2000), now (clock, for tests).
+function dirSize(dir, opts) {
+  const o = opts || {};
+  const now = o.now || Date.now;
+  const end = now() + (o.limitMs === undefined ? 2000 : o.limitMs);
+  let bytes = 0;
+  const stack = [dir];
+  while (stack.length) {
+    if (now() >= end) return { bytes, partial: true };
+    const cur = stack.pop();
+    let ents;
+    try { ents = fs.readdirSync(cur, { withFileTypes: true }); } catch { continue; }
+    for (const e of ents) {
+      if (now() >= end) return { bytes, partial: true };
+      const p = path.join(cur, e.name);
+      if (e.isSymbolicLink()) continue;
+      if (e.isDirectory()) { stack.push(p); continue; }
+      try { bytes += fs.lstatSync(p).size; } catch { /* gone meanwhile */ }
+    }
+  }
+  return { bytes, partial: false };
+}
+
+module.exports = { check, remove, dirSize };
