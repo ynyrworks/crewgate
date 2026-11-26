@@ -242,25 +242,33 @@ function retire(root, projectId, cfg, key, opts = {}) {
 
 // Brings lesson lines left in a work tree back to the project: appends every line of <worktreeRoot>/.crew/LESSONS.md
 // that the project file does not have yet (same date, kind, key and text), in order. Never touches the source file.
+// -> { adopted, skipped, ok: true }, or { adopted, skipped, ok: false, error } when the source cannot be read or the
+// project file cannot be written (adopted then counts only the lines really appended). A missing source file is ok.
 function adoptFrom(worktreeRoot, projectRoot) {
-  const none = { adopted: 0, skipped: 0 };
+  let adopted = 0;
+  let skipped = 0;
   try {
     const src = lessonsFile(worktreeRoot);
     const dst = lessonsFile(projectRoot);
-    if (path.resolve(src) === path.resolve(dst)) return none;
-    if (fs.existsSync(dst) && paths.canonical(src) === paths.canonical(dst)) return none;
+    if (path.resolve(src) === path.resolve(dst)) return { adopted, skipped, ok: true };
+    if (fs.existsSync(dst) && paths.canonical(src) === paths.canonical(dst)) return { adopted, skipped, ok: true };
     const have = new Set(readEntries(projectRoot).map((e) => JSON.stringify([e.date, e.kind, e.key, e.text])));
-    let adopted = 0;
-    let skipped = 0;
-    for (const e of readEntries(worktreeRoot)) {
+    let raw = '';
+    try { raw = fs.readFileSync(src, 'utf8'); } catch (err) { if (!err || err.code !== 'ENOENT') throw err; }
+    const wanted = [];
+    for (const line of raw.split(/\r?\n/)) {
+      const m = LINE_RE.exec(line);
+      if (m) wanted.push({ date: m[1], kind: m[2], key: m[3], text: m[4] });
+    }
+    for (const e of wanted) {
       const id = JSON.stringify([e.date, e.kind, e.key, e.text]);
       if (have.has(id)) { skipped++; continue; }
       appendLine(projectRoot, `- ${e.date} [${e.kind}] ${e.key}: ${e.text}`);
       have.add(id);
       adopted++;
     }
-    return { adopted, skipped };
-  } catch { return none; }
+    return { adopted, skipped, ok: true };
+  } catch (err) { return { adopted, skipped, ok: false, error: String((err && err.message) || err) }; }
 }
 
 module.exports = {
