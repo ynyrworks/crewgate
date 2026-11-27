@@ -111,16 +111,22 @@ test('events are single JSON objects on one line (stdout is exactly one object)'
 
 test('latency: typical hook runs stay well under a loose CI bound', () => {
   const f = H.fixture();
+  // The bound follows the machine: the median cost of starting a bare node, times LATENCY_FACTOR, with 1000 ms as the floor.
+  // A hook that becomes several times slower than a bare node start still fails on any machine.
+  const LATENCY_FACTOR = 20;
+  const median = (fn, n = 3) => { const a = Array.from({ length: n }, fn).sort((x, y) => x - y); return a[a.length >> 1]; };
+  const bareNode = () => { const t0 = process.hrtime.bigint(); require('child_process').spawnSync(process.execPath, ['-e', ''], { stdio: 'ignore' }); return Number(process.hrtime.bigint() - t0) / 1e6; };
+  const bare = median(bareNode, 5);
+  const bound = Math.max(1000, bare * LATENCY_FACTOR);
   // A full test run keeps the machine busy: a measurement over the bound gets one more try before it counts.
-  const median = (fn) => { const a = [0, 1, 2].map(fn).sort((x, y) => x - y); return a[1]; };
-  const med = (fn) => { const first = median(fn); return first < 1000 ? first : median(fn); };
+  const med = (fn) => { const first = median(fn); return first < bound ? first : median(fn); };
   const start = med(() => H.runHook('session-start', H.base(f, { source: 'startup' }), { cwd: f.repo }).ms);
   const edit = med(() => H.runHook('pre-tool-use', H.base(f, { tool_name: 'Edit', tool_input: { file_path: path.join(f.repo, 'src', 'a.js') } }), { cwd: f.repo }).ms);
   const end = med(() => { H.start(f); return H.runHook('session-end', H.base(f, { reason: 'other' }), { cwd: f.repo }).ms; });
-  console.log(`# median ms: session-start=${start.toFixed(0)} pre-tool-use(Edit)=${edit.toFixed(0)} session-end=${end.toFixed(0)} (${os.platform()})`);
-  assert.ok(start < 1000, `session-start ${start}`);
-  assert.ok(edit < 1000, `edit ${edit}`);
-  assert.ok(end < 1000, `session-end ${end}`);
+  console.log(`# median ms: session-start=${start.toFixed(0)} pre-tool-use(Edit)=${edit.toFixed(0)} session-end=${end.toFixed(0)} bare-node=${bare.toFixed(0)} bound=${bound.toFixed(0)} (${os.platform()})`);
+  assert.ok(start < bound, `session-start ${start} (bound ${bound}, bare node ${bare})`);
+  assert.ok(edit < bound, `edit ${edit} (bound ${bound}, bare node ${bare})`);
+  assert.ok(end < bound, `session-end ${end} (bound ${bound}, bare node ${bare})`);
 });
 
 test('double-fired SessionStart is deduplicated', () => {
@@ -150,12 +156,14 @@ test('hooks.json: exec-form commands for known events, valid matchers', () => {
 
 test('the stuck-handler test knob is ignored without CREWGATE_TEST=1', () => {
   const f = H.fixture();
-  const t0 = Date.now();
+  // The knob is 20 s and the limit 10 s: a hook that honours it takes 20 s or more, a slow machine would have to be 20 times
+  // slower than usual (about 0.5 s) to reach the limit. The hook's own answer (not the guard's '{}') says the handler ran.
+  const KNOB = 20000;
   const r = H.runHook('session-start', H.base(f, { source: 'startup' }), {
-    cwd: f.repo, env: { CREWGATE_TEST: '', CREWGATE_HOOK_TEST_SLEEP_MS: '4000' },
+    cwd: f.repo, env: { CREWGATE_TEST: '', CREWGATE_HOOK_TEST_SLEEP_MS: String(KNOB) },
   });
   assert.equal(r.code, 0);
-  assert.ok(Date.now() - t0 < 3500, 'no sleep happened');
+  assert.ok(r.ms < KNOB / 2, `the hook took ${r.ms.toFixed(0)} ms with a ${KNOB} ms knob: it slept (or the machine is 20x slower than usual)`);
   assert.notEqual(r.out, '{}');
 });
 

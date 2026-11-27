@@ -118,7 +118,7 @@ test('start(): no wscript.exe means no holder and an event, never another way of
   assert.ok(!fs.existsSync(sessionjob.pidFile(f.pid, 4244)));
 });
 
-test('hidden-run.vbs: arguments with spaces reach the program intact, and it opens no window', { skip: !WIN || !sessionjob.findWscript(), timeout: 60000 }, async (t) => {
+test('hidden-run.vbs: arguments with spaces reach the program intact, and it opens no window', { skip: !WIN || !sessionjob.findWscript(), timeout: 150000 }, async (t) => {
   const dir = tmpDir('crew-vbs-');
   const out = path.join(dir, 'argv.json');
   const js = path.join(dir, 'a b', 'dump.js');
@@ -128,7 +128,7 @@ test('hidden-run.vbs: arguments with spaces reach the program intact, and it ope
   const child = spawn(sessionjob.findWscript(), ['//B', '//Nologo', vbs, process.execPath, js, out, 'one two', 'x', 'C:/p q/r s'],
     { detached: true, stdio: 'ignore', windowsHide: true });
   child.unref();
-  const got = JSON.parse(await until(() => fs.existsSync(out) && fs.readFileSync(out, 'utf8'), 20000));
+  const got = JSON.parse(await until(() => fs.existsSync(out) && fs.readFileSync(out, 'utf8'), 'the program run by hidden-run.vbs to write its arguments', 100000));
   assert.deepStrictEqual(got, ['one two', 'x', 'C:/p q/r s']);
 });
 
@@ -172,9 +172,36 @@ test('SessionStart calls priority and the session job with the configured values
 const HOLDER = path.join(__dirname, '..', 'scripts', 'session-job.ps1');
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function until(fn, ms = 30000) {
+// A wait for something that must happen. The usual first event takes about 3 s and a busy machine has taken 30 s, so the
+// default limit is 90 s (a machine five times slower than a loaded one); it costs time only when something is slow.
+// A timeout says what it waited for and what is known: the events so far, the pid file, who is alive.
+const S = { f: null, pidFile: null, holder: null, sess: null };
+const watching = (v) => Object.assign(S, { f: null, pidFile: null, holder: null, sess: null }, v);
+const WAIT = 90000;
+// The holder's own exit after it recorded its event: in a full suite run it was still alive 90 s later (it did end).
+const HOLDER_END = 240000;
+function known() {
+  const parts = [];
+  try { if (S.f) parts.push(`events=${JSON.stringify(events.read(S.f.pid).map((x) => ({ type: x.type, data: x.data })))}`); } catch (e) { parts.push(`events unreadable: ${e.message}`); }
+  if (S.pidFile) {
+    let held = null;
+    try { held = fs.readFileSync(S.pidFile, 'utf8').trim(); } catch { /* none */ }
+    parts.push(`pidFile exists=${fs.existsSync(S.pidFile)} content=${JSON.stringify(held)}`);
+    const hp = Number(held);
+    if (!S.holder && Number.isInteger(hp) && hp > 0) parts.push(`holder (from the file) alive=${alive(hp)}`);
+  }
+  if (S.holder) parts.push(`holder ${S.holder} alive=${alive(S.holder)}`);
+  if (S.sess) parts.push(`stand-in session ${S.sess} alive=${alive(S.sess)}`);
+  return parts.join('; ');
+}
+async function until(fn, what, ms = WAIT) {
   const t0 = Date.now();
-  for (;;) { const v = fn(); if (v) return v; if (Date.now() - t0 > ms) throw new Error('timed out'); await sleep(150); }
+  for (;;) {
+    const v = fn();
+    if (v) return v;
+    if (Date.now() - t0 > ms) throw new Error(`timed out after ${ms} ms waiting for ${what}; ${known()}`);
+    await sleep(150);
+  }
 }
 
 // Session stand-in: a sleeping PowerShell (a node parent would not do: libuv puts node's non-detached children in
@@ -218,13 +245,14 @@ async function scenario(t, cleanup, boardFile = 'pid', extraArgs = []) {
   { stdio: 'ignore', windowsHide: true, env: process.env });
   holder.unref();
   started.push(holder.pid);
-  const job = await until(() => events.read(f.pid, { types: 'session.job' })[0]);
+  watching({ f, pidFile, holder: holder.pid, sess: sess.pid });
+  const job = await until(() => events.read(f.pid, { types: 'session.job' })[0], 'the first session.job event');
   assert.strictEqual(job.data.assigned, true);
   assert.strictEqual(job.data.cap_read, 45, 'the cap is read back from the job');
   fs.writeFileSync(flag, '1');
-  const pids = JSON.parse(await until(() => fs.existsSync(out) && fs.readFileSync(out, 'utf8')));
-  pids.kid = Number(await until(() => fs.existsSync(boardKid) && fs.readFileSync(boardKid, 'utf8')));
-  pids.det = Number(await until(() => fs.existsSync(detOut) && fs.readFileSync(detOut, 'utf8')));
+  const pids = JSON.parse(await until(() => fs.existsSync(out) && fs.readFileSync(out, 'utf8'), 'the stand-in session to write its child pids (pids.json)', 60000));
+  pids.kid = Number(await until(() => fs.existsSync(boardKid) && fs.readFileSync(boardKid, 'utf8'), 'the stand-in board to write its child pid', 60000));
+  pids.det = Number(await until(() => fs.existsSync(detOut) && fs.readFileSync(detOut, 'utf8'), 'the detached stand-in to write its pid', 60000));
   started.push(pids.plain, pids.det, pids.board, pids.kid);
   const bf = path.join(f.home, 'board.json');
   if (boardFile === 'pid') fs.writeFileSync(bf, JSON.stringify({ pid: pids.board, port: 1, started: 'x', alive: 'x' }));
@@ -233,19 +261,21 @@ async function scenario(t, cleanup, boardFile = 'pid', extraArgs = []) {
   return { f, pids, sess, holder, pidFile, stop };
 }
 
-const realHolder = { skip: !WIN || !sessionjob.findShell(), timeout: 120000 };
+// The test timeout stays above the longest sum of waits inside one test (the corrupt/nopid test runs two scenarios of
+// 90 + 3 x 60 s plus one 90 s wait each: 720 s; the longest with a holder exit is 270 + 2 x 90 + 240 = 690 s); it is reached only when a wait did not report first.
+const realHolder = { skip: !WIN || !sessionjob.findShell(), timeout: 900000 };
 
 test('holder: the session ends, its children go, the board and its child stay, the pid file goes', realHolder, async (t) => {
   const s = await scenario(t, 'on');
   assert.ok(alive(s.pids.plain) && alive(s.pids.det));
   s.stop(s.sess.pid);
-  const ev = await until(() => events.read(s.f.pid, { types: 'session.cleanup' })[0]);
+  const ev = await until(() => events.read(s.f.pid, { types: 'session.cleanup' })[0], 'the session.cleanup event');
   assert.ok(ev.data.stopped >= 2, 'the plain and the detached child (and their console hosts) are stopped');
   assert.ok(ev.data.kept >= 2);
   assert.strictEqual(ev.data.would_stop, ev.data.found - ev.data.kept);
-  await until(() => !alive(s.pids.plain) && !alive(s.pids.det));
+  await until(() => !alive(s.pids.plain) && !alive(s.pids.det), 'the plain and the detached child to be stopped');
   assert.ok(alive(s.pids.board) && alive(s.pids.kid), 'the board and its child survive');
-  await until(() => !alive(s.holder.pid));
+  await until(() => !alive(s.holder.pid), 'the holder to end', HOLDER_END);
   assert.ok(!fs.existsSync(s.pidFile));
   assert.ok(!JSON.stringify(ev).includes('node'), 'no command lines in the event');
 });
@@ -253,7 +283,7 @@ test('holder: the session ends, its children go, the board and its child stay, t
 test('holder: cleanup off lists and records without stopping', realHolder, async (t) => {
   const s = await scenario(t, 'off');
   s.stop(s.sess.pid);
-  const ev = await until(() => events.read(s.f.pid, { types: 'session.cleanup' })[0]);
+  const ev = await until(() => events.read(s.f.pid, { types: 'session.cleanup' })[0], 'the session.cleanup event');
   assert.strictEqual(ev.data.stopped, 0);
   assert.ok(ev.data.found >= 4);
   assert.ok(ev.data.would_stop >= 2, 'the plain and the detached child would be stopped');
@@ -265,7 +295,7 @@ test('holder: cleanup off lists and records without stopping', realHolder, async
 test('holder killed first: the session and its children keep running and nothing is recorded', realHolder, async (t) => {
   const s = await scenario(t, 'on');
   s.stop(s.holder.pid);
-  await until(() => !alive(s.holder.pid));
+  await until(() => !alive(s.holder.pid), 'the holder to end', HOLDER_END);
   await sleep(1500);
   assert.ok(alive(s.sess.pid) && alive(s.pids.plain) && alive(s.pids.det) && alive(s.pids.board));
   assert.strictEqual(events.read(s.f.pid, { types: 'session.cleanup' }).length, 0);
@@ -274,12 +304,13 @@ test('holder killed first: the session and its children keep running and nothing
 test('start() launches a real holder through wscript; it records the job and the cleanup, and removes its pid file', realHolder, async (t) => {
   const f = H.fixture();
   const sess = spawn(sessionjob.findShell(), ['-NoLogo', '-NoProfile', '-Command', 'Start-Sleep -Seconds 60'], { stdio: 'ignore', windowsHide: true });
+  watching({ f, pidFile: sessionjob.pidFile(f.pid, sess.pid), sess: sess.pid });
   const stopSess = () => { if (alive(sess.pid)) { try { process.kill(sess.pid); } catch { /* gone */ } } };
   t.after(stopSess);
   assert.strictEqual(sessionjob.start(f.pid, { session_cpu_percent: 30 }, sess.pid, { describe: () => claude }), 'started');
   const file = sessionjob.pidFile(f.pid, sess.pid);
   let job;
-  try { job = await until(() => events.read(f.pid, { types: 'session.job' })[0]); } catch (e) {
+  try { job = await until(() => events.read(f.pid, { types: 'session.job' })[0], 'the first session.job event'); } catch (e) {
     // Evidence for a failure on CI: every event of the fixture (no command lines in them), the pid file, who is alive.
     let held = null;
     try { held = fs.readFileSync(file, 'utf8').trim(); } catch { /* none */ }
@@ -289,12 +320,12 @@ test('start() launches a real holder through wscript; it records the job and the
       + `holder alive=${Number.isInteger(hp) && hp > 0 ? alive(hp) : 'unknown (no pid in the file)'}`);
   }
   assert.deepStrictEqual([job.data.assigned, job.data.cap_read], [true, 30]);
-  const holder = Number(await until(() => fs.existsSync(file) && fs.readFileSync(file, 'utf8')));
+  const holder = Number(await until(() => fs.existsSync(file) && fs.readFileSync(file, 'utf8'), 'the holder pid file'));
   t.after(() => { if (alive(holder)) { try { process.kill(holder); } catch { /* gone */ } } });
   assert.strictEqual(sessionjob.start(f.pid, {}, sess.pid, { describe: () => claude }), 'already');
   stopSess();
-  await until(() => events.read(f.pid, { types: 'session.cleanup' })[0]);
-  await until(() => !alive(holder));
+  await until(() => events.read(f.pid, { types: 'session.cleanup' })[0], 'the session.cleanup event');
+  await until(() => !alive(holder), 'the holder to end', HOLDER_END);
   assert.ok(!fs.existsSync(file));
 });
 
@@ -302,7 +333,7 @@ test('holder: a corrupt board.json, or one without a pid, stops nothing and says
   for (const mode of ['corrupt', 'nopid']) {
     const s = await scenario(t, 'on', mode);
     s.stop(s.sess.pid);
-    const ev = await until(() => events.read(s.f.pid, { types: 'session.cleanup' })[0]);
+    const ev = await until(() => events.read(s.f.pid, { types: 'session.cleanup' })[0], 'the session.cleanup event');
     assert.strictEqual(ev.data.error, 'board-json-unreadable');
     assert.strictEqual(ev.data.stopped, 0);
     await sleep(500);
@@ -313,9 +344,9 @@ test('holder: a corrupt board.json, or one without a pid, stops nothing and says
 test('holder: a missing board.json keeps a board serve command line and its children, and stops the rest', realHolder, async (t) => {
   const s = await scenario(t, 'on', 'missing');
   s.stop(s.sess.pid);
-  const ev = await until(() => events.read(s.f.pid, { types: 'session.cleanup' })[0]);
+  const ev = await until(() => events.read(s.f.pid, { types: 'session.cleanup' })[0], 'the session.cleanup event');
   assert.ok(ev.data.stopped >= 2 && ev.data.kept >= 2 && !ev.data.error, JSON.stringify(ev.data));
-  await until(() => !alive(s.pids.plain) && !alive(s.pids.det));
+  await until(() => !alive(s.pids.plain) && !alive(s.pids.det), 'the plain and the detached child to be stopped');
   assert.ok(alive(s.pids.board) && alive(s.pids.kid), 'the board and its child survive without a state file');
   assert.ok(!JSON.stringify(ev).includes('crew.js'), 'no command lines in the event');
 });
@@ -327,9 +358,10 @@ test('holder: refuses a process that started after the hook took its pid, and ca
     '-ClaudePid', String(sess.pid), '-ProjectId', f.pid, '-PidFile', path.join(f.home, 'h.pid'), '-CrewHome', f.home, '-NodeExe', process.execPath,
     '-RecordScript', require.resolve('../lib/hooks/sessionjob'), '-CapPercent', '45', '-HookStart', '1'], { stdio: 'ignore', windowsHide: true, env: process.env });
   t.after(() => { for (const p of [sess.pid, holder.pid]) if (alive(p)) { try { process.kill(p); } catch { /* gone */ } } });
-  const ev = await until(() => events.read(f.pid, { types: 'session.job.error' })[0]);
+  watching({ f, holder: holder.pid, sess: sess.pid });
+  const ev = await until(() => events.read(f.pid, { types: 'session.job.error' })[0], 'the session.job.error event');
   assert.strictEqual(ev.data.reason, 'pid-reused');
-  await until(() => !alive(holder.pid));
+  await until(() => !alive(holder.pid), 'the holder to end', HOLDER_END);
   assert.strictEqual(events.read(f.pid, { types: 'session.job' }).length, 0);
 });
 
@@ -341,6 +373,7 @@ function holderOn(t, f, hookStart) {
     '-ClaudePid', String(sess.pid), '-ProjectId', f.pid, '-PidFile', path.join(f.home, 'h.pid'), '-CrewHome', f.home, '-NodeExe', process.execPath,
     '-RecordScript', require.resolve('../lib/hooks/sessionjob'), '-CapPercent', '45', '-HookStart', String(hookStart(t0))], { stdio: 'ignore', windowsHide: true, env: process.env });
   t.after(() => { for (const p of [sess.pid, holder.pid]) if (alive(p)) { try { process.kill(p); } catch { /* gone */ } } });
+  watching({ f, holder: holder.pid, sess: sess.pid });
   return { sess, holder };
 }
 
@@ -348,7 +381,7 @@ test('holder: a hook that took its pid a few ms before the process started still
   const f = H.fixture();
   // HookStart is taken before the stand-in is even spawned, so the process starts later than it by the spawn time.
   holderOn(t, f, (t0) => t0);
-  const job = await until(() => events.read(f.pid, { types: 'session.job' })[0]);
+  const job = await until(() => events.read(f.pid, { types: 'session.job' })[0], 'the first session.job event');
   assert.strictEqual(job.data.assigned, true);
   assert.strictEqual(events.read(f.pid, { types: 'session.job.error' }).length, 0);
 });
@@ -357,11 +390,11 @@ test('holder: an uncaught error records session.job.error with reason=uncaught, 
   const f = H.fixture();
   // A HookStart past the last date a DateTimeOffset holds makes the pid check throw, outside every try block.
   const { holder } = holderOn(t, f, () => '9007199254740991');
-  const ev = await until(() => events.read(f.pid, { types: 'session.job.error' })[0]);
+  const ev = await until(() => events.read(f.pid, { types: 'session.job.error' })[0], 'the session.job.error event');
   assert.strictEqual(ev.data.reason, 'uncaught');
   assert.strictEqual(typeof ev.data.type, 'string');
   assert.ok(!JSON.stringify(ev).includes('powershell') && !JSON.stringify(ev).includes('-File'), 'no command line in the event');
-  await until(() => !alive(holder.pid));
+  await until(() => !alive(holder.pid), 'the holder to end', HOLDER_END);
   assert.strictEqual(events.read(f.pid, { types: 'session.job' }).length, 0);
 });
 

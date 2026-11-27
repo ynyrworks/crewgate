@@ -35,11 +35,22 @@ function hasGit() {
   return r.status === 0;
 }
 
-function git(cwd, ...args) {
-  const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.test', '-c', 'commit.gpgsign=false', ...args], { cwd, encoding: 'utf8' });
-  if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${r.stderr}`);
+// `spawn` is injectable for the helper test. A process that could not be started at all (r.error set or r.status null) is
+// started once more; git that ran and failed (non-zero) is never retried. A failure names the error code and message, the
+// status and the signal next to stderr, so an empty stderr still explains itself.
+function gitWith(spawn, cwd, ...args) {
+  const full = ['-c', 'user.name=t', '-c', 'user.email=t@example.test', '-c', 'commit.gpgsign=false', ...args];
+  let r = spawn('git', full, { cwd, encoding: 'utf8' });
+  let tries = 1;
+  if (r.error || r.status === null) { r = spawn('git', full, { cwd, encoding: 'utf8' }); tries = 2; }
+  if (r.status !== 0) {
+    const err = r.error ? `${r.error.code || ''} ${r.error.message}`.trim() : 'none';
+    throw new Error(`git ${args.join(' ')} failed (error=${err} status=${r.status} signal=${r.signal} tries=${tries}): ${r.stderr}`);
+  }
   return r.stdout.trim();
 }
+
+function git(cwd, ...args) { return gitWith(spawnSync, cwd, ...args); }
 
 // A repo with one commit; returns its (real) path.
 function makeRepo() {
@@ -86,4 +97,4 @@ const GOOD_REPORT = [
   '## Needs real-environment check', 'no', '',
 ].join('\n');
 
-module.exports = { tmpDir, setupHome, hasGit, git, makeRepo, crew, finalizedRound, BIN, GOOD_BRIEF, GOOD_REPORT };
+module.exports = { tmpDir, setupHome, hasGit, git, gitWith, makeRepo, crew, finalizedRound, BIN, GOOD_BRIEF, GOOD_REPORT };
