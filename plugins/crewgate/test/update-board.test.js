@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const u = require('./update-helpers');
+const { withFreePort, takenIn, takenError, watchChild } = require('./port-helpers');
 
 u.setupHome();
 const { createBoard } = require('../board/server');
@@ -139,11 +140,20 @@ async function realBoard(onUpdate) {
   const log = path.join(root, 'calls.log');
   u.fakeCli(bin, 'claude', { log, list: '[{"id":"crewgate@crewgate"}]', pluginJson, crewJs: path.join(dest, 'bin', 'crew.js'), onUpdate }, u.CLAUDE_BODY);
   const env = u.fakeEnv({ bin, claudeDir, codexDir: path.join(root, '.codex'), extra: { CREWGATE_HOME: home, CREWGATE_CLAUDE_ROOT: empty, CREWGATE_CODEX_ROOT: empty } });
-  const p = await u.freePort();
-  const child = spawn(process.execPath, [path.join(dest, 'bin', 'crew.js'), 'board', 'serve', '--port', String(p)], { env, stdio: 'ignore', windowsHide: true });
   const stateFile = path.join(home, 'board.json');
   const state = () => { try { return JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch { return null; } };
-  await until(async () => { const s = state(); return s && s.pid === child.pid && (await u.request(p, { path: '/api/health' }).catch(() => null)); });
+  // the port is picked and then bound by the board process: a taken port (the board exits with "Port N is already
+  // in use") is retried on a new port, anything else fails as before
+  const { p, child } = await withFreePort(async (p) => {
+    const child = spawn(process.execPath, [path.join(dest, 'bin', 'crew.js'), 'board', 'serve', '--port', String(p)], { env, stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true });
+    const w = watchChild(child);
+    const kill = () => { try { process.kill(child.pid); } catch { /* gone */ } };
+    try {
+      await until(async () => { if (w.exited) return true; const s = state(); return s && s.pid === child.pid && (await u.request(p, { path: '/api/health' }).catch(() => null)); });
+    } catch (e) { kill(); throw e; }
+    if (w.exited) throw takenIn(w.stderr, p) ? takenError(p, w.stderr) : new Error(`the board exited before it came up (code ${w.code}): ${w.stderr}`);
+    return { p, child };
+  }, { cleanup: () => { try { fs.unlinkSync(stateFile); } catch { /* none */ } } });
   const stop = () => { for (const pid of new Set([child.pid, (state() || {}).pid])) { try { process.kill(pid); } catch { /* gone */ } } };
   return { port: p, child, state, stop, log };
 }

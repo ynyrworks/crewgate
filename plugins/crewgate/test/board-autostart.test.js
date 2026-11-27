@@ -36,10 +36,18 @@ function fresh(t) {
   });
   return E;
 }
-const freePort = () => new Promise((resolve) => {
-  const s = net.createServer();
-  s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => resolve(p)); });
-});
+// A port a board is going to bind comes from withFreePort (see port-helpers.js): the picked number can be taken by
+// someone else before the board binds it, and then the attempt is repeated on a new port. A bare freePort() is used
+// only where nothing binds the number (it is only written into files or stub arguments), as the call sites say.
+const { freePort, takenIn, takenError, withFreePort, watchChild } = require('./port-helpers');
+// A start attempt starts from nothing: no state, lock, log or config, and no board left from the failed one.
+const retryClean = (E) => () => { E.reset(); E.crew(['board', 'stop']); };
+// Throws the retry evidence as soon as board.log says the port was taken, instead of waiting out the full timeout.
+const failIfTaken = (E, port) => {
+  let text = '';
+  try { text = fs.readFileSync(E.log, 'utf8'); } catch { /* no log yet */ }
+  if (takenIn(text, port)) throw takenError(port, `board.log:\n${text}`);
+};
 // What a failing wait needs to explain itself: board.log, the state file, the lock and how long was waited.
 function diagnose(E, t0) {
   const read = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch (e) { return `(unreadable: ${e.code})`; } };
@@ -100,13 +108,19 @@ test('SessionStart starts the board when board.autostart is on, without waiting 
   const E = fresh(t);
   const { F, HOME, state, lock, log, crew, writeGlobal, reset } = E;
   reset();
-  const port = await freePort();
+  await withFreePort((port) => autostartComesUp(E, port, t), { cleanup: retryClean(E) });
+});
+
+// pick is only replaced by the control test below, which makes the first picked port taken on purpose
+async function autostartComesUp(E, port, t) {
+  const { F, HOME, state, lock, log, crew, writeGlobal } = E;
   writeGlobal({ port, board: { autostart: true } });
   const r = h.start(F);
   assert.equal(r.code, 0, r.err);
   assert.ok(r.json && r.json.hookSpecificOutput, 'the brief is still returned');
   const t0 = Date.now();
   const st = await until(async () => {
+    failIfTaken(E, port);
     try {
       const x = JSON.parse(fs.readFileSync(state, 'utf8'));
       return (await bh.request(port, { path: '/api/health' })).status === 200 ? x : null;
@@ -124,6 +138,31 @@ test('SessionStart starts the board when board.autostart is on, without waiting 
   assert.ok(await until(() => /autostart check: running/.test(fs.readFileSync(log, 'utf8')), 60000), `the detached check did not run within 60 s; board.log:\n${fs.readFileSync(log, 'utf8')}`);
   assert.equal(JSON.parse(fs.readFileSync(state, 'utf8')).pid, st.pid, 'no second board');
   assert.equal(crew(['board', 'stop']).code, 0);
+}
+
+// Control for the retry: the picked port is taken on purpose (a socket in this process holds it) before the board
+// binds it, which is what a stranger taking the number between the pick and the bind looks like.
+test('control: a picked port that is taken before the board binds it is replaced; without the retry the same attempt fails', async (t) => {
+  const E = fresh(t);
+  E.reset();
+  const holders = [];
+  const hold = () => new Promise((resolve) => {
+    const s = net.createServer();
+    holders.push(s);
+    s.listen(0, '127.0.0.1', () => resolve(s.address().port));
+  });
+  t.after(() => { for (const s of holders) s.close(); });
+  // without the retry (what the old bare freePort did): the board cannot bind, and the failure names the port
+  const taken = await hold();
+  await assert.rejects(autostartComesUp(E, taken, t), (e) => e.portTaken === taken && /already in use/.test(e.message));
+  retryClean(E)();
+  // with the retry: the first pick is the held port, the second a new free one; autostartComesUp asserts that the
+  // board came up on exactly the port it was given
+  const picks = [];
+  const pick = async () => { const p = picks.length === 0 ? await hold() : await freePort(); picks.push(p); return p; };
+  await withFreePort((port) => autostartComesUp(E, port, t), { cleanup: retryClean(E), pick });
+  assert.equal(picks.length, 2, 'one retry, on a new port');
+  assert.notEqual(picks[0], picks[1]);
 });
 
 test('SessionStart leaves the board alone by default', (t) => {
@@ -168,7 +207,7 @@ test('the server logs the signal that stops it', { skip: process.platform === 'w
 test('status and doctor report a board that vanished without a stop line', async (t) => {
   const { F, HOME, state, lock, log, crew, writeGlobal, reset } = fresh(t);
   reset();
-  const port = await freePort();
+  const port = await freePort();   // safe: no process binds it; it is only a number in config and state files (a dead pid)
   writeGlobal({ port });
   fs.writeFileSync(state, JSON.stringify({ pid: 2147483000, port, started: '2026-10-30T01:02:03.000Z' }));
   const doc = crew(['doctor']);
@@ -187,9 +226,10 @@ test('status and doctor report a board that vanished without a stop line', async
 });
 
 test('a state file whose pid is alive but where nothing answers is stale: board ensure starts a board', async (t) => {
-  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = fresh(t);
+  const E = fresh(t);
+  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = E;
   reset();
-  const port = await freePort();
+  const port = await freePort();   // safe: the spawn is a stub and nothing binds it (a foreign listener there would not answer as a board either)
   writeGlobal({ port, board: { autostart: true } });
   // this process is alive but is not a board (a reused pid)
   fs.writeFileSync(state, JSON.stringify({ pid: process.pid, port, started: '2026-10-30T01:02:03.000Z' }));
@@ -199,25 +239,29 @@ test('a state file whose pid is alive but where nothing answers is stale: board 
   assert.match(fs.readFileSync(log, 'utf8'), /no board answers on port/);
   reset();
   // a live board is left alone
-  const live = await freePort();
-  writeGlobal({ port: live, board: { autostart: true } });
-  assert.equal(crew(['board', 'start', '--port', String(live), '--no-open']).code, 0);
-  assert.equal(await board.ensureChecked({ spawn: () => assert.fail('must not spawn') }), 'running');
-  assert.equal(crew(['board', 'stop']).code, 0);
-  // off stays off
-  writeGlobal({ port: live });
-  assert.equal(await board.ensureChecked({ spawn: () => assert.fail('must not spawn') }), 'off');
+  await withFreePort(async (live) => {
+    writeGlobal({ port: live, board: { autostart: true } });
+    const started = crew(['board', 'start', '--port', String(live), '--no-open']);
+    assert.equal(started.code, 0, started.err);
+    assert.equal(await board.ensureChecked({ spawn: () => assert.fail('must not spawn') }), 'running');
+    assert.equal(crew(['board', 'stop']).code, 0);
+    // off stays off
+    writeGlobal({ port: live });
+    assert.equal(await board.ensureChecked({ spawn: () => assert.fail('must not spawn') }), 'off');
+  }, { cleanup: retryClean(E) });
   reset();
 });
 
 test('SessionStart with a reused pid in board.json ends with one working board', async (t) => {
-  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = fresh(t);
+  const E = fresh(t);
+  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = E;
   reset();
-  const port = await freePort();
+  await withFreePort(async (port) => {
   writeGlobal({ port, board: { autostart: true } });
   fs.writeFileSync(state, JSON.stringify({ pid: process.pid, port, started: 'x' }));
   assert.equal(h.start(F).code, 0);
   const st = await until(async () => {
+    failIfTaken(E, port);
     try {
       const x = JSON.parse(fs.readFileSync(state, 'utf8'));
       return x.pid !== process.pid && (await bh.request(port, { path: '/api/health' })).status === 200 ? x : null;
@@ -226,40 +270,51 @@ test('SessionStart with a reused pid in board.json ends with one working board',
   assert.ok(st, 'the stale state was replaced by a real board');
   assert.ok(await until(() => /autostart check: started/.test(fs.readFileSync(log, 'utf8'))), 'the detached check finished');
   assert.equal(crew(['board', 'stop']).code, 0);
+  }, { cleanup: retryClean(E) });
 });
 
 test('manual board start waits for an autostart in progress and reports that board', async (t) => {
-  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = fresh(t);
+  const E = fresh(t);
+  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = E;
   reset();
-  const port = await freePort();
+  await withFreePort(async (port) => {
   fs.writeFileSync(lock, '1');
   const c = spawn(process.execPath, [BIN, 'board', 'start', '--no-open', '--json'], { env: { ...process.env } });
   let out = '';
   c.stdout.on('data', (d) => { out += d; });
+  const cExited = new Promise((r) => c.on('exit', r));
   await new Promise((r) => setTimeout(r, 500));
   // the "autostarted" board: a real one, tracked in board.json, which drops the lock when it listens
-  const serve = spawn(process.execPath, [BIN, 'board', 'serve', '--port', String(port)], { env: { ...process.env }, stdio: 'ignore' });
-  const code = await new Promise((r) => c.on('exit', r));
-  assert.equal(code, 0, out);
+  const serve = spawn(process.execPath, [BIN, 'board', 'serve', '--port', String(port)], { env: { ...process.env }, stdio: ['ignore', 'ignore', 'pipe'] });
+  const sw = watchChild(serve);
+  // a board that could not bind because the port was taken: end the waiting start (our own child, by its handle)
+  // and let withFreePort try again on a new port
+  const early = await Promise.race([sw.done.then(() => 'serve'), cExited.then(() => 'start')]);
+  if (early === 'serve' && takenIn(sw.stderr, port)) { c.kill(); await cExited; throw takenError(port, sw.stderr); }
+  const code = await cExited;
+  assert.equal(code, 0, out + sw.stderr);
   const j = JSON.parse(out);
   assert.equal(j.started, false);
   assert.equal(j.port, port);
   assert.equal(j.pid, serve.pid, 'reported the existing board, started no second one');
   // End the board through the event loop: it is a child of this process, and a blocking `crew board stop` would
   // leave it a zombie (alive to kill -0) that this process cannot reap while it waits.
-  const exited = new Promise((r) => serve.on('exit', r));
   serve.kill('SIGTERM');
-  await exited;
+  await sw.done;
   reset();
+  }, { cleanup: retryClean(E) });
 });
 
 test('manual board start takes and releases the lock', async (t) => {
-  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = fresh(t);
+  const E = fresh(t);
+  const { F, HOME, state, lock, log, crew, writeGlobal, reset } = E;
   reset();
-  const port = await freePort();
-  assert.equal(crew(['board', 'start', '--port', String(port), '--no-open']).code, 0);
-  assert.equal(fs.existsSync(lock), false);
-  crew(['board', 'stop']);
+  await withFreePort(async (port) => {
+    const started = crew(['board', 'start', '--port', String(port), '--no-open']);
+    assert.equal(started.code, 0, started.err);
+    assert.equal(fs.existsSync(lock), false);
+    crew(['board', 'stop']);
+  }, { cleanup: retryClean(E) });
   // a failing start (busy explicit port) does not leave the lock behind
   const blocker = net.createServer();
   const busy = await new Promise((resolve) => blocker.listen(0, '127.0.0.1', () => resolve(blocker.address().port)));
@@ -273,21 +328,23 @@ test('doctor: a board answering on the port does not make a state file with a de
   const { F, state, crew, writeGlobal } = fresh(t);
   // a real board of ANOTHER data folder holds the port (what a leaked or foreign board looks like)
   const other = require('./helpers').tmpDir('crew-other-home-');
-  const port = await freePort();
   const run = (args) => bh.crew(args, F.repo, { CREWGATE_HOME: other });
   t.after(() => { run(['board', 'stop']); });
-  assert.equal(run(['board', 'start', '--port', String(port), '--no-open']).code, 0);
-  writeGlobal({ port });
-  fs.writeFileSync(state, JSON.stringify({ pid: 2147483000, port, started: '2026-10-30T01:02:03.000Z' }));
-  const doc = crew(['doctor']);
-  assert.match(doc.out, new RegExp(`Board: running on 127\.0\.0\.1:${port}`));
-  assert.match(doc.out, /WARN {2}Board: The board stopped without logging a reason \(pid 2147483000/);
+  await withFreePort(async (port) => {
+    const started = run(['board', 'start', '--port', String(port), '--no-open']);
+    assert.equal(started.code, 0, started.err);
+    writeGlobal({ port });
+    fs.writeFileSync(state, JSON.stringify({ pid: 2147483000, port, started: '2026-10-30T01:02:03.000Z' }));
+    const doc = crew(['doctor']);
+    assert.match(doc.out, new RegExp(`Board: running on 127\.0\.0\.1:${port}`));
+    assert.match(doc.out, /WARN {2}Board: The board stopped without logging a reason \(pid 2147483000/);
+  }, { cleanup: () => { run(['board', 'stop']); fs.rmSync(state, { force: true }); } });
 });
 
 test('a state file with an alive time: status, --json, doctor and the log give when the board was last alive', async (t) => {
   const { state, log, crew, writeGlobal, reset } = fresh(t);
   reset();
-  const port = await freePort();
+  const port = await freePort();   // safe: no process binds it; it is only a number in config and state files (a dead pid)
   writeGlobal({ port });
   const alive = '2026-10-30T05:06:07.000Z';
   const write = () => fs.writeFileSync(state, JSON.stringify({ pid: 2147483000, port, started: '2026-10-30T01:02:03.000Z', alive }));
@@ -323,15 +380,21 @@ test('heartbeat: stamps alive, keeps other fields, ignores a state file of anoth
 test('a real board serve keeps stamping alive in board.json (the heartbeat is wired into serve)', async (t) => {
   const { HOME, state, reset } = fresh(t);
   reset();
-  const port = await freePort();
-  const serve = spawn(process.execPath, [BIN, 'board', 'serve', '--port', String(port)], {
-    env: { ...process.env, CREWGATE_HOME: HOME, CREWGATE_BOARD_HEARTBEAT_MS: '100' }, stdio: 'ignore',
-  });
-  const exited = new Promise((r) => serve.on('exit', r));
-  t.after(async () => { serve.kill('SIGKILL'); await exited; });
   const read = () => { try { return JSON.parse(fs.readFileSync(state, 'utf8')); } catch { return null; } };
+  // the board ends at once when its port was taken: that (and only that) is retried on a new port
+  const { serve, sw, port } = await withFreePort(async (port) => {
+    const serve = spawn(process.execPath, [BIN, 'board', 'serve', '--port', String(port)], {
+      env: { ...process.env, CREWGATE_HOME: HOME, CREWGATE_BOARD_HEARTBEAT_MS: '100' }, stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    const sw = watchChild(serve);
+    t.after(async () => { serve.kill('SIGKILL'); await sw.done; });
+    await until(() => { const s = read(); return sw.exited || (s && s.pid === serve.pid && s.alive); });
+    if (sw.exited && takenIn(sw.stderr, port)) throw takenError(port, sw.stderr);
+    return { serve, sw, port };
+  }, { cleanup: () => reset() });
+  const exited = sw.done;
   const first = await until(() => { const s = read(); return s && s.pid === serve.pid && s.alive ? s : null; });
-  assert.ok(first, 'the board wrote its state file');
+  assert.ok(first, 'the board wrote its state file' + (sw.stderr ? `\n${sw.stderr}` : ''));
   const next = await until(() => { const s = read(); return s && s.pid === serve.pid && s.alive !== first.alive ? s : null; }, 5000);
   assert.ok(next, 'alive changed without anyone touching the board');
   assert.ok(Date.parse(next.alive) > Date.parse(first.alive));
