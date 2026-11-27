@@ -36,13 +36,30 @@ function hasGit() {
 }
 
 // `spawn` is injectable for the helper test. A process that could not be started at all (r.error set or r.status null) is
-// started once more; git that ran and failed (non-zero) is never retried. A failure names the error code and message, the
+// started once more; git that ran and failed (non-zero) with a fatal:/error: line is never retried, and one that failed with
+// no such line is run once more with GIT_TRACE on, with a note on stderr. A failure names the error code and message, the
 // status and the signal next to stderr, so an empty stderr still explains itself.
 function gitWith(spawn, cwd, ...args) {
   const full = ['-c', 'user.name=t', '-c', 'user.email=t@example.test', '-c', 'commit.gpgsign=false', ...args];
   let r = spawn('git', full, { cwd, encoding: 'utf8' });
   let tries = 1;
   if (r.error || r.status === null) { r = spawn('git', full, { cwd, encoding: 'utf8' }); tries = 2; }
+  // git ran, failed, and said nothing that names an error (seen on Windows CI: status 1 with only a CRLF warning): run it once
+  // more with tracing on (trace goes to stderr, stdout stays the caller's), and leave a line in the CI log either way.
+  if (!r.error && typeof r.status === 'number' && r.status !== 0 && !/^\s*(fatal|error):/m.test(r.stderr || '')) {
+    const first = r;
+    const cmd = `git ${args.join(' ')}`;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+    r = spawn('git', full, { cwd, encoding: 'utf8', env: { ...process.env, GIT_TRACE: '1', GIT_TRACE_SETUP: '1' } });
+    tries = 2;
+    const second = r.error ? `error=${r.error.code || ''} ${r.error.message}`.trim() : `status=${r.status} signal=${r.signal}`;
+    process.stderr.write(`[git-helper] silent failure of \`${cmd}\` in ${cwd}: first attempt status=${first.status} signal=${first.signal} stderr=${JSON.stringify(first.stderr)}; second attempt (traced) ${second}\n`);
+    if (r.status !== 0) {
+      const err2 = r.error ? `${r.error.code || ''} ${r.error.message}`.trim() : 'none';
+      throw new Error(`${cmd} failed twice without a git error. first attempt: status=${first.status} signal=${first.signal} stderr=${first.stderr}`
+        + ` | second attempt (error=${err2} status=${r.status} signal=${r.signal} tries=2) trace/stderr: ${r.stderr}`);
+    }
+  }
   if (r.status !== 0) {
     const err = r.error ? `${r.error.code || ''} ${r.error.message}`.trim() : 'none';
     throw new Error(`git ${args.join(' ')} failed (error=${err} status=${r.status} signal=${r.signal} tries=${tries}): ${r.stderr}`);
