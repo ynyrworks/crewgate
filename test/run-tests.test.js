@@ -84,3 +84,21 @@ test('pool: an empty list is a pass; a limit larger than the list is fine', asyn
   assert.deepStrictEqual(await runPool([], 4, async () => ({ code: 0, output: '' })), { ran: 0, failed: [], code: 0 });
   assert.strictEqual((await runPool(names(2), 99, async () => ({ code: 0, output: '' }))).ran, 2);
 });
+
+const { selectFiles } = require('../scripts/run-tests');
+
+test('selectFiles: arguments without --pool-worker are ignored, the default list is used', () => {
+  const defaults = ['/d/a.test.js', '/d/b.test.js'];
+  assert.deepStrictEqual(selectFiles(['x.test.js'], {}, 'flag', defaults), defaults);
+  assert.deepStrictEqual(selectFiles(['--inspect', 'x.test.js'], {}, 'pool', defaults), defaults);
+  assert.deepStrictEqual(selectFiles([], {}, 'flag', defaults), defaults);
+  assert.deepStrictEqual(selectFiles(['--pool-worker'], {}, 'pool', defaults), defaults);
+});
+
+test('selectFiles: with --pool-worker the named files replace the list; the env list works only in pool mode', () => {
+  const path = require('path');
+  const defaults = ['/d/a.test.js'];
+  assert.deepStrictEqual(selectFiles(['--pool-worker', 'x.test.js'], {}, 'pool', defaults), [path.resolve('x.test.js')]);
+  assert.deepStrictEqual(selectFiles([], { CREW_TEST_POOL_FILES: 'p.test.js,q.test.js' }, 'pool', defaults), [path.resolve('p.test.js'), path.resolve('q.test.js')]);
+  assert.deepStrictEqual(selectFiles([], { CREW_TEST_POOL_FILES: 'p.test.js' }, 'flag', defaults), defaults);
+});

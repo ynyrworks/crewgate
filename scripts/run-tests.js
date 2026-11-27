@@ -74,11 +74,21 @@ async function runPoolAndReport(files, limit) {
   return r.code;
 }
 
+// Which files to run. Arguments name files only for the internal pool call (--pool-worker); otherwise they are
+// ignored, as before. CREW_TEST_POOL_FILES (comma separated), read only in pool mode, names files for a trial run.
+function selectFiles(argv, env, mode, defaults) {
+  if (argv.includes('--pool-worker')) {
+    const given = argv.filter((a) => a !== '--pool-worker');
+    if (given.length) return given.map((f) => path.resolve(f));
+  }
+  const listed = mode === 'pool' && env && env.CREW_TEST_POOL_FILES ? env.CREW_TEST_POOL_FILES.split(',').filter(Boolean) : [];
+  return listed.length ? listed.map((f) => path.resolve(f)) : defaults;
+}
+
 function main() {
   const root = path.join(__dirname, '..');
   const dirs = [path.join(root, 'plugins', 'crewgate', 'test'), path.join(root, 'plugins', 'crewgate-office', 'test'), path.join(root, 'test')];
-  const given = process.argv.slice(2).filter((a) => a !== '--pool-worker');   // files named on the command line replace the default list
-  const files = given.length ? given.map((f) => path.resolve(f)) : dirs.flatMap((dir) => (fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.test.js')).sort().map((f) => path.join(dir, f)) : []));
+  const defaults = dirs.flatMap((dir) => (fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith('.test.js')).sort().map((f) => path.join(dir, f)) : []));
   const cores = typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length;
   // Below normal priority, set before spawning: the children inherit it.
   try {
@@ -86,6 +96,7 @@ function main() {
     if (os.getPriority(process.pid) < below) os.setPriority(process.pid, below);   // never raise
   } catch { /* keep the current priority */ }
   const mode = runnerMode(process.versions.node, process.env);
+  const files = selectFiles(process.argv.slice(2), process.env, mode, defaults);
   const limit = concurrencyFor(cores, process.env);
   const poolWorker = process.argv.includes('--pool-worker');
   if (!poolWorker) console.log(`test runner: ${limit} files at once (${mode === 'flag' ? '--test-concurrency flag' : 'pool'})`);
@@ -112,4 +123,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { testFlags, concurrencyFor, runnerMode, runPool };
+module.exports = { testFlags, concurrencyFor, runnerMode, runPool, selectFiles };
