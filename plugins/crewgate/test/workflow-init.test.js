@@ -238,12 +238,8 @@ test('workflow i18n tables have identical keys and cover every key used in the c
   }
 });
 
-function freePort() {
-  return new Promise((ok) => {
-    const s = http.createServer();
-    s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => ok(p)); });
-  });
-}
+// safe use only: the doctor test below probes the number and nothing binds it (see port-helpers.js)
+const { freePort } = require('./port-helpers');
 
 test('doctor: no stale warning right after init, also with CRLF and non-default config', () => {
   const repo = u.initRepo();

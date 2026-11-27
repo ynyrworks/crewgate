@@ -11,17 +11,11 @@ const empty = h.tmpDir('crew-cli-roots-');
 const env = { CREWGATE_HOME: HOME, CREWGATE_CLAUDE_ROOT: empty, CREWGATE_CODEX_ROOT: empty };
 const crew = (args) => h.crew(args, empty, env);
 
-function freePort() {
-  return new Promise((resolve) => {
-    const s = net.createServer();
-    s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => resolve(p)); });
-  });
-}
+const { withFreePort } = require('./port-helpers');
 
 test.after(() => { crew(['board', 'stop']); });
 
-test('board lifecycle: start, health, start again, status, stop, status', async () => {
-  const port = await freePort();
+test('board lifecycle: start, health, start again, status, stop, status', () => withFreePort(async (port) => {
   assert.equal(crew(['board', 'status']).code, 1, 'not running yet');
   const stopped = crew(['board', 'stop']);
   assert.equal(stopped.code, 0);
@@ -53,7 +47,7 @@ test('board lifecycle: start, health, start again, status, stop, status', async 
   await assert.rejects(h.request(port, { path: '/api/health' }));
   assert.equal(fs.existsSync(path.join(HOME, 'board.json')), false);
   assert.equal(crew(['board', 'status']).code, 1);
-});
+}, { cleanup: () => { crew(['board', 'stop']); } }));
 
 test('start: an explicit busy port fails; the default port searches upwards', async () => {
   const blocker = net.createServer();

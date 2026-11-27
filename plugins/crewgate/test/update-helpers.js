@@ -75,12 +75,8 @@ process.stdin.resume();
 setTimeout(() => { if (!ended) { log('stdin-open'); process.exit(9); } }, 3000);
 `;
 
-function freePort() {
-  return new Promise((resolve) => {
-    const s = net.createServer();
-    s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => resolve(p)); });
-  });
-}
+// freePort is the shared one (port-helpers.js); a port handed to a board comes from withFreePort there.
+const { freePort } = require('./port-helpers');
 
 // Environment for code that must find only the fake tools.
 // A stub `git` is put in `bin` (git: false leaves it out), because the update refuses to run claude without one.
