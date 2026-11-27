@@ -1,0 +1,77 @@
+# Repeat: runs the whole test suite many times on Windows, to tell unstable tests from real bugs.
+# Start it by pushing a branch named repeat/... (10 runs on node 18 and 20), or by hand
+# with workflow_dispatch (inputs count and nodes). Limits: count at most 20, at most 3 node
+# versions, so one start is never more than 60 jobs. A new push to the same ref cancels the batch.
+name: Repeat
+
+on:
+  push:
+    branches:
+      - 'repeat/**'
+  workflow_dispatch:
+    inputs:
+      count:
+        description: 'Number of runs per node version (1 to 20)'
+        required: false
+        default: '10'
+      nodes:
+        description: 'Node versions as a JSON list, at most 3'
+        required: false
+        default: '[18, 20]'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repeat-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    name: plan
+    runs-on: ubuntu-latest
+    outputs:
+      runs: ${{ steps.plan.outputs.runs }}
+      nodes: ${{ steps.plan.outputs.nodes }}
+    steps:
+      - id: plan
+        env:
+          COUNT: ${{ github.event.inputs.count || '10' }}
+          NODES: ${{ github.event.inputs.nodes || '[18, 20]' }}
+        run: |
+          node -e '
+            const count = Number(process.env.COUNT);
+            let nodes;
+            try { nodes = JSON.parse(process.env.NODES); } catch { nodes = null; }
+            const fail = (m) => { console.error("Repeat refused: " + m); process.exit(1); };
+            if (!Number.isInteger(count) || count < 1) fail("count must be a whole number of at least 1, got " + process.env.COUNT);
+            if (count > 20) fail("count " + count + " is above the limit of 20");
+            if (!Array.isArray(nodes) || nodes.length < 1) fail("nodes must be a JSON list with at least one version");
+            if (nodes.length > 3) fail("nodes has " + nodes.length + " versions, the limit is 3");
+            if (!nodes.every((n) => /^[0-9]+$/.test(String(n)))) fail("nodes must hold plain major versions such as 18");
+            const runs = Array.from({ length: count }, (_, i) => i + 1);
+            const out = "runs=" + JSON.stringify(runs) + "\nnodes=" + JSON.stringify(nodes) + "\n";
+            require("fs").appendFileSync(process.env.GITHUB_OUTPUT, out);
+            console.log(out);
+          '
+
+  repeat:
+    name: repeat (node ${{ matrix.node }}, run ${{ matrix.run }})
+    needs: plan
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ${{ fromJSON(needs.plan.outputs.nodes) }}
+        run: ${{ fromJSON(needs.plan.outputs.runs) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Git identity (tests create repositories)
+        run: |
+          git config --global user.name ci
+          git config --global user.email ci@example.com
+      - run: npm test
